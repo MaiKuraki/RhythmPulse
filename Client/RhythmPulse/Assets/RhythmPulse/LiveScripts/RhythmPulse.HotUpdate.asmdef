@@ -1,0 +1,22 @@
+{
+    "name": "RhythmPulse.HotUpdate",
+    "rootNamespace": "",
+    "references": [
+        "GUID:f51ebe6a0ceec4240a699833d6309b23",
+        "GUID:a61d364006d5941e7ac75e73dd6b0df3",
+        "GUID:b0214a6008ed146ff8f122a6a9c2f6cc",
+        "GUID:8a0ff85ce7ae944459caf8abb9313c06",
+        "GUID:19e824f9fd05b4f4a8cd9aaafc8c4550",
+        "GUID:c8623b71fcaefe141a3b92681008f8bb",
+        "GUID:562d48ba35170a7418fc31951b7d8f16"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

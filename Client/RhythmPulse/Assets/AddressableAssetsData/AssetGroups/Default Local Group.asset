@@ -13,10 +13,18 @@ MonoBehaviour:
   m_Name: Default Local Group
   m_EditorClassIdentifier: 
   m_GroupName: Default Local Group
-  m_Data:
-    m_SerializedData: []
   m_GUID: bac307361f7737d4fa81b723095fdbf2
-  m_SerializeEntries: []
+  m_SerializeEntries:
+  - m_GUID: 28bbc9defa9026b4989a247ee6662523
+    m_Address: Assets/RhythmPulse/LiveContent/Prefabs/ProjectSharedLifetimeScope.prefab
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: dba0706919473b549b528dea16ea6950
+    m_Address: Assets/RhythmPulse/LiveContent/Scenes
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   m_ReadOnly: 0
   m_Settings: {fileID: 11400000, guid: e46ec740f6aaed642935f5362ca33705, type: 2}
   m_SchemaSet:

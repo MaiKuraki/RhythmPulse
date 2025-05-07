@@ -6,8 +6,9 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
-    path: Assets/RhythmPulse/Scenes/Scene_Launch.unity
+    path: Assets/RhythmPulse/BuiltIn/Scenes/Scene_Launch.unity
     guid: 99c9720ab356a0642a771bea13969a05
   m_configObjects:
     com.unity.addressableassets: {fileID: 11400000, guid: 50abb427129d85d4ea2856a7af0f1089,
       type: 2}
+  m_UseUCBPForAssetBundles: 0
