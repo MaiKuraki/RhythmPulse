@@ -1,0 +1,22 @@
+{
+    "name": "CycloneGames.UIFramework",
+    "rootNamespace": "",
+    "references": [
+        "Unity.ResourceManager",
+        "Unity.Addressables",
+        "UniTask",
+        "Addler",
+        "CycloneGames.Logger",
+        "CycloneGames.Factory",
+        "CycloneGames.Service"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
