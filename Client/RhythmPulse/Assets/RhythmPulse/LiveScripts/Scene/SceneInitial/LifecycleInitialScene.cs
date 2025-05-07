@@ -15,6 +15,7 @@ namespace RhythmPulse.Scene
 
         public UniTask OnEnter(ISceneDataReader reader, CancellationToken cancellationToken)
         {
+            GlobalSceneNavigator.Instance.Push(SceneDefinitions.Splash);
             return UniTask.CompletedTask;
         }
 
