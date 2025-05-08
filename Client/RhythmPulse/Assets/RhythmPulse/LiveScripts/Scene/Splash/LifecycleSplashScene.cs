@@ -38,6 +38,7 @@ namespace RhythmPulse.Scene
         {
             int SplashDuration = 3000; // ms
             await UniTask.Delay(SplashDuration, true, PlayerLoopTiming.FixedUpdate, cancellation);
+            await GlobalSceneNavigator.Instance.Push(SceneDefinitions.Title, transitionDirector: new SimpleTransitionDirector(SceneDefinitions.Transition));
         }
     }
 }

@@ -5,7 +5,8 @@ namespace RhythmPulse.Scene
 {
     public class SceneDefinitions
     {
-        public static ISceneIdentifier Transition { get; }
         public static ISceneIdentifier Splash { get; } = new AddressableSceneIdentifier("Assets/RhythmPulse/LiveContent/Scenes/Scene_Splash.unity");
+        public static ISceneIdentifier Transition { get; } = new AddressableSceneIdentifier("Assets/RhythmPulse/LiveContent/Scenes/Scene_Transition.unity");
+        public static ISceneIdentifier Title { get; } = new AddressableSceneIdentifier("Assets/RhythmPulse/LiveContent/Scenes/Scene_Title.unity");
     }
 }
