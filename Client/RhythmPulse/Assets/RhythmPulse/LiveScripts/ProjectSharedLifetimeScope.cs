@@ -1,6 +1,8 @@
-using CycloneGames.Logger;
 using VContainer;
 using VContainer.Unity;
+using CycloneGames.Logger;
+using CycloneGames.Factory;
+using CycloneGames.Service;
 
 namespace RhythmPulse
 {
@@ -11,6 +13,8 @@ namespace RhythmPulse
             base.Configure(builder);
 
             CLogger.Instance.AddLogger(new UnityLogger());
+            builder.Register<IUnityObjectSpawner, RhythmObjectSpawner>(Lifetime.Singleton);
+            builder.Register<IMainCameraService, MainCameraService>(Lifetime.Singleton);
         }
     }
 }
