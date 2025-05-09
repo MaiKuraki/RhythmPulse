@@ -32,7 +32,10 @@ namespace CycloneGames.Editor.VersionControl
             if (File.Exists(Path.Combine(Application.streamingAssetsPath, "VersionInfo.json")))
             {
                 File.Delete(Path.Combine(Application.streamingAssetsPath, "VersionInfo.json"));
-                UnityEngine.Debug.Log("Version information file removed.");
+            }
+            if (File.Exists(Path.Combine(Application.streamingAssetsPath, "VersionInfo.json.meta")))
+            {
+                File.Delete(Path.Combine(Application.streamingAssetsPath, "VersionInfo.json.meta"));
             }
         }
 
