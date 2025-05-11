@@ -11,20 +11,43 @@ namespace RhythmPulse.Cheat
     {
         private DebugPage debugPageRoot;
 
+        public static DebugSheetManager Insatnce;
+        [SerializeField] bool _isUnique = true;
+
+        void Awake()
+        {
+            if (_isUnique)
+            {
+                MakeUnique();
+            }
+        }
+
+        void MakeUnique()
+        {
+            if (Insatnce == null)
+            {
+                Insatnce = this;
+                DontDestroyOnLoad(gameObject);
+                return;
+            }
+
+            Destroy(gameObject);
+        }
+
         void Start()
         {
-            debugPageRoot = DebugSheet.Instance.GetOrCreateInitialPage();
+            debugPageRoot = DebugSheet.Instance?.GetOrCreateInitialPage();
 
-            debugPageRoot.AddButton("Toggle FPS", clicked: () =>
+            debugPageRoot?.AddButton("Toggle FPS", clicked: () =>
             {
                 IsFPSVisible = !IsFPSVisible;
                 SetFPSVisibility(IsFPSVisible);
             });
-            debugPageRoot.AddPageLinkButton<IngameDebugConsoleDebugPage>("In-Game Console Debug", onLoad: x => x.page.Setup(DebugLogManager.Instance));
+            debugPageRoot?.AddPageLinkButton<IngameDebugConsoleDebugPage>("In-Game Console Debug", onLoad: x => x.page.Setup(DebugLogManager.Instance));
         }
 
         private bool IsFPSVisible = false;
-        public void SetFPSVisibility(bool isVisible)
+        private void SetFPSVisibility(bool isVisible)
         {
             try
             {

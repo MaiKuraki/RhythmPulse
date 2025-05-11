@@ -466,7 +466,7 @@ GameObject:
   - component: {fileID: 344953199}
   - component: {fileID: 344953200}
   m_Layer: 0
-  m_Name: DebugInitializer
+  m_Name: DebugSheetManager
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -499,6 +499,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 09a440a244d551848a0101716ea6ce47, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  _isUnique: 1
 --- !u!1 &502011477
 GameObject:
   m_ObjectHideFlags: 0
