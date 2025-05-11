@@ -11,7 +11,7 @@ namespace RhythmPulse.Cheat
     {
         private DebugPage debugPageRoot;
 
-        private void Awake()
+        void Start()
         {
             debugPageRoot = DebugSheet.Instance.GetOrCreateInitialPage();
 
