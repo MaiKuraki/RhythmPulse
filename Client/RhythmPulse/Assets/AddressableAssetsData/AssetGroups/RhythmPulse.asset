@@ -15,6 +15,11 @@ MonoBehaviour:
   m_GroupName: RhythmPulse
   m_GUID: bac307361f7737d4fa81b723095fdbf2
   m_SerializeEntries:
+  - m_GUID: 285e5716e0fa5af4aaf5f6cb1047112a
+    m_Address: Assets/RhythmPulse/LiveContent/Prefabs/UI
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 28bbc9defa9026b4989a247ee6662523
     m_Address: Assets/RhythmPulse/LiveContent/Prefabs/ProjectSharedLifetimeScope.prefab
     m_ReadOnly: 0
