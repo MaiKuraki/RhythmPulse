@@ -4,8 +4,9 @@
     "references": [
         "UniTask",
         "CycloneGames.Logger",
-        "VContainer",
         "Unity.TextMeshPro",
+        "VContainer",
+        "R3.Unity",
         "LitMotion",
         "LitMotion.Extensions",
         "MackySoft.Navigathena",
