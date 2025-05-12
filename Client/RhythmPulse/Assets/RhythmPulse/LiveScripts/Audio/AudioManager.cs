@@ -16,43 +16,51 @@ namespace RhythmPulse.Audio
             Unloading   // Currently unloading
         }
 
-        // Loaded AudioClips mapped by path
-        private Dictionary<string, AudioClip> loadedClips = new Dictionary<string, AudioClip>();
+        public enum AudioCategory
+        {
+            Music,
+            SFX
+        }
+
+        // Loaded AudioClips mapped by path and category
+        private Dictionary<AudioCategory, Dictionary<string, AudioClip>> loadedClips = new Dictionary<AudioCategory, Dictionary<string, AudioClip>>();
 
         // Audio loading states
-        private Dictionary<string, AudioState> audioStates = new Dictionary<string, AudioState>();
+        private Dictionary<AudioCategory, Dictionary<string, AudioState>> audioStates = new Dictionary<AudioCategory, Dictionary<string, AudioState>>();
 
         // Object pool storing unloaded but cached AudioClips with unload timestamp
-        private Dictionary<string, (AudioClip clip, float unloadTime)> audioClipPool = new Dictionary<string, (AudioClip, float)>();
+        private Dictionary<AudioCategory, Dictionary<string, (AudioClip clip, float unloadTime)>> audioClipPool = new Dictionary<AudioCategory, Dictionary<string, (AudioClip, float)>>();
 
-        // Pool size limit
-        public int poolSize = 5;
+        // Pool size limit for each category
+        public Dictionary<AudioCategory, int> poolSizes = new Dictionary<AudioCategory, int>
+        {
+            { AudioCategory.Music, 5 },  // Default pool size for Music
+            { AudioCategory.SFX, 10 }    // Default pool size for SFX
+        };
 
         // Playback state tracking: true if the clip is playing
-        private Dictionary<string, bool> isPlayingMap = new Dictionary<string, bool>();
-
-        public Dictionary<string, AudioClip> GetLoadedClips()
-        {
-            return loadedClips;
-        }
-
-        public Dictionary<string, AudioState> GetAudioStates()
-        {
-            return audioStates;
-        }
-
-        public Dictionary<string, (AudioClip clip, float unloadTime)> GetAudioClipPool()
-        {
-            return audioClipPool;
-        }
-
-        public Dictionary<string, bool> GetIsPlayingMap()
-        {
-            return isPlayingMap;
-        }
+        private Dictionary<AudioCategory, Dictionary<string, bool>> isPlayingMap = new Dictionary<AudioCategory, Dictionary<string, bool>>();
 
         // Loading tasks to prevent duplicate concurrent loads
-        private Dictionary<string, UniTaskCompletionSource<AudioClip>> loadingTasks = new Dictionary<string, UniTaskCompletionSource<AudioClip>>();
+        private Dictionary<AudioCategory, Dictionary<string, UniTaskCompletionSource<AudioClip>>> loadingTasks = new Dictionary<AudioCategory, Dictionary<string, UniTaskCompletionSource<AudioClip>>>();
+
+        public Dictionary<AudioCategory, Dictionary<string, AudioClip>> GetLoadedClips() => loadedClips;
+        public Dictionary<AudioCategory, Dictionary<string, AudioState>> GetAudioStates() => audioStates;
+        public Dictionary<AudioCategory, Dictionary<string, (AudioClip clip, float unloadTime)>> GetAudioClipPool() => audioClipPool;
+        public Dictionary<AudioCategory, Dictionary<string, bool>> GetIsPlayingMap() => isPlayingMap;
+
+        private void Awake()
+        {
+            // Initialize dictionaries for each category
+            foreach (AudioCategory category in Enum.GetValues(typeof(AudioCategory)))
+            {
+                loadedClips[category] = new Dictionary<string, AudioClip>();
+                audioStates[category] = new Dictionary<string, AudioState>();
+                audioClipPool[category] = new Dictionary<string, (AudioClip, float)>();
+                isPlayingMap[category] = new Dictionary<string, bool>();
+                loadingTasks[category] = new Dictionary<string, UniTaskCompletionSource<AudioClip>>();
+            }
+        }
 
         async void OnDestroy()
         {
@@ -63,57 +71,63 @@ namespace RhythmPulse.Audio
         /// Asynchronously loads an AudioClip from the specified path.
         /// Uses caching and pooling to optimize performance.
         /// </summary>
-        public async UniTask<AudioClip> LoadAudioAsync(string path)
+        public async UniTask<AudioClip> LoadAudioAsync(string path, AudioCategory category)
         {
+            var loadedClipsCategory = loadedClips[category];
+            var audioStatesCategory = audioStates[category];
+            var audioClipPoolCategory = audioClipPool[category];
+            var isPlayingMapCategory = isPlayingMap[category];
+            var loadingTasksCategory = loadingTasks[category];
+
             // If already loaded, return immediately
-            if (audioStates.TryGetValue(path, out var state))
+            if (audioStatesCategory.TryGetValue(path, out var state))
             {
-                if (state == AudioState.Loaded && loadedClips.TryGetValue(path, out var clip))
+                if (state == AudioState.Loaded && loadedClipsCategory.TryGetValue(path, out var clip))
                 {
                     return clip;
                 }
                 else if (state == AudioState.Loading)
                 {
                     // Wait for ongoing loading task to complete
-                    if (loadingTasks.TryGetValue(path, out var tcs))
+                    if (loadingTasksCategory.TryGetValue(path, out var tcs))
                     {
                         return await tcs.Task;
                     }
                     else
                     {
                         // Defensive: no loading task found, wait until state changes
-                        await WaitForStateChange(path, AudioState.Loading);
-                        return loadedClips.TryGetValue(path, out var loadedClip) ? loadedClip : null;
+                        await WaitForStateChange(path, AudioState.Loading, category);
+                        return loadedClipsCategory.TryGetValue(path, out var loadedClip) ? loadedClip : null;
                     }
                 }
                 else if (state == AudioState.Unloading)
                 {
                     // Wait until unloading completes, then reload
-                    await WaitForStateChange(path, AudioState.Unloading);
-                    return await LoadAudioAsync(path);
+                    await WaitForStateChange(path, AudioState.Unloading, category);
+                    return await LoadAudioAsync(path, category);
                 }
             }
 
             // Check if clip is in pool
-            if (audioClipPool.TryGetValue(path, out var poolEntry))
+            if (audioClipPoolCategory.TryGetValue(path, out var poolEntry))
             {
                 // Move from pool to loaded
-                loadedClips[path] = poolEntry.clip;
-                audioStates[path] = AudioState.Loaded;
-                audioClipPool.Remove(path);
-                isPlayingMap[path] = false;
+                loadedClipsCategory[path] = poolEntry.clip;
+                audioStatesCategory[path] = AudioState.Loaded;
+                audioClipPoolCategory.Remove(path);
+                isPlayingMapCategory[path] = false;
                 return poolEntry.clip;
             }
 
             // Pool full? Unload oldest unused clip
-            if (audioClipPool.Count >= poolSize)
+            if (audioClipPoolCategory.Count >= poolSizes[category])
             {
                 string oldestUnusedPath = null;
                 float oldestTime = float.MaxValue;
 
-                foreach (var kvp in audioClipPool)
+                foreach (var kvp in audioClipPoolCategory)
                 {
-                    bool isPlaying = isPlayingMap.ContainsKey(kvp.Key) && isPlayingMap[kvp.Key];
+                    bool isPlaying = isPlayingMapCategory.ContainsKey(kvp.Key) && isPlayingMapCategory[kvp.Key];
                     if (!isPlaying && kvp.Value.unloadTime < oldestTime)
                     {
                         oldestTime = kvp.Value.unloadTime;
@@ -124,14 +138,14 @@ namespace RhythmPulse.Audio
                 if (!string.IsNullOrEmpty(oldestUnusedPath))
                 {
                     Debug.Log($"Pool is full, unloading oldest unused audio: {oldestUnusedPath}");
-                    await UnloadAudio(oldestUnusedPath);
+                    await UnloadAudio(oldestUnusedPath, category);
                 }
             }
 
             // Mark as loading and create a loading task
-            audioStates[path] = AudioState.Loading;
+            audioStatesCategory[path] = AudioState.Loading;
             var completionSource = new UniTaskCompletionSource<AudioClip>();
-            loadingTasks[path] = completionSource;
+            loadingTasksCategory[path] = completionSource;
 
             try
             {
@@ -142,19 +156,19 @@ namespace RhythmPulse.Audio
                     if (www.result == UnityWebRequest.Result.ConnectionError || www.result == UnityWebRequest.Result.ProtocolError)
                     {
                         Debug.LogError($"Error loading audio '{path}': {www.error}");
-                        audioStates[path] = AudioState.NotLoaded;
+                        audioStatesCategory[path] = AudioState.NotLoaded;
                         completionSource.TrySetResult(null);
-                        loadingTasks.Remove(path);
+                        loadingTasksCategory.Remove(path);
                         return null;
                     }
 
                     var clip = DownloadHandlerAudioClip.GetContent(www);
-                    loadedClips[path] = clip;
-                    audioStates[path] = AudioState.Loaded;
-                    isPlayingMap[path] = false;
+                    loadedClipsCategory[path] = clip;
+                    audioStatesCategory[path] = AudioState.Loaded;
+                    isPlayingMapCategory[path] = false;
 
                     completionSource.TrySetResult(clip);
-                    loadingTasks.Remove(path);
+                    loadingTasksCategory.Remove(path);
 
                     return clip;
                 }
@@ -162,9 +176,9 @@ namespace RhythmPulse.Audio
             catch (Exception ex)
             {
                 Debug.LogError($"Exception loading audio '{path}': {ex}");
-                audioStates[path] = AudioState.NotLoaded;
+                audioStatesCategory[path] = AudioState.NotLoaded;
                 completionSource.TrySetResult(null);
-                loadingTasks.Remove(path);
+                loadingTasksCategory.Remove(path);
                 return null;
             }
         }
@@ -173,35 +187,40 @@ namespace RhythmPulse.Audio
         /// Asynchronously unloads an AudioClip from memory.
         /// If the clip is not playing, it will be cached in the pool.
         /// </summary>
-        public async UniTask UnloadAudio(string path)
+        public async UniTask UnloadAudio(string path, AudioCategory category)
         {
-            if (!audioStates.TryGetValue(path, out var state))
+            var audioStatesCategory = audioStates[category];
+            var loadedClipsCategory = loadedClips[category];
+            var isPlayingMapCategory = isPlayingMap[category];
+            var audioClipPoolCategory = audioClipPool[category];
+
+            if (!audioStatesCategory.TryGetValue(path, out var state))
                 return;
 
             if (state == AudioState.Loading)
             {
                 // Wait for loading to finish before unloading
-                await WaitForStateChange(path, AudioState.Loading);
+                await WaitForStateChange(path, AudioState.Loading, category);
                 // Re-check state after waiting
-                state = audioStates.TryGetValue(path, out var newState) ? newState : AudioState.NotLoaded;
+                state = audioStatesCategory.TryGetValue(path, out var newState) ? newState : AudioState.NotLoaded;
                 if (state != AudioState.Loaded)
                     return;
             }
 
             if (state == AudioState.Loaded)
             {
-                audioStates[path] = AudioState.Unloading;
+                audioStatesCategory[path] = AudioState.Unloading;
 
-                if (loadedClips.TryGetValue(path, out var clip))
+                if (loadedClipsCategory.TryGetValue(path, out var clip))
                 {
-                    bool isPlaying = isPlayingMap.ContainsKey(path) && isPlayingMap[path];
+                    bool isPlaying = isPlayingMapCategory.ContainsKey(path) && isPlayingMapCategory[path];
 
                     if (!isPlaying)
                     {
-                        if (audioClipPool.Count < poolSize)
+                        if (audioClipPoolCategory.Count < poolSizes[category])
                         {
                             // Cache clip in pool with current time
-                            audioClipPool[path] = (clip, Time.time);
+                            audioClipPoolCategory[path] = (clip, Time.time);
                         }
                         else
                         {
@@ -213,15 +232,15 @@ namespace RhythmPulse.Audio
                     {
                         // If playing, do not cache, just keep loaded
                         Debug.LogWarning($"Attempted to unload audio '{path}' which is currently playing. Skipping unload.");
-                        audioStates[path] = AudioState.Loaded;
+                        audioStatesCategory[path] = AudioState.Loaded;
                         return;
                     }
 
-                    loadedClips.Remove(path);
-                    isPlayingMap.Remove(path);
+                    loadedClipsCategory.Remove(path);
+                    isPlayingMapCategory.Remove(path);
                 }
 
-                audioStates[path] = AudioState.NotLoaded;
+                audioStatesCategory[path] = AudioState.NotLoaded;
             }
         }
 
@@ -230,36 +249,39 @@ namespace RhythmPulse.Audio
         /// </summary>
         public async UniTask UnloadAllAudio()
         {
-            var paths = new List<string>(loadedClips.Keys);
-            foreach (var path in paths)
+            foreach (var category in loadedClips.Keys)
             {
-                await UnloadAudio(path);
+                var paths = new List<string>(loadedClips[category].Keys);
+                foreach (var path in paths)
+                {
+                    await UnloadAudio(path, category);
+                }
             }
         }
 
         /// <summary>
         /// Gets the current loading state of the audio clip.
         /// </summary>
-        public AudioState GetAudioState(string path)
+        public AudioState GetAudioState(string path, AudioCategory category)
         {
-            return audioStates.TryGetValue(path, out var state) ? state : AudioState.NotLoaded;
+            return audioStates[category].TryGetValue(path, out var state) ? state : AudioState.NotLoaded;
         }
 
         /// <summary>
         /// Sets the playing state of the audio clip.
         /// Adds the entry if it does not exist.
         /// </summary>
-        public void SetPlayingState(string path, bool isPlaying)
+        public void SetPlayingState(string path, bool isPlaying, AudioCategory category)
         {
-            isPlayingMap[path] = isPlaying;
+            isPlayingMap[category][path] = isPlaying;
         }
 
         /// <summary>
         /// Helper method to wait until the audio state changes from a specific state.
         /// </summary>
-        private async UniTask WaitForStateChange(string path, AudioState waitingState)
+        private async UniTask WaitForStateChange(string path, AudioState waitingState, AudioCategory category)
         {
-            while (audioStates.TryGetValue(path, out var state) && state == waitingState)
+            while (audioStates[category].TryGetValue(path, out var state) && state == waitingState)
             {
                 await UniTask.Yield();
             }
