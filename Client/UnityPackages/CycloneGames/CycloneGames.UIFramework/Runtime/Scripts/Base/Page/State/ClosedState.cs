@@ -1,13 +1,13 @@
 namespace CycloneGames.UIFramework
 {
-    public class ClosedState : UIPageState
+    public class ClosedState : UIWindowState
     {
-        public override void OnEnter(UIPage page)
+        public override void OnEnter(UIWindow page)
         {
-            UnityEngine.Debug.Log($"{DEBUG_FLAG} Closed: {page.PageName}");
+            UnityEngine.Debug.Log($"{DEBUG_FLAG} Closed: {page.WindowName}");
         }
 
-        public override void OnExit(UIPage page)
+        public override void OnExit(UIWindow page)
         {
             
         }

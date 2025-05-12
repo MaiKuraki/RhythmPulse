@@ -11,24 +11,24 @@ namespace CycloneGames.UIFramework
         private const string DEBUG_FLAG = "[UILayer]";
         [SerializeField] private string layerName;
 
-        [Tooltip("The amount of pages to expand when the page array is full")]
+        [Tooltip("The amount of window to expand when the window array is full")]
         [SerializeField] private int expansionAmount = 3;
 
         private Canvas uiCanvas;
         public Canvas UICanvas => uiCanvas;
         private GraphicRaycaster graphicRaycaster;
-        public GraphicRaycaster PageGraphicRaycaster => graphicRaycaster;
+        public GraphicRaycaster WindowGraphicRaycaster => graphicRaycaster;
         public string LayerName => layerName;
-        private UIPage[] uiPagesArray;
-        public UIPage[] UIPageArray => uiPagesArray;
-        public int PageCount { get; private set; }
+        private UIWindow[] uiWindowArray;
+        public UIWindow[] UIWindowArray => uiWindowArray;
+        public int WindowCount { get; private set; }
         public bool IsFinishedLayerInit { get; private set; }
 
         protected void Awake()
         {
             uiCanvas = GetComponent<Canvas>();
             graphicRaycaster = GetComponent<GraphicRaycaster>();
-            PageGraphicRaycaster.blockingMask = LayerMask.GetMask("UI");
+            WindowGraphicRaycaster.blockingMask = LayerMask.GetMask("UI");
             InitLayer();
         }
 
@@ -41,40 +41,40 @@ namespace CycloneGames.UIFramework
                 return;
             }
 
-            var tempPages = GetComponentsInChildren<UIPage>();
-            uiPagesArray = new UIPage[tempPages.Length];
-            PageCount = 0;
+            var tempWindowArray = GetComponentsInChildren<UIWindow>();
+            uiWindowArray = new UIWindow[tempWindowArray.Length];
+            WindowCount = 0;
 
-            foreach (UIPage page in tempPages)
+            foreach (UIWindow window in tempWindowArray)
             {
-                page.SetPageName(page.gameObject.name);
-                page.SetUILayer(this);
-                uiPagesArray[PageCount++] = page;
+                window.SetWindowName(window.gameObject.name);
+                window.SetUILayer(this);
+                uiWindowArray[WindowCount++] = window;
             }
 
-            SortPagesByPriority();
+            SortUIWindowByPriority();
             IsFinishedLayerInit = true;
             Debug.Log($"{DEBUG_FLAG} Finished init Layer: {LayerName}");
         }
 
-        public UIPage GetUIPage(string InPageName)
+        public UIWindow GetUIWindow(string InWindowName)
         {
-            if (string.IsNullOrEmpty(InPageName)) return null;
-            for (int i = 0; i < PageCount; i++)
+            if (string.IsNullOrEmpty(InWindowName)) return null;
+            for (int i = 0; i < WindowCount; i++)
             {
-                if (uiPagesArray[i].PageName == InPageName)
+                if (uiWindowArray[i].WindowName == InWindowName)
                 {
-                    return uiPagesArray[i];
+                    return uiWindowArray[i];
                 }
             }
             return null;
         }
 
-        public bool HasPage(string InPageName)
+        public bool HasWindow(string InWindowName)
         {
-            for (int i = 0; i < PageCount; i++)
+            for (int i = 0; i < WindowCount; i++)
             {
-                if (uiPagesArray[i].PageName.Equals(InPageName, System.StringComparison.OrdinalIgnoreCase))
+                if (uiWindowArray[i].WindowName.Equals(InWindowName, System.StringComparison.OrdinalIgnoreCase))
                 {
                     return true;
                 }
@@ -82,7 +82,7 @@ namespace CycloneGames.UIFramework
             return false;
         }
 
-        public void AddPage(UIPage newPage)
+        public void AddWindow(UIWindow newWindow)
         {
             if (!IsFinishedLayerInit)
             {
@@ -90,54 +90,54 @@ namespace CycloneGames.UIFramework
                 return;
             }
 
-            for (int i = 0; i < PageCount; i++)
+            for (int i = 0; i < WindowCount; i++)
             {
-                if (uiPagesArray[i].PageName == newPage.PageName)
+                if (uiWindowArray[i].WindowName == newWindow.WindowName)
                 {
-                    Debug.LogError($"{DEBUG_FLAG} Page already exists: {newPage.PageName}");
+                    Debug.LogError($"{DEBUG_FLAG} Window already exists: {newWindow.WindowName}");
                     return;
                 }
             }
 
-            newPage.gameObject.name = newPage.PageName;
-            newPage.SetUILayer(this);
-            newPage.transform.SetParent(transform, false);
+            newWindow.gameObject.name = newWindow.WindowName;
+            newWindow.SetUILayer(this);
+            newWindow.transform.SetParent(transform, false);
 
-            if (PageCount == (uiPagesArray?.Length ?? 0))
+            if (WindowCount == (uiWindowArray?.Length ?? 0))
             {
-                int newSize = (uiPagesArray?.Length ?? 0) + expansionAmount;
-                System.Array.Resize(ref uiPagesArray, newSize);
+                int newSize = (uiWindowArray?.Length ?? 0) + expansionAmount;
+                System.Array.Resize(ref uiWindowArray, newSize);
             }
 
-            int insertIndex = PageCount;
-            for (int i = PageCount - 1; i >= 0; i--)
+            int insertIndex = WindowCount;
+            for (int i = WindowCount - 1; i >= 0; i--)
             {
-                if (uiPagesArray[i].Priority > newPage.Priority)
+                if (uiWindowArray[i].Priority > newWindow.Priority)
                 {
                     insertIndex = i;
                 }
-                else if (uiPagesArray[i].Priority == newPage.Priority)
+                else if (uiWindowArray[i].Priority == newWindow.Priority)
                 {
                     insertIndex = i + 1;
                     break;
                 }
             }
 
-            for (int i = PageCount; i > insertIndex; i--)
+            for (int i = WindowCount; i > insertIndex; i--)
             {
-                uiPagesArray[i] = uiPagesArray[i - 1];
+                uiWindowArray[i] = uiWindowArray[i - 1];
             }
 
-            uiPagesArray[insertIndex] = newPage;
-            PageCount++;
+            uiWindowArray[insertIndex] = newWindow;
+            WindowCount++;
 
-            for (int i = insertIndex; i < PageCount; i++)
+            for (int i = insertIndex; i < WindowCount; i++)
             {
-                uiPagesArray[i].transform.SetSiblingIndex(i);
+                uiWindowArray[i].transform.SetSiblingIndex(i);
             }
         }
 
-        public void RemovePage(string InPageName)
+        public void RemoveWindow(string InWindowName)
         {
             if (!IsFinishedLayerInit)
             {
@@ -145,45 +145,45 @@ namespace CycloneGames.UIFramework
                 return;
             }
 
-            for (int i = 0; i < PageCount; i++)
+            for (int i = 0; i < WindowCount; i++)
             {
-                if (uiPagesArray[i].PageName == InPageName)
+                if (uiWindowArray[i].WindowName == InWindowName)
                 {
-                    UIPage page = uiPagesArray[i];
-                    for (int j = i; j < PageCount - 1; j++)
+                    UIWindow window = uiWindowArray[i];
+                    for (int j = i; j < WindowCount - 1; j++)
                     {
-                        uiPagesArray[j] = uiPagesArray[j + 1];
+                        uiWindowArray[j] = uiWindowArray[j + 1];
                     }
-                    PageCount--;
+                    WindowCount--;
 
-                    page.ClosePage();
-                    page.SetUILayer(null);
+                    window.Close();
+                    window.SetUILayer(null);
                     return;
                 }
             }
         }
 
-        private void SortPagesByPriority()
+        private void SortUIWindowByPriority()
         {
-            if (PageCount <= 1) return;
-            System.Array.Sort(uiPagesArray, 0, PageCount, Comparer<UIPage>.Create((a, b) => a.Priority.CompareTo(b.Priority)));
+            if (WindowCount <= 1) return;
+            System.Array.Sort(uiWindowArray, 0, WindowCount, Comparer<UIWindow>.Create((a, b) => a.Priority.CompareTo(b.Priority)));
 
-            for (int i = 0; i < PageCount; i++)
+            for (int i = 0; i < WindowCount; i++)
             {
-                uiPagesArray[i].transform.SetSiblingIndex(i);
+                uiWindowArray[i].transform.SetSiblingIndex(i);
             }
         }
 
         public void OnDestroy()
         {
-            for (int i = 0; i < PageCount; i++)
+            for (int i = 0; i < WindowCount; i++)
             {
-                if (uiPagesArray[i] != null)
+                if (uiWindowArray[i] != null)
                 {
-                    uiPagesArray[i].SetUILayer(null);
+                    uiWindowArray[i].SetUILayer(null);
                 }
             }
-            PageCount = 0;
+            WindowCount = 0;
         }
     }
 }

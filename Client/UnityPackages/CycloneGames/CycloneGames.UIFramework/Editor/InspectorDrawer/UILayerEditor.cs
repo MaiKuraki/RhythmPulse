@@ -27,7 +27,7 @@ namespace CycloneGames.UIFramework.Editor
 
             // Get child count and page count 
             int childCount = uiLayer.transform.childCount;
-            int pageCount = uiLayer.PageCount;
+            int pageCount = uiLayer.WindowCount;
 
             // Display child count and page count 
             EditorGUILayout.BeginHorizontal();
@@ -65,13 +65,13 @@ namespace CycloneGames.UIFramework.Editor
             // Display page list 
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("Page List", EditorStyles.boldLabel);
-            for (int i = 0; i < uiLayer.PageCount; i++)
+            for (int i = 0; i < uiLayer.WindowCount; i++)
             {
-                var page = uiLayer.UIPageArray[i];
+                var page = uiLayer.UIWindowArray[i];
                 bool pageIsChild = page != null && page.transform.parent == uiLayer.transform;
 
                 EditorGUILayout.BeginHorizontal();
-                EditorGUILayout.LabelField($"Index: {i.ToString().PadLeft(3, ' ')}  |  {(page?.PageName ?? InValidPageName).PadRight(30, ' ')}\t Layer: {page.Priority.ToString().PadLeft(3, ' ')}");
+                EditorGUILayout.LabelField($"Index: {i.ToString().PadLeft(3, ' ')}  |  {(page?.WindowName ?? InValidPageName).PadRight(30, ' ')}\t Layer: {page.Priority.ToString().PadLeft(3, ' ')}");
                 EditorGUILayout.LabelField(
                     pageIsChild ? "✅" : "❌",
                     GUILayout.Width(20));

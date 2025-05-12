@@ -111,11 +111,11 @@ namespace CycloneGames.UIFramework
             return layerList.Find(m => m.LayerName == LayerName);
         }
 
-        public UILayer TryGetUILayerFromPageName(string pageName)
+        public UILayer TryGetUILayerFromUIWindowName(string pageName)
         {
             foreach (var layer in layerList)
             {
-                if (layer.GetUIPage(pageName) != null)
+                if (layer.GetUIWindow(pageName) != null)
                 {
                     return layer;
                 }

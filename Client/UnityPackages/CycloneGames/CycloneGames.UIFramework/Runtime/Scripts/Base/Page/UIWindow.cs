@@ -2,25 +2,25 @@ using UnityEngine;
 
 namespace CycloneGames.UIFramework
 {
-    public class UIPage : MonoBehaviour
+    public class UIWindow : MonoBehaviour
     {
         [SerializeField, Header("Priority Override"), Range(-100, 400)] private int priority;
         public int Priority => priority;
-        private string pageName;
-        public string PageName => pageName;
-        private IUIPageState currentState;
+        private string windowName;
+        public string WindowName => windowName;
+        private IUIWindowState currentState;
         private UILayer parentLayer;
 
-        public void SetPageName(string NewPageName)
+        public void SetWindowName(string NewWindowName)
         {
-            pageName = NewPageName;
+            windowName = NewWindowName;
         }
         public void SetUILayer(UILayer layer)
         {
             parentLayer = layer;
         }
 
-        public void ClosePage()
+        public void Close()
         {
             OnStartClose();
 
@@ -28,7 +28,7 @@ namespace CycloneGames.UIFramework
             OnFinishedClose();
         }
 
-        private void ChangeState(IUIPageState newState)
+        private void ChangeState(IUIWindowState newState)
         {
             currentState?.OnExit(this);
             currentState = newState;
@@ -55,7 +55,7 @@ namespace CycloneGames.UIFramework
             ChangeState(new ClosedState());
             if (parentLayer != null)
             {
-                parentLayer.RemovePage(pageName);
+                parentLayer.RemoveWindow(windowName);
             }
             Destroy(gameObject);
         }
@@ -83,7 +83,7 @@ namespace CycloneGames.UIFramework
         {
             if(parentLayer != null)
             {
-                parentLayer.RemovePage(pageName);
+                parentLayer.RemoveWindow(windowName);
                 parentLayer = null;
             }
         }

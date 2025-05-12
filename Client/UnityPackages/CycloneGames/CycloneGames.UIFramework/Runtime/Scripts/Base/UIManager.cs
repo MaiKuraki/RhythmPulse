@@ -40,133 +40,133 @@ namespace CycloneGames.UIFramework
             AddUICameraToMainCameraStack();
         }
 
-        internal void OpenUI(string PageName, System.Action<UIPage> OnPageCreated = null)
+        internal void OpenUI(string WindowName, System.Action<UIWindow> OnUIWindowCreated = null)
         {
-            OpenUIAsync(PageName, OnPageCreated).Forget();
+            OpenUIAsync(WindowName, OnUIWindowCreated).Forget();
         }
 
-        internal void CloseUI(string PageName)
+        internal void CloseUI(string WindowName)
         {
-            CloseUIAsync(PageName).Forget();
+            CloseUIAsync(WindowName).Forget();
         }
 
-        async UniTask OpenUIAsync(string PageName, System.Action<UIPage> OnPageCreated = null)
+        async UniTask OpenUIAsync(string WindowName, System.Action<UIWindow> OnUIWindowCreated = null)
         {
-            if (uiOpenTasks.ContainsKey(PageName))
+            if (uiOpenTasks.ContainsKey(WindowName))
             {
-                CLogger.LogError($"{DEBUG_FLAG} Duplicated Open! PageName: {PageName}");
+                CLogger.LogError($"{DEBUG_FLAG} Duplicated Open! WindowName: {WindowName}");
                 return;
             }
             var tcs = new UniTaskCompletionSource<bool>();
-            uiOpenTasks[PageName] = tcs;
+            uiOpenTasks[WindowName] = tcs;
 
-            CLogger.LogInfo($"{DEBUG_FLAG} Attempting to open UI: {PageName}");
-            string configPath = assetPathBuilder.GetAssetPath(PageName);
-            UIPageConfiguration pageConfig = null;
-            var pageHandle = Addressables.LoadAssetAsync<UIPageConfiguration>(configPath);
+            CLogger.LogInfo($"{DEBUG_FLAG} Attempting to open UI: {WindowName}");
+            string configPath = assetPathBuilder.GetAssetPath(WindowName);
+            UIWindowConfiguration windowConfig = null;
+            var uiWindowHandle = Addressables.LoadAssetAsync<UIWindowConfiguration>(configPath);
             try
             {
-                await pageHandle.Task;
-                pageConfig = pageHandle.Result;
+                await uiWindowHandle.Task;
+                windowConfig = uiWindowHandle.Result;
 
-                if (pageConfig == null || pageConfig.PagePrefab == null)
+                if (windowConfig == null || windowConfig.WindowPrefab == null)
                 {
-                    CLogger.LogError($"{DEBUG_FLAG} Invalid UI Prefab in PageConfig, PageName: {PageName}");
-                    uiOpenTasks.Remove(PageName);
-                    pageHandle.Release();
+                    CLogger.LogError($"{DEBUG_FLAG} Invalid UI Prefab in WindowConfig, WindowName: {WindowName}");
+                    uiOpenTasks.Remove(WindowName);
+                    uiWindowHandle.Release();
                     return;
                 }
             }
             catch (System.Exception ex)
             {
-                CLogger.LogError($"{DEBUG_FLAG} An exception occurred while loading the UI: {PageName}: {ex.Message}");
-                uiOpenTasks.Remove(PageName);
-                pageHandle.Release();
+                CLogger.LogError($"{DEBUG_FLAG} An exception occurred while loading the UI: {WindowName}: {ex.Message}");
+                uiOpenTasks.Remove(WindowName);
+                uiWindowHandle.Release();
                 return;
             }
 
-            string layerName = pageConfig.Layer.LayerName;
+            string layerName = windowConfig.Layer.LayerName;
             UILayer uiLayer = uiRoot.GetUILayer(layerName);
             if (uiLayer == null)
             {
                 CLogger.LogError($"{DEBUG_FLAG} UILayer not found: {layerName}");
-                uiOpenTasks.Remove(PageName);
-                pageHandle.Release();
+                uiOpenTasks.Remove(WindowName);
+                uiWindowHandle.Release();
                 return;
             }
 
-            if (uiLayer.HasPage(PageName))
+            if (uiLayer.HasWindow(WindowName))
             {
-                // Please note that within this framework, the opening of a UIPage must be unique;
-                // that is, UI pages similar to Notifications should be managed within the page itself and should not be opened repeatedly for the same UI page.
-                CLogger.LogError($"{DEBUG_FLAG} Page already exists: {PageName}, layer: {uiLayer.LayerName}");
-                uiOpenTasks.Remove(PageName);
-                pageHandle.Release();
+                // Please note that within this framework, the opening of a UIWindow must be unique;
+                // that is, UI window similar to Notifications should be managed within the window itself and should not be opened repeatedly for the same UI window.
+                CLogger.LogError($"{DEBUG_FLAG} Window already exists: {WindowName}, layer: {uiLayer.LayerName}");
+                uiOpenTasks.Remove(WindowName);
+                uiWindowHandle.Release();
                 return;
             }
 
-            UIPage uiPage = objectSpawner.Create(pageConfig.PagePrefab) as UIPage;
-            if (uiPage == null)
+            UIWindow uiWindow = objectSpawner.Create(windowConfig.WindowPrefab) as UIWindow;
+            if (uiWindow == null)
             {
-                CLogger.LogError($"{DEBUG_FLAG} Failed to instantiate UIPage prefab: {PageName}");
-                uiOpenTasks.Remove(PageName);
-                pageHandle.Release();
+                CLogger.LogError($"{DEBUG_FLAG} Failed to instantiate UIWindow prefab: {WindowName}");
+                uiOpenTasks.Remove(WindowName);
+                uiWindowHandle.Release();
                 return;
             }
-            await pageHandle.BindTo(uiPage.gameObject);
-            uiPage.SetPageName(PageName);
-            uiLayer.AddPage(uiPage);
-            OnPageCreated?.Invoke(uiPage);
+            await uiWindowHandle.BindTo(uiWindow.gameObject);
+            uiWindow.SetWindowName(WindowName);
+            uiLayer.AddWindow(uiWindow);
+            OnUIWindowCreated?.Invoke(uiWindow);
 
             tcs.TrySetResult(true);
         }
 
-        async UniTask CloseUIAsync(string PageName)
+        async UniTask CloseUIAsync(string UIWindowName)
         {
-            if (uiOpenTasks.TryGetValue(PageName, out var openTask))
+            if (uiOpenTasks.TryGetValue(UIWindowName, out var openTask))
             {
                 await openTask.Task;
-                uiOpenTasks.Remove(PageName);
+                uiOpenTasks.Remove(UIWindowName);
             }
 
-            string preReleaseConfigPath = assetPathBuilder.GetAssetPath(PageName);
+            string preReleaseConfigPath = assetPathBuilder.GetAssetPath(UIWindowName);
 
-            UILayer layer = uiRoot?.TryGetUILayerFromPageName(PageName);
+            UILayer layer = uiRoot?.TryGetUILayerFromUIWindowName(UIWindowName);
             if (layer == null)
             {
-                UIPage preRemovePage = GetUIPage(PageName);
-                if (preRemovePage != null)
+                UIWindow preRemoveWindow = GetUIWindow(UIWindowName);
+                if (preRemoveWindow != null)
                 {
-                    CLogger.LogError($"{DEBUG_FLAG} Layer not found, but page exists: {PageName}");
-                    preRemovePage.ClosePage();
+                    CLogger.LogError($"{DEBUG_FLAG} Layer not found, but window exists: {UIWindowName}");
+                    preRemoveWindow.Close();
                 }
                 return;
             }
 
-            layer.RemovePage(PageName);
+            layer.RemoveWindow(UIWindowName);
         }
 
-        internal bool IsUIPageValid(string PageName)
+        internal bool IsUIWindowValid(string UIWindowName)
         {
-            UILayer layer = uiRoot.TryGetUILayerFromPageName(PageName);
+            UILayer layer = uiRoot.TryGetUILayerFromUIWindowName(UIWindowName);
             if (layer == null)
             {
-                CLogger.LogError($"{DEBUG_FLAG} Can not find layer from PageName: {PageName}");
+                CLogger.LogError($"{DEBUG_FLAG} Can not find layer from WindowName: {UIWindowName}");
                 return false;
             }
 
-            // If the page doesn't exist or isn't active, it's not valid.
-            return layer.HasPage(PageName);
+            // If the window doesn't exist or isn't active, it's not valid.
+            return layer.HasWindow(UIWindowName);
         }
 
-        internal UIPage GetUIPage(string PageName)
+        internal UIWindow GetUIWindow(string UIWindowName)
         {
-            UILayer layer = uiRoot.TryGetUILayerFromPageName(PageName);
+            UILayer layer = uiRoot.TryGetUILayerFromUIWindowName(UIWindowName);
             if (layer == null)
             {
                 return null;
             }
-            return layer.GetUIPage(PageName);
+            return layer.GetUIWindow(UIWindowName);
         }
 
         public void AddUICameraToMainCameraStack()

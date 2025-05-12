@@ -2,15 +2,15 @@ using UnityEngine;
 
 namespace CycloneGames.UIFramework
 {
-    [CreateAssetMenu(menuName = "CycloneGames/UIFramework/UIPage")]
+    [CreateAssetMenu(menuName = "CycloneGames/UIFramework/UIWindow")]
     [System.Serializable]
-    public class UIPageConfiguration : ScriptableObject
+    public class UIWindowConfiguration : ScriptableObject
     {
         //TODO: Maybe there is a better way to implement this, to resolve the dependency of UIPageConfiguration and UIPage
-        [SerializeField] private UIPage pagePrefab;
+        [SerializeField] private UIWindow windowPrefab;
         [SerializeField] private UILayerConfiguration layer;
 
-        public UIPage PagePrefab => pagePrefab;
+        public UIWindow WindowPrefab => windowPrefab;
         public UILayerConfiguration Layer => layer;
     }
 }

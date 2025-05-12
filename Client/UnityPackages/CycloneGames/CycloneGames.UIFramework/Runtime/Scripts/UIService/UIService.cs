@@ -6,10 +6,10 @@ namespace CycloneGames.UIFramework
 {
     public interface IUIService
     {
-        void OpenUI(string PageName, System.Action<UIPage> OnPageCreated = null);
+        void OpenUI(string PageName, System.Action<UIWindow> OnPageCreated = null);
         void CloseUI(string PageName);
         bool IsUIPageValid(string PageName);
-        UIPage GetUIPage(string PageName);
+        UIWindow GetUIPage(string PageName);
     }
     public class UIService : IDisposable, IUIService
     {
@@ -40,10 +40,10 @@ namespace CycloneGames.UIFramework
 
         public bool IsUIPageValid(string PageName)
         {
-            return uiManager.IsUIPageValid(PageName);
+            return uiManager.IsUIWindowValid(PageName);
         }
 
-        public void OpenUI(string PageName, Action<UIPage> OnPageCreated = null)
+        public void OpenUI(string PageName, Action<UIWindow> OnPageCreated = null)
         {
             if (uiManager == null)
             {
@@ -62,9 +62,9 @@ namespace CycloneGames.UIFramework
             uiManager.CloseUI(PageName);
         }
 
-        public UIPage GetUIPage(string PageName)
+        public UIWindow GetUIPage(string PageName)
         {
-            return uiManager.GetUIPage(PageName);
+            return uiManager.GetUIWindow(PageName);
         }
 
         public void AddUICameraToMainCameraStack()
