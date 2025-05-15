@@ -1,0 +1,2 @@
+## Note
+You must get [ffmpeg-release-full-shared](https://www.gyan.dev/ffmpeg/builds/) libs, or build your own from https://github.com/FFmpeg/FFmpeg.git this project. Put binaries to `ffmpeg-release-full-shared/bin/` folder.
