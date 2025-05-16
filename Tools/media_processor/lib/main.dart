@@ -17,6 +17,35 @@ void main() async {
     });
   });
 
+  //  Check FFMPEG and FFPROBE availability
+  if (kDebugMode) {
+    try {
+      final ffmpegPath = FFmpegHelper.getBundledFfmpegPath();
+      print('Expected ffmpeg path: $ffmpegPath');
+      final exists = await File(ffmpegPath).exists();
+      print('ffmpeg exists: $exists');
+      if (exists && !Platform.isWindows) {
+        final stat = await File(ffmpegPath).stat();
+        print('ffmpeg permissions: ${stat.mode}');
+      }
+    } catch (e) {
+      print('Error checking ffmpeg: $e');
+    }
+
+    try {
+      final ffprobePath = FFmpegHelper.getBundledFfprobePath();
+      print('Expected ffprobe path: $ffprobePath');
+      final exists = await File(ffprobePath).exists();
+      print('ffprobe exists: $exists');
+      if (exists && !Platform.isWindows) {
+        final stat = await File(ffprobePath).stat();
+        print('ffprobe permissions: ${stat.mode}');
+      }
+    } catch (e) {
+      print('Error checking ffprobe: $e');
+    }
+  }
+
   // Initialize and run the application
   runApp(const MediaProcessingMasterApp());
 }
@@ -236,6 +265,12 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
     _currentTaskCompleter = Completer<void>();
 
     try {
+      final hasFfprobe = await FFmpegHelper.verifyBundledFfprobe();
+      if (!hasFfprobe) {
+        throw Exception(
+          'Bundled ffprobe not found. Please ensure FFmpeg binaries are properly installed.',
+        );
+      }
       final inputFile = File(_selectedFilePath!);
       final dir = inputFile.parent.path.replaceAll('\\', '/');
       final baseName = inputFile.uri.pathSegments.last.split('.').first;

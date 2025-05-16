@@ -29,10 +29,20 @@ class MediaInfo {
 
 /// Provides utility methods for FFmpeg operations
 class FFmpegHelper {
-  /// Retrieves media metadata using ffprobe
-  /// Returns [MediaInfo] if successful, null otherwise
+  /// Retrieves media metadata using the bundled ffprobe
   static Future<MediaInfo?> _getMediaInfo(String inputPath) async {
     try {
+      // Verify bundled ffprobe is available
+      final hasBundledFfprobe = await verifyBundledFfprobe();
+      if (!hasBundledFfprobe) {
+        throw Exception('Bundled ffprobe not found or not accessible');
+      }
+
+      final ffprobePath = getBundledFfprobePath();
+      if (kDebugMode) {
+        print('Using bundled ffprobe at: $ffprobePath');
+      }
+
       // Configure arguments for video stream analysis
       final videoArgs = [
         '-v',
@@ -46,7 +56,7 @@ class FFmpegHelper {
         inputPath,
       ];
 
-      final videoProcess = await Process.run('ffprobe', videoArgs);
+      final videoProcess = await Process.run(ffprobePath, videoArgs);
 
       if (videoProcess.exitCode != 0) {
         if (kDebugMode) {
@@ -83,7 +93,7 @@ class FFmpegHelper {
         inputPath,
       ];
 
-      final audioProcess = await Process.run('ffprobe', audioArgs);
+      final audioProcess = await Process.run(ffprobePath, audioArgs);
 
       if (audioProcess.exitCode != 0) {
         if (kDebugMode) {
@@ -115,7 +125,7 @@ class FFmpegHelper {
       if (kDebugMode) {
         print('Exception occurred while retrieving media info: $e');
       }
-      return null;
+      rethrow; // Rethrow to let caller handle the error
     }
   }
 
@@ -148,6 +158,16 @@ class FFmpegHelper {
     }
 
     try {
+      // Verify both ffprobe and ffmpeg are available
+      final hasFfprobe = await verifyBundledFfprobe();
+      final hasFfmpeg = await verifyBundledFfmpeg();
+
+      if (!hasFfprobe || !hasFfmpeg) {
+        final err = 'Required FFmpeg binaries not found or not accessible';
+        buffer.writeln('[$timestamp]    ❌ $err');
+        onLog?.call(buffer.toString());
+        return buffer.toString();
+      }
       final mediaInfo = await _getMediaInfo(inputPath);
 
       if (mediaInfo == null) {
@@ -268,6 +288,98 @@ class FFmpegHelper {
     return buffer.toString();
   }
 
+  /// Gets the absolute path to the bundled ffprobe executable
+  static String getBundledFfprobePath() {
+    final binDir = path.join(
+      Directory.current.path,
+      'data',
+      'ffmpeg-release-full-shared',
+      'bin',
+    );
+
+    if (Platform.isWindows) {
+      return path.join(binDir, 'ffprobe.exe');
+    } else if (Platform.isLinux || Platform.isMacOS) {
+      return path.join(binDir, 'ffprobe');
+    }
+    throw UnsupportedError('Unsupported platform');
+  }
+
+  /// Gets the absolute path to the bundled ffmpeg executable
+  static String getBundledFfmpegPath() {
+    final binDir = path.join(
+      Directory.current.path,
+      'data',
+      'ffmpeg-release-full-shared',
+      'bin',
+    );
+
+    if (Platform.isWindows) {
+      return path.join(binDir, 'ffmpeg.exe');
+    } else if (Platform.isLinux || Platform.isMacOS) {
+      return path.join(binDir, 'ffmpeg');
+    }
+    throw UnsupportedError('Unsupported platform');
+  }
+
+  /// Verifies the bundled ffprobe exists and is accessible
+  static Future<bool> verifyBundledFfprobe() async {
+    try {
+      final ffprobePath = getBundledFfprobePath();
+      final file = File(ffprobePath);
+
+      if (await file.exists()) {
+        // On Unix-like systems, check execute permission
+        if (!Platform.isWindows) {
+          final stat = await file.stat();
+          if (stat.mode & 0x1 == 0) {
+            // No execute permission
+            if (kDebugMode) {
+              print('ffprobe exists but is not executable: $ffprobePath');
+            }
+            return false;
+          }
+        }
+        return true;
+      }
+      return false;
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error verifying bundled ffprobe: $e');
+      }
+      return false;
+    }
+  }
+
+  /// Verifies the bundled ffmpeg exists and is accessible
+  static Future<bool> verifyBundledFfmpeg() async {
+    try {
+      final ffmpegPath = getBundledFfmpegPath();
+      final file = File(ffmpegPath);
+
+      if (await file.exists()) {
+        // On Unix-like systems, check execute permission
+        if (!Platform.isWindows) {
+          final stat = await file.stat();
+          if (stat.mode & 0x1 == 0) {
+            // No execute permission
+            if (kDebugMode) {
+              print('ffmpeg exists but is not executable: $ffmpegPath');
+            }
+            return false;
+          }
+        }
+        return true;
+      }
+      return false;
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error verifying bundled ffmpeg: $e');
+      }
+      return false;
+    }
+  }
+
   /// Executes an FFmpeg command with process management
   /// [args] - Command line arguments for FFmpeg
   /// [cancelToken] - Optional cancellation token
@@ -281,29 +393,18 @@ class FFmpegHelper {
     Process? process;
 
     try {
-      late String ffmpegPath;
-
-      // Platform-specific FFmpeg executable handling
-      if (Platform.isWindows) {
-        ffmpegPath = path.join(
-          Directory.current.path,
-          'data',
-          'ffmpeg-release-full-shared',
-          'bin',
-          'ffmpeg.exe',
-        );
-        final ffmpegFile = File(ffmpegPath);
-        if (!ffmpegFile.existsSync()) {
-          final err = 'FFmpeg executable not found at $ffmpegPath';
-          logBuffer.writeln(err);
-          return FfmpegResult(false, err);
-        }
-        process = await Process.start(ffmpegPath, args, runInShell: true);
-      } else {
-        ffmpegPath = 'ffmpeg';
-        process = await Process.start('ffmpeg', args, runInShell: true);
+      // Verify bundled ffmpeg is available
+      final hasBundledFfmpeg = await verifyBundledFfmpeg();
+      if (!hasBundledFfmpeg) {
+        throw Exception('Bundled ffmpeg not found or not accessible');
       }
 
+      final ffmpegPath = getBundledFfmpegPath();
+      if (kDebugMode) {
+        print('Using bundled ffmpeg at: $ffmpegPath');
+      }
+
+      process = await Process.start(ffmpegPath, args, runInShell: true);
       processPid = process.pid;
       FfmpegProcessManager().addProcess(processPid);
       if (kDebugMode) {
