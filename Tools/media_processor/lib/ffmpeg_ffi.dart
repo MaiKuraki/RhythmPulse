@@ -4,7 +4,7 @@ import 'package:ffi/ffi.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
 
-// 加载所有必要的 FFmpeg 库
+/// Loads all required FFmpeg shared libraries with platform-specific handling
 final DynamicLibrary _avcodecLib = _loadFfmpegLibrary('avcodec-61');
 final DynamicLibrary _avdeviceLib = _loadFfmpegLibrary('avdevice-61');
 final DynamicLibrary _avfilterLib = _loadFfmpegLibrary('avfilter-10');
@@ -14,6 +14,11 @@ final DynamicLibrary _postprocLib = _loadFfmpegLibrary('postproc-58');
 final DynamicLibrary _swresampleLib = _loadFfmpegLibrary('swresample-5');
 final DynamicLibrary _swscaleLib = _loadFfmpegLibrary('swscale-8');
 
+/// Dynamically loads FFmpeg libraries based on the host operating system
+///
+/// [libraryName] The base name of the FFmpeg library (e.g., 'avcodec-61')
+/// Returns a DynamicLibrary instance for the specified library
+/// Throws UnsupportedError if the platform is not supported
 DynamicLibrary _loadFfmpegLibrary(String libraryName) {
   if (Platform.isWindows) {
     final libraryPath = path.join(
@@ -25,7 +30,7 @@ DynamicLibrary _loadFfmpegLibrary(String libraryName) {
     );
     if (kDebugMode) {
       print('Loading FFmpeg library: $libraryPath');
-    } // 添加日志输出
+    }
     try {
       return DynamicLibrary.open(libraryPath);
     } catch (e) {
@@ -37,7 +42,7 @@ DynamicLibrary _loadFfmpegLibrary(String libraryName) {
   } else if (Platform.isLinux) {
     if (kDebugMode) {
       print('Loading FFmpeg library: lib$libraryName.so');
-    } // 添加日志输出
+    }
     try {
       return DynamicLibrary.open('lib$libraryName.so');
     } catch (e) {
@@ -49,7 +54,7 @@ DynamicLibrary _loadFfmpegLibrary(String libraryName) {
   } else if (Platform.isMacOS) {
     if (kDebugMode) {
       print('Loading FFmpeg library: lib$libraryName.dylib');
-    } // 添加日志输出
+    }
     try {
       return DynamicLibrary.open('lib$libraryName.dylib');
     } catch (e) {
@@ -62,7 +67,7 @@ DynamicLibrary _loadFfmpegLibrary(String libraryName) {
   throw UnsupportedError('Unsupported platform');
 }
 
-// FFmpeg 函数绑定
+/// FFmpeg function type definitions for native interoperation
 typedef AvFormatOpenInput =
     Int32 Function(
       Pointer<Pointer<AVFormatContext>> ps,
@@ -74,7 +79,7 @@ typedef AvFormatOpenInput =
 typedef AvFormatCloseInput =
     Void Function(Pointer<Pointer<AVFormatContext>> ps);
 
-// 从 avformat 库中获取函数
+/// Binds native FFmpeg functions from the avformat library
 final int Function(
   Pointer<Pointer<AVFormatContext>> ps,
   Pointer<Utf8> url,
@@ -91,18 +96,21 @@ final void Function(Pointer<Pointer<AVFormatContext>> ps) avFormatCloseInput =
         .lookup<NativeFunction<AvFormatCloseInput>>('avformat_close_input')
         .asFunction();
 
-// FFmpeg 结构体定义
+/// FFmpeg structure definitions (placeholder implementations)
+///
+/// These structs serve as type markers for FFI operations and require
+/// proper field definitions matching the native implementations.
 final class AVFormatContext extends Struct {
-  @Int32() // 占位字段
+  @Int32()
   external int placeholder;
 }
 
 final class AVInputFormat extends Struct {
-  @Int32() // 占位字段
+  @Int32()
   external int placeholder;
 }
 
 final class AVDictionary extends Struct {
-  @Int32() // 占位字段
+  @Int32()
   external int placeholder;
 }

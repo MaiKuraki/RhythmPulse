@@ -10,6 +10,8 @@
   "operation": "操作",
   "state": "状态",
   "splitAudioVideo": "分离音视频",
+  "cancelTask": "取消任务",
+  "taskCanceled": "任务已取消",
   "processingPleaseWait": "处理中，请稍候...",
   "executionLog": "执行日志",
   "noFileSelected": "请先选择一个媒体文件。",
@@ -25,5 +27,6 @@
   "taskStatusIdle": "空闲",
   "taskStatusRunning": "运行中",
   "taskStatusSuccess": "成功",
-  "taskStatusFailed": "失败"
+  "taskStatusFailed": "失败",
+  "taskStatusCanceled": "已取消"
 }

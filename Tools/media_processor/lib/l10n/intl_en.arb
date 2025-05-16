@@ -10,6 +10,8 @@
   "operation": "Operation",
   "state": "State",
   "splitAudioVideo": "Split Audio and Video",
+  "cancelTask": "Cancel Task",
+  "taskCanceled": "Task canceled",
   "processingPleaseWait": "Processing, please wait...",
   "executionLog": "Execution Log",
   "noFileSelected": "Please select a media file first.",
@@ -25,5 +27,6 @@
   "taskStatusIdle": "Idle",
   "taskStatusRunning": "Running",
   "taskStatusSuccess": "Success",
-  "taskStatusFailed": "Failed"
+  "taskStatusFailed": "Failed",
+  "taskStatusCanceled": "Canceled"
 }

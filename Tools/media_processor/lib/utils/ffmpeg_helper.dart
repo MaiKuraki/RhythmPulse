@@ -4,18 +4,20 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
 
+/// Represents the result of an FFmpeg operation
 class FfmpegResult {
-  final bool success;
-  final String log;
+  final bool success; // Indicates whether the operation succeeded
+  final String log; // Contains execution logs or error messages
 
   FfmpegResult(this.success, this.log);
 }
 
+/// Contains metadata information about a media file
 class MediaInfo {
-  final int videoBitrate; // bps
-  final int width;
-  final int height;
-  final int audioBitrate; // bps
+  final int videoBitrate; // Video bitrate in bits per second (bps)
+  final int width; // Video width in pixels
+  final int height; // Video height in pixels
+  final int audioBitrate; // Audio bitrate in bits per second (bps)
 
   MediaInfo({
     required this.videoBitrate,
@@ -25,9 +27,13 @@ class MediaInfo {
   });
 }
 
+/// Provides utility methods for FFmpeg operations
 class FFmpegHelper {
+  /// Retrieves media metadata using ffprobe
+  /// Returns [MediaInfo] if successful, null otherwise
   static Future<MediaInfo?> _getMediaInfo(String inputPath) async {
     try {
+      // Configure arguments for video stream analysis
       final videoArgs = [
         '-v',
         'error',
@@ -44,7 +50,7 @@ class FFmpegHelper {
 
       if (videoProcess.exitCode != 0) {
         if (kDebugMode) {
-          print('ffprobe video stream failed: ${videoProcess.stderr}');
+          print('ffprobe video stream analysis failed: ${videoProcess.stderr}');
         }
         return null;
       }
@@ -53,7 +59,7 @@ class FFmpegHelper {
       final videoStreams = videoJson['streams'] as List<dynamic>?;
       if (videoStreams == null || videoStreams.isEmpty) {
         if (kDebugMode) {
-          print('No video stream found');
+          print('No video stream detected in the input file');
         }
         return null;
       }
@@ -64,6 +70,7 @@ class FFmpegHelper {
       final int width = videoStream['width'] ?? 0;
       final int height = videoStream['height'] ?? 0;
 
+      // Configure arguments for audio stream analysis
       final audioArgs = [
         '-v',
         'error',
@@ -80,7 +87,7 @@ class FFmpegHelper {
 
       if (audioProcess.exitCode != 0) {
         if (kDebugMode) {
-          print('ffprobe audio stream failed: ${audioProcess.stderr}');
+          print('ffprobe audio stream analysis failed: ${audioProcess.stderr}');
         }
         return null;
       }
@@ -89,7 +96,7 @@ class FFmpegHelper {
       final audioStreams = audioJson['streams'] as List<dynamic>?;
       if (audioStreams == null || audioStreams.isEmpty) {
         if (kDebugMode) {
-          print('No audio stream found');
+          print('No audio stream detected in the input file');
         }
         return null;
       }
@@ -106,27 +113,37 @@ class FFmpegHelper {
       );
     } catch (e) {
       if (kDebugMode) {
-        print('Error getting media info: $e');
+        print('Exception occurred while retrieving media info: $e');
       }
       return null;
     }
   }
 
+  /// Splits a media file into separate video and audio streams
+  /// [inputPath] - Source media file path
+  /// [outputVideoPath] - Destination path for video output
+  /// [outputAudioPath] - Destination path for audio output
+  /// [localizedStrings] - Localization strings for logging
+  /// [onLog] - Optional callback for real-time logging
+  /// [cancelToken] - Optional cancellation token for aborting the operation
+  /// Returns a formatted log of the operation
   static Future<String> splitAudioVideo({
     required String inputPath,
     required String outputVideoPath,
     required String outputAudioPath,
     required Map<String, String> localizedStrings,
     void Function(String log)? onLog,
+    Future<void>? cancelToken,
   }) async {
     final buffer = StringBuffer();
     final timestamp = DateTime.now().toIso8601String();
 
+    /// Formats template strings with provided parameters
     String format(String template, Map<String, dynamic> params) {
       return params.entries.fold(
         template,
         (result, entry) =>
-            result.replaceAll('{${entry.key}}', entry.value.toString()),
+            result.replaceAll('{{${entry.key}}}', entry.value.toString()),
       );
     }
 
@@ -134,77 +151,79 @@ class FFmpegHelper {
       final mediaInfo = await _getMediaInfo(inputPath);
 
       if (mediaInfo == null) {
-        final err = 'Failed to get media info for input file.';
+        final err = 'Unable to retrieve media metadata from input file';
         buffer.writeln('[$timestamp]   ❌ $err');
         onLog?.call(buffer.toString());
         return buffer.toString();
       }
 
+      // Calculate bitrates with 5% margin
       final videoBitrate =
           mediaInfo.videoBitrate > 0
               ? (mediaInfo.videoBitrate * 1.05).toInt()
-              : 1000 * 1000;
+              : 1000 * 1000; // Default to 1Mbps if bitrate unavailable
 
       final audioBitrate =
           mediaInfo.audioBitrate > 0
               ? (mediaInfo.audioBitrate * 1.05).toInt()
-              : 128 * 1000;
+              : 128 * 1000; // Default to 128kbps if bitrate unavailable
 
+      // Video extraction command configuration
       final videoCmd = [
-        '-i',
-        inputPath,
-        '-c:v',
-        'libx264',
-        '-b:v',
-        videoBitrate.toString(),
-        '-vf',
-        'scale=${mediaInfo.width}:${mediaInfo.height}',
-        '-an',
-        '-y',
+        '-i', inputPath,
+        '-c:v', 'libx264',
+        '-b:v', videoBitrate.toString(),
+        '-vf', 'scale=${mediaInfo.width}:${mediaInfo.height}',
+        '-an', // Disable audio
+        '-y', // Overwrite output without confirmation
         outputVideoPath,
       ];
 
+      // Audio extraction command configuration
       final audioCmd = [
-        '-i',
-        inputPath,
-        '-vn',
-        '-c:a',
-        'libvorbis',
-        '-b:a',
-        audioBitrate.toString(),
-        '-y',
+        '-i', inputPath,
+        '-vn', // Disable video
+        '-c:a', 'libvorbis',
+        '-b:a', audioBitrate.toString(),
+        '-y', // Overwrite output without confirmation
         outputAudioPath,
       ];
 
-      final videoCmdStr = videoCmd.join(' ');
-      final audioCmdStr = audioCmd.join(' ');
-
+      // Prepare localized log messages
       final videoSplitCmdLog = format(
-        localizedStrings['videoSplitCmd'] ?? 'Split video command: {cmd}',
-        {'cmd': videoCmdStr},
+        localizedStrings['videoSplitCmd'] ??
+            'Video extraction command: {{cmd}}',
+        {'cmd': videoCmd.join('   ')},
       );
       final videoSplitSuccessLog = format(
-        localizedStrings['videoSplitSuccess'] ?? 'Video split success: {path}',
+        localizedStrings['videoSplitSuccess'] ??
+            'Video successfully extracted to: {{path}}',
         {'path': outputVideoPath},
       );
       final videoSplitFailedLog =
-          localizedStrings['videoSplitFailed'] ?? 'Video split failed';
+          localizedStrings['videoSplitFailed'] ?? 'Video extraction failed';
 
       final audioSplitCmdLog = format(
-        localizedStrings['audioSplitCmd'] ?? 'Split audio command: {cmd}',
-        {'cmd': audioCmdStr},
+        localizedStrings['audioSplitCmd'] ??
+            'Audio extraction command: {{cmd}}',
+        {'cmd': audioCmd.join('   ')},
       );
       final audioSplitSuccessLog = format(
-        localizedStrings['audioSplitSuccess'] ?? 'Audio split success: {path}',
+        localizedStrings['audioSplitSuccess'] ??
+            'Audio successfully extracted to: {{path}}',
         {'path': outputAudioPath},
       );
       final audioSplitFailedLog =
-          localizedStrings['audioSplitFailed'] ?? 'Audio split failed';
+          localizedStrings['audioSplitFailed'] ?? 'Audio extraction failed';
 
+      // Execute video extraction
       buffer.writeln('[$timestamp]   $videoSplitCmdLog');
       onLog?.call(buffer.toString());
 
-      final videoResult = await _executeFfmpegCommand(videoCmd);
+      final videoResult = await _executeFfmpegCommand(
+        videoCmd,
+        cancelToken: cancelToken,
+      );
 
       buffer.writeln(videoResult.log);
       onLog?.call(buffer.toString());
@@ -218,10 +237,14 @@ class FFmpegHelper {
         return buffer.toString();
       }
 
+      // Execute audio extraction
       buffer.writeln('[$timestamp]   $audioSplitCmdLog');
       onLog?.call(buffer.toString());
 
-      final audioResult = await _executeFfmpegCommand(audioCmd);
+      final audioResult = await _executeFfmpegCommand(
+        audioCmd,
+        cancelToken: cancelToken,
+      );
 
       buffer.writeln(audioResult.log);
       onLog?.call(buffer.toString());
@@ -234,7 +257,7 @@ class FFmpegHelper {
         onLog?.call(buffer.toString());
       }
     } catch (e) {
-      final errLog = 'Error during FFmpeg operation: $e';
+      final errLog = 'FFmpeg operation encountered an error: $e';
       if (kDebugMode) {
         print(errLog);
       }
@@ -245,13 +268,22 @@ class FFmpegHelper {
     return buffer.toString();
   }
 
-  static Future<FfmpegResult> _executeFfmpegCommand(List<String> args) async {
+  /// Executes an FFmpeg command with process management
+  /// [args] - Command line arguments for FFmpeg
+  /// [cancelToken] - Optional cancellation token
+  /// Returns an [FfmpegResult] containing execution status and logs
+  static Future<FfmpegResult> _executeFfmpegCommand(
+    List<String> args, {
+    Future<void>? cancelToken,
+  }) async {
     final logBuffer = StringBuffer();
+    int? processPid;
+    Process? process;
 
     try {
-      late Process process;
-      String ffmpegPath;
+      late String ffmpegPath;
 
+      // Platform-specific FFmpeg executable handling
       if (Platform.isWindows) {
         ffmpegPath = path.join(
           Directory.current.path,
@@ -263,109 +295,133 @@ class FFmpegHelper {
         final ffmpegFile = File(ffmpegPath);
         if (!ffmpegFile.existsSync()) {
           final err = 'FFmpeg executable not found at $ffmpegPath';
-          if (kDebugMode) {
-            print(err);
-          }
+          logBuffer.writeln(err);
           return FfmpegResult(false, err);
         }
-        logBuffer.writeln(
-          'Executing FFmpeg command: $ffmpegPath ${args.join(' ')}',
-        );
         process = await Process.start(ffmpegPath, args, runInShell: true);
       } else {
         ffmpegPath = 'ffmpeg';
-        logBuffer.writeln('Executing FFmpeg command: ffmpeg ${args.join(' ')}');
         process = await Process.start('ffmpeg', args, runInShell: true);
       }
 
-      // 注册进程
-      FfmpegProcessManager().addProcess(process);
+      processPid = process.pid;
+      FfmpegProcessManager().addProcess(processPid);
+      if (kDebugMode) {
+        print('FFmpeg process initiated with PID: $processPid');
+      }
 
       final completer = Completer<void>();
 
+      // Capture standard output
       process.stdout.transform(utf8.decoder).listen((data) {
         logBuffer.write(data);
-        if (kDebugMode) {
-          print('FFmpeg stdout: $data');
-        }
       });
 
-      process.stderr
-          .transform(utf8.decoder)
-          .listen(
-            (data) {
-              logBuffer.write(data);
-              if (kDebugMode) {
-                print('FFmpeg stderr: $data');
-              }
-            },
-            onDone: () {
-              completer.complete();
-            },
-          );
+      // Capture standard error
+      process.stderr.transform(utf8.decoder).listen((data) {
+        logBuffer.write(data);
+      }, onDone: () => completer.complete());
+
+      // Handle cancellation request
+      final cancelSub = cancelToken?.asStream().listen((_) {
+        if (kDebugMode) {
+          print('Cancellation initiated for process PID: $processPid');
+        }
+        process?.kill();
+        FfmpegProcessManager().killProcess(processPid!);
+      });
 
       final exitCode = await process.exitCode;
       await completer.future;
+      cancelSub?.cancel();
 
-      // 进程结束，移除
-      FfmpegProcessManager().removeProcess(process);
-
-      if (exitCode == 0) {
-        logBuffer.writeln('FFmpeg command executed successfully.');
-        return FfmpegResult(true, logBuffer.toString());
-      } else {
-        logBuffer.writeln('FFmpeg command failed with exit code $exitCode.');
-        return FfmpegResult(false, logBuffer.toString());
-      }
+      return FfmpegResult(
+        exitCode == 0,
+        'Exit Code: $exitCode\n${logBuffer.toString()}',
+      );
     } catch (e) {
-      final err = 'Error executing FFmpeg command: $e';
-      if (kDebugMode) {
-        print(err);
+      return FfmpegResult(
+        false,
+        'Execution error: $e\n${logBuffer.toString()}',
+      );
+    } finally {
+      if (processPid != null) {
+        FfmpegProcessManager().removeProcess(processPid);
       }
-      logBuffer.writeln(err);
-      return FfmpegResult(false, logBuffer.toString());
     }
   }
 }
 
+/// Manages FFmpeg process lifecycle and provides cleanup capabilities
 class FfmpegProcessManager {
   static final FfmpegProcessManager _instance =
       FfmpegProcessManager._internal();
-
   factory FfmpegProcessManager() => _instance;
-
   FfmpegProcessManager._internal();
 
-  final List<Process> _runningProcesses = [];
+  final Set<int> _runningPids = {};
 
-  void addProcess(Process process) {
-    _runningProcesses.add(process);
+  /// Registers a new process PID for management
+  void addProcess(int pid) {
+    _runningPids.add(pid);
+    if (kDebugMode) {
+      print('Process registered - PID: $pid, Active PIDs: $_runningPids');
+    }
   }
 
-  void removeProcess(Process process) {
-    _runningProcesses.remove(process);
+  /// Deregisters a process PID
+  void removeProcess(int pid) {
+    _runningPids.remove(pid);
+    if (kDebugMode) {
+      print('Process deregistered - PID: $pid, Remaining PIDs: $_runningPids');
+    }
   }
 
-  /// 杀死所有正在运行的 FFmpeg 进程
-  Future<void> killAll() async {
-    for (final process in List<Process>.from(_runningProcesses)) {
+  /// Terminates a specific process
+  void killProcess(int pid) {
+    if (_runningPids.contains(pid)) {
       try {
-        if (process.kill(ProcessSignal.sigterm)) {
-          // 等待进程退出，超时后强制杀死
-          await process.exitCode.timeout(
-            const Duration(seconds: 3),
-            onTimeout: () {
-              process.kill(ProcessSignal.sigkill);
-              return -1; // 必须返回 int
-            },
-          );
+        if (Platform.isWindows) {
+          Process.run('taskkill', ['/F', '/T', '/PID', '$pid']);
+        } else {
+          Process.run('kill', ['-9', '$pid']);
+        }
+        if (kDebugMode) {
+          print('Termination signal sent to process PID: $pid');
         }
       } catch (e) {
         if (kDebugMode) {
-          print('Error killing FFmpeg process: $e');
+          print('Process termination failed for PID $pid: $e');
         }
       }
-      _runningProcesses.remove(process);
+      _runningPids.remove(pid);
+    }
+  }
+
+  /// Terminates all managed processes
+  Future<void> killAll() async {
+    final pidsToKill = Set<int>.from(_runningPids);
+    _runningPids.clear(); // Clear PID registry immediately
+
+    if (kDebugMode) {
+      print('Initiating termination for all processes: $pidsToKill');
+    }
+
+    for (final pid in pidsToKill) {
+      try {
+        if (Platform.isWindows) {
+          await Process.run('taskkill', ['/F', '/T', '/PID', '$pid']);
+        } else {
+          await Process.run('kill', ['-9', '$pid']);
+        }
+        if (kDebugMode) {
+          print('Successfully terminated process PID: $pid');
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          print('Error terminating process $pid: $e');
+        }
+      }
     }
   }
 }

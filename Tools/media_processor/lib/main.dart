@@ -2,20 +2,26 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:path/path.dart' as path;
 import 'utils/ffmpeg_helper.dart';
 
+/// Main application entry point
 void main() async {
+  // Handle process termination signals (Ctrl+C)
   ProcessSignal.sigint.watch().listen((signal) {
     FfmpegProcessManager().killAll().then((_) {
       exit(0);
     });
   });
+
+  // Initialize and run the application
   runApp(const MediaProcessingMasterApp());
 }
 
+/// Root application widget configuring MaterialApp with internationalization support
 class MediaProcessingMasterApp extends StatelessWidget {
   const MediaProcessingMasterApp({super.key});
 
@@ -48,8 +54,10 @@ class MediaProcessingMasterApp extends StatelessWidget {
   }
 }
 
-enum TaskStatus { idle, running, success, failed }
+/// Enumeration representing possible states of media processing tasks
+enum TaskStatus { idle, running, success, failed, canceled }
 
+/// Primary application screen containing media processing functionality
 class MediaProcessingHomePage extends StatefulWidget {
   const MediaProcessingHomePage({super.key});
 
@@ -58,15 +66,19 @@ class MediaProcessingHomePage extends StatefulWidget {
       _MediaProcessingHomePageState();
 }
 
+/// State management for the media processing home page
 class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
     with WidgetsBindingObserver {
   String? _selectedFilePath;
+  List<String> _outputFiles = [];
   String _log = '';
   bool _isProcessing = false;
   TaskStatus _taskStatus = TaskStatus.idle;
+  Completer<void>? _currentTaskCompleter;
 
   final ScrollController _logScrollController = ScrollController();
 
+  /// Supported media file extensions for processing
   final List<String> _allowedExtensions = [
     'mp4',
     'avi',
@@ -74,10 +86,11 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
     'mov',
     'flv',
     'wmv',
+    'webm',
     'mp3',
     'wav',
-    'aac',
     'ogg',
+    'aac',
   ];
 
   @override
@@ -88,23 +101,53 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
 
   @override
   void dispose() {
+    // Clean up resources and observers
     WidgetsBinding.instance.removeObserver(this);
     _scrollDebounce?.cancel();
     _logScrollController.dispose();
-    // 页面销毁时杀死所有 FFmpeg 进程，防止残留
-    FfmpegProcessManager().killAll();
+    _cancelCurrentTask();
     super.dispose();
   }
 
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.detached ||
-        state == AppLifecycleState.inactive) {
-      // 应用即将退出或进入后台，杀死所有 FFmpeg 进程
-      FfmpegProcessManager().killAll();
+  /// Terminates the current processing task and cleans up resources
+  Future<void> _cancelCurrentTask() async {
+    if (_isProcessing) {
+      if (kDebugMode) {
+        print('User requested cancellation');
+      }
+      setState(() {
+        _taskStatus = TaskStatus.canceled;
+        _isProcessing = false;
+        _log += '\n${S.of(context)?.taskCanceled ?? 'Task canceled by user'}';
+      });
+      _scrollLogToBottom();
+
+      // Complete the current task completer and terminate FFmpeg processes
+      _currentTaskCompleter?.complete();
+      await FfmpegProcessManager().killAll();
+      _currentTaskCompleter = null;
+
+      // Remove incomplete output files
+      for (final filePath in _outputFiles) {
+        final file = File(filePath);
+        if (await file.exists()) {
+          try {
+            await file.delete();
+            if (kDebugMode) {
+              print('Deleted incomplete file: $filePath');
+            }
+          } catch (e) {
+            if (kDebugMode) {
+              print('Error deleting file $filePath: $e');
+            }
+          }
+        }
+      }
+      _outputFiles.clear();
     }
   }
 
+  /// Opens a file picker dialog to select media files
   Future<void> _pickMediaFile() async {
     setState(() {
       _log = '';
@@ -137,6 +180,7 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
     }
   }
 
+  /// Clears the currently selected file
   void _clearSelectedFile() {
     if (_isProcessing) return;
     setState(() {
@@ -146,7 +190,7 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
     });
   }
 
-  /// 生成一个不重复的文件路径，如果存在则自动添加数字后缀
+  /// Generates a unique file path by appending a counter if the file exists
   String generateUniqueFilePath(String originalPath) {
     var file = File(originalPath);
     if (!file.existsSync()) {
@@ -168,6 +212,7 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
     return newPath;
   }
 
+  /// Executes the audio/video separation process
   Future<void> _splitAudioVideo() async {
     if (_selectedFilePath == null) {
       setState(() {
@@ -188,18 +233,24 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
     });
     _scrollLogToBottom();
 
+    _currentTaskCompleter = Completer<void>();
+
     try {
       final inputFile = File(_selectedFilePath!);
       final dir = inputFile.parent.path.replaceAll('\\', '/');
       final baseName = inputFile.uri.pathSegments.last.split('.').first;
 
-      // 生成唯一文件路径，避免覆盖
+      // Generate initial and unique output paths
       final outputVideoPathInitial = '$dir/${baseName}_video_only.mp4';
       final outputAudioPathInitial = '$dir/${baseName}_audio.ogg';
 
       final outputVideoPath = generateUniqueFilePath(outputVideoPathInitial);
       final outputAudioPath = generateUniqueFilePath(outputAudioPathInitial);
 
+      // Track output file paths for cleanup
+      _outputFiles = [outputVideoPath, outputAudioPath];
+
+      // Prepare localized strings for FFmpeg commands
       final localizedStringsMap = {
         'videoSplitCmd': S.of(context)!.videoSplitCmd(''),
         'videoSplitSuccess': S.of(context)!.videoSplitSuccess(''),
@@ -209,45 +260,59 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
         'audioSplitFailed': S.of(context)!.audioSplitFailed(''),
       };
 
+      // Execute the FFmpeg processing
       final log = await FFmpegHelper.splitAudioVideo(
         inputPath: _selectedFilePath!,
         outputVideoPath: outputVideoPath,
         outputAudioPath: outputAudioPath,
         localizedStrings: localizedStringsMap,
         onLog: (partialLog) {
-          setState(() {
-            _log = partialLog;
-          });
-          _scrollLogToBottom();
+          if (_currentTaskCompleter?.isCompleted == false) {
+            setState(() {
+              _log = partialLog;
+            });
+            _scrollLogToBottom();
+          }
         },
+        cancelToken: _currentTaskCompleter?.future,
       );
 
-      setState(() {
-        _log = log;
-        if (log.contains('❌')) {
-          _taskStatus = TaskStatus.failed;
-        } else {
-          _taskStatus = TaskStatus.success;
-        }
-      });
-      _scrollLogToBottom();
+      // Update status based on processing outcome
+      if (_taskStatus != TaskStatus.canceled) {
+        setState(() {
+          _log = log;
+          if (log.contains('❌')) {
+            _taskStatus = TaskStatus.failed;
+          } else {
+            _taskStatus = TaskStatus.success;
+          }
+        });
+        _scrollLogToBottom();
+      }
     } catch (e) {
-      setState(() {
-        _log =
-            S.of(context)?.errorOccurred(e.toString()) ??
-            'An error occurred: $e';
-        _taskStatus = TaskStatus.failed;
-      });
-      _scrollLogToBottom();
+      if (_taskStatus != TaskStatus.canceled) {
+        setState(() {
+          _log =
+              S.of(context)?.errorOccurred(e.toString()) ??
+              'An error occurred: $e';
+          _taskStatus = TaskStatus.failed;
+        });
+        _scrollLogToBottom();
+      }
     } finally {
-      setState(() {
-        _isProcessing = false;
-      });
+      await FfmpegProcessManager().killAll();
+      if (_taskStatus != TaskStatus.canceled && mounted) {
+        setState(() {
+          _isProcessing = false;
+        });
+      }
+      _currentTaskCompleter = null;
     }
   }
 
   Timer? _scrollDebounce;
 
+  /// Scrolls the log output to the bottom with debouncing
   void _scrollLogToBottom() {
     _scrollDebounce?.cancel();
     _scrollDebounce = Timer(const Duration(milliseconds: 100), () {
@@ -259,8 +324,9 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
     });
   }
 
+  /// Builds the file selection UI component
   Widget _buildFileSelector() {
-    final formats = _allowedExtensions.join(',  ');
+    final formats = _allowedExtensions.join(',    ');
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -346,11 +412,13 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
     );
   }
 
+  /// Builds the operation control UI component
   Widget _buildOperationCard() {
     String statusText;
     Color statusColor;
     IconData? statusIcon;
 
+    // Determine status display properties
     switch (_taskStatus) {
       case TaskStatus.running:
         statusText = S.of(context)?.taskStatusRunning ?? 'Running';
@@ -366,8 +434,12 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
         statusColor = Colors.red;
         statusIcon = Icons.error;
         break;
+      case TaskStatus.canceled:
+        statusText = S.of(context)?.taskStatusCanceled ?? 'Canceled';
+        statusColor = Colors.orange;
+        statusIcon = Icons.warning;
+        break;
       case TaskStatus.idle:
-      default:
         statusText = S.of(context)?.taskStatusIdle ?? 'Idle';
         statusColor = Colors.grey;
         break;
@@ -391,22 +463,43 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
               ),
             ),
             const SizedBox(height: 16),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.content_cut),
-              label: Text(
-                S.of(context)?.splitAudioVideo ?? 'Split Audio and Video',
-              ),
-              onPressed:
-                  (_selectedFilePath == null || _isProcessing)
-                      ? null
-                      : _splitAudioVideo,
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size.fromHeight(48),
-                backgroundColor: Colors.deepPurple,
-                foregroundColor: Colors.white,
-                disabledBackgroundColor: Colors.deepPurple.shade100,
-                disabledForegroundColor: Colors.deepPurple,
-              ),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.content_cut),
+                    label: Text(
+                      S.of(context)?.splitAudioVideo ?? 'Split Audio and Video',
+                    ),
+                    onPressed:
+                        (_selectedFilePath == null || _isProcessing)
+                            ? null
+                            : _splitAudioVideo,
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(48),
+                      backgroundColor: Colors.deepPurple,
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor: Colors.deepPurple.shade100,
+                      disabledForegroundColor: Colors.deepPurple,
+                    ),
+                  ),
+                ),
+                if (_isProcessing) ...[
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.cancel),
+                      label: Text(S.of(context)?.cancelTask ?? 'Cancel Task'),
+                      onPressed: _cancelCurrentTask,
+                      style: ElevatedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(48),
+                        backgroundColor: Colors.redAccent,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ),
             if (_isProcessing || _taskStatus != TaskStatus.idle)
               Padding(
@@ -438,6 +531,7 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
     );
   }
 
+  /// Builds the log output display component
   Widget _buildLogOutput() {
     return Card(
       elevation: 4,
@@ -493,6 +587,7 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
     );
   }
 
+  /// Builds the application footer component
   Widget _buildFooter() {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 12),
