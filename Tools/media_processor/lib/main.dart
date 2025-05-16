@@ -104,6 +104,7 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
   bool _isProcessing = false;
   TaskStatus _taskStatus = TaskStatus.idle;
   Completer<void>? _currentTaskCompleter;
+  bool _videoOutputApply4K = false;
 
   final ScrollController _logScrollController = ScrollController();
 
@@ -301,6 +302,7 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
         outputVideoPath: outputVideoPath,
         outputAudioPath: outputAudioPath,
         localizedStrings: localizedStringsMap,
+        apply4K: _videoOutputApply4K,
         onLog: (partialLog) {
           if (_currentTaskCompleter?.isCompleted == false) {
             setState(() {
@@ -498,6 +500,8 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
               ),
             ),
             const SizedBox(height: 16),
+            _buildResolutionToggle(),
+            const SizedBox(height: 16),
             Row(
               children: [
                 Expanded(
@@ -563,6 +567,34 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
           ],
         ),
       ),
+    );
+  }
+
+  /// Builds the resolution toggle
+  Widget _buildResolutionToggle() {
+    return Row(
+      children: [
+        Switch(
+          value: _videoOutputApply4K,
+          onChanged:
+              _isProcessing
+                  ? null
+                  : (value) {
+                    setState(() {
+                      _videoOutputApply4K = value;
+                    });
+                  },
+          activeColor: Colors.deepPurple,
+        ),
+        const SizedBox(width: 8),
+        Text(
+          S.of(context)?.output4K ?? 'Output 4K Video Resolution',
+          style: TextStyle(
+            fontSize: 14,
+            color: _isProcessing ? Colors.grey : Colors.black87,
+          ),
+        ),
+      ],
     );
   }
 

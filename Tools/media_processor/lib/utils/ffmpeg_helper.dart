@@ -142,6 +142,7 @@ class FFmpegHelper {
     required String outputVideoPath,
     required String outputAudioPath,
     required Map<String, String> localizedStrings,
+    bool apply4K = false,
     void Function(String log)? onLog,
     Future<void>? cancelToken,
   }) async {
@@ -177,11 +178,28 @@ class FFmpegHelper {
         return buffer.toString();
       }
 
+      // Calculate target resolution
+      int targetHeight = mediaInfo.height;
+      int targetWidth = mediaInfo.width;
+
+      // If 4K is not selected and original height exceeds 1080, scale down
+      if (!apply4K && mediaInfo.height > 1080) {
+        final aspectRatio = mediaInfo.width / mediaInfo.height;
+        targetHeight = 1080;
+        targetWidth = (1080 * aspectRatio).round();
+      }
+
       // Calculate bitrates with 5% margin
       final videoBitrate =
           mediaInfo.videoBitrate > 0
               ? (mediaInfo.videoBitrate * 1.05).toInt()
               : 1000 * 1000; // Default to 1Mbps if bitrate unavailable
+
+      // Adjust bitrate proportionally if resolution was scaled down
+      final adjustedBitrate =
+          !apply4K && mediaInfo.height > 1080
+              ? (videoBitrate * (1080 / mediaInfo.height)).toInt()
+              : videoBitrate;
 
       final audioBitrate =
           mediaInfo.audioBitrate > 0
@@ -192,8 +210,8 @@ class FFmpegHelper {
       final videoCmd = [
         '-i', inputPath,
         '-c:v', 'libx264',
-        '-b:v', videoBitrate.toString(),
-        '-vf', 'scale=${mediaInfo.width}:${mediaInfo.height}',
+        '-b:v', adjustedBitrate.toString(),
+        '-vf', 'scale=$targetWidth:$targetHeight',
         '-an', // Disable audio
         '-y', // Overwrite output without confirmation
         outputVideoPath,

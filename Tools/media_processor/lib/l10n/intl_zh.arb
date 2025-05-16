@@ -8,6 +8,7 @@
   "clear": "清除",
   "supportedFormats": "支持格式：{formats}",
   "operation": "操作",
+  "output4K": "输出4K视频",
   "state": "状态",
   "splitAudioVideo": "分离音视频",
   "cancelTask": "取消任务",

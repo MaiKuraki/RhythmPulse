@@ -8,6 +8,7 @@
   "clear": "Clear",
   "supportedFormats": "Supported formats: {formats}",
   "operation": "Operation",
+  "output4K": "Output 4K Video Resolution",
   "state": "State",
   "splitAudioVideo": "Split Audio and Video",
   "cancelTask": "Cancel Task",
