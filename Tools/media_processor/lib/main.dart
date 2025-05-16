@@ -105,6 +105,9 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
   TaskStatus _taskStatus = TaskStatus.idle;
   Completer<void>? _currentTaskCompleter;
   bool _videoOutputApply4K = false;
+  bool _showPreviewOptions = false;
+  final TextEditingController _startTimeController = TextEditingController();
+  final TextEditingController _endTimeController = TextEditingController();
 
   final ScrollController _logScrollController = ScrollController();
 
@@ -133,6 +136,8 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
   void dispose() {
     // Clean up resources and observers
     WidgetsBinding.instance.removeObserver(this);
+    _startTimeController.dispose();
+    _endTimeController.dispose();
     _scrollDebounce?.cancel();
     _logScrollController.dispose();
     _cancelCurrentTask();
@@ -347,6 +352,202 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
     }
   }
 
+  /// Generate preview based on current settings
+  Future<void> _generatePreview() async {
+    if (_selectedFilePath == null) {
+      setState(() {
+        _log =
+            S.of(context)?.noFileSelected ??
+            'Please select a media file first.';
+        _taskStatus = TaskStatus.failed;
+      });
+      _scrollLogToBottom();
+      return;
+    }
+
+    // Validate time inputs
+    final startMs = int.tryParse(_startTimeController.text) ?? 0;
+    final endMs = int.tryParse(_endTimeController.text) ?? 0;
+
+    if (startMs < 0 || endMs <= startMs) {
+      setState(() {
+        _log =
+            S.of(context)?.invalidTimeRange ??
+            'Invalid time range (end must be after start)';
+        _taskStatus = TaskStatus.failed;
+      });
+      _scrollLogToBottom();
+      return;
+    }
+
+    setState(() {
+      _isProcessing = true;
+      _taskStatus = TaskStatus.running;
+      _log = S.of(context)?.generatingPreview ?? 'Generating preview...';
+    });
+    _scrollLogToBottom();
+
+    _currentTaskCompleter = Completer<void>();
+
+    try {
+      final inputFile = File(_selectedFilePath!);
+      final dir = inputFile.parent.path.replaceAll('\\', '/');
+      final baseName = inputFile.uri.pathSegments.last.split('.').first;
+
+      // Check if input is video (by extension)
+      final isVideo = _allowedExtensions
+          .where(
+            (ext) =>
+                ext != 'mp3' && ext != 'wav' && ext != 'ogg' && ext != 'aac',
+          )
+          .any((ext) => _selectedFilePath!.toLowerCase().endsWith('.$ext'));
+
+      // Generate output path
+      final outputPath = generateUniqueFilePath(
+        '$dir/${baseName}_preview.${isVideo ? 'mp4' : 'ogg'}',
+      );
+
+      // Track output file for cleanup
+      _outputFiles = [outputPath];
+
+      // Prepare localized strings
+      final localizedStringsMap = {
+        'previewCmd':
+            S.of(context)?.previewCmd('') ?? 'Preview command: {{cmd}}',
+        'previewSuccess':
+            S.of(context)?.previewSuccess('') ?? 'Preview generated: {{path}}',
+        'previewFailed':
+            S.of(context)?.previewFailed ?? 'Preview generation failed',
+      };
+
+      // Execute preview generation
+      final log = await FFmpegHelper.generatePreview(
+        inputPath: _selectedFilePath!,
+        outputPath: outputPath,
+        startMs: startMs,
+        endMs: endMs,
+        isVideo: isVideo,
+        apply4K: _videoOutputApply4K,
+        localizedStrings: localizedStringsMap,
+        onLog: (partialLog) {
+          if (_currentTaskCompleter?.isCompleted == false) {
+            setState(() {
+              _log = partialLog;
+            });
+            _scrollLogToBottom();
+          }
+        },
+        cancelToken: _currentTaskCompleter?.future,
+      );
+
+      // Update status
+      if (_taskStatus != TaskStatus.canceled) {
+        setState(() {
+          _log = log;
+          _taskStatus =
+              log.contains('❌') ? TaskStatus.failed : TaskStatus.success;
+        });
+        _scrollLogToBottom();
+      }
+    } catch (e) {
+      if (_taskStatus != TaskStatus.canceled) {
+        setState(() {
+          _log = S.of(context)?.errorOccurred(e.toString()) ?? 'Error: $e';
+          _taskStatus = TaskStatus.failed;
+        });
+        _scrollLogToBottom();
+      }
+    } finally {
+      await FfmpegProcessManager().killAll();
+      if (_taskStatus != TaskStatus.canceled && mounted) {
+        setState(() {
+          _isProcessing = false;
+        });
+      }
+      _currentTaskCompleter = null;
+    }
+  }
+
+  /// Toggles preview options visibility
+  void _togglePreviewOptions() {
+    setState(() {
+      _showPreviewOptions = !_showPreviewOptions;
+    });
+  }
+
+  /// Builds the preview options UI
+  Widget _buildPreviewOptions() {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+      height: _showPreviewOptions ? 180 : 0,
+      padding: _showPreviewOptions ? const EdgeInsets.all(16) : EdgeInsets.zero,
+      decoration: BoxDecoration(
+        color: Colors.deepPurple.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.deepPurple.shade100),
+      ),
+      child:
+          _showPreviewOptions
+              ? Column(
+                children: [
+                  Text(
+                    S.of(context)?.previewSettings ?? 'Preview Settings',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.deepPurple,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _startTimeController,
+                          keyboardType: TextInputType.number,
+                          decoration: InputDecoration(
+                            labelText:
+                                S.of(context)?.startTimeMs ?? 'Start Time (ms)',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: TextField(
+                          controller: _endTimeController,
+                          keyboardType: TextInputType.number,
+                          decoration: InputDecoration(
+                            labelText:
+                                S.of(context)?.endTimeMs ?? 'End Time (ms)',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.play_arrow),
+                    label: Text(
+                      S.of(context)?.generatePreview ?? 'Generate Preview',
+                    ),
+                    onPressed: _isProcessing ? null : _generatePreview,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.deepPurple,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ],
+              )
+              : null,
+    );
+  }
+
   Timer? _scrollDebounce;
 
   /// Scrolls the log output to the bottom with debouncing
@@ -499,9 +700,28 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
                 color: Colors.deepPurple,
               ),
             ),
+
+            //  Resolution Toggle
             const SizedBox(height: 16),
             _buildResolutionToggle(),
             const SizedBox(height: 16),
+
+            //  Preview Options
+            ElevatedButton.icon(
+              icon: Icon(
+                _showPreviewOptions ? Icons.expand_less : Icons.expand_more,
+              ),
+              label: Text(S.of(context)?.previewOptions ?? 'Preview Options'),
+              onPressed: _isProcessing ? null : _togglePreviewOptions,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.deepPurple.shade100,
+                foregroundColor: Colors.deepPurple,
+              ),
+            ),
+            const SizedBox(height: 12),
+            _buildPreviewOptions(),
+            const SizedBox(height: 16),
+
             Row(
               children: [
                 Expanded(

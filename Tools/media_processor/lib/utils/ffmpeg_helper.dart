@@ -129,6 +129,180 @@ class FFmpegHelper {
     }
   }
 
+  /// Gets the absolute path to the bundled ffprobe executable
+  static String getBundledFfprobePath() {
+    final binDir = path.join(
+      Directory.current.path,
+      'data',
+      'ffmpeg-release-full-shared',
+      'bin',
+    );
+
+    if (Platform.isWindows) {
+      return path.join(binDir, 'ffprobe.exe');
+    } else if (Platform.isLinux || Platform.isMacOS) {
+      return path.join(binDir, 'ffprobe');
+    }
+    throw UnsupportedError('Unsupported platform');
+  }
+
+  /// Gets the absolute path to the bundled ffmpeg executable
+  static String getBundledFfmpegPath() {
+    final binDir = path.join(
+      Directory.current.path,
+      'data',
+      'ffmpeg-release-full-shared',
+      'bin',
+    );
+
+    if (Platform.isWindows) {
+      return path.join(binDir, 'ffmpeg.exe');
+    } else if (Platform.isLinux || Platform.isMacOS) {
+      return path.join(binDir, 'ffmpeg');
+    }
+    throw UnsupportedError('Unsupported platform');
+  }
+
+  /// Verifies the bundled ffprobe exists and is accessible
+  static Future<bool> verifyBundledFfprobe() async {
+    try {
+      final ffprobePath = getBundledFfprobePath();
+      final file = File(ffprobePath);
+
+      if (await file.exists()) {
+        // On Unix-like systems, check execute permission
+        if (!Platform.isWindows) {
+          final stat = await file.stat();
+          if (stat.mode & 0x1 == 0) {
+            // No execute permission
+            if (kDebugMode) {
+              print('ffprobe exists but is not executable: $ffprobePath');
+            }
+            return false;
+          }
+        }
+        return true;
+      }
+      return false;
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error verifying bundled ffprobe: $e');
+      }
+      return false;
+    }
+  }
+
+  /// Verifies the bundled ffmpeg exists and is accessible
+  static Future<bool> verifyBundledFfmpeg() async {
+    try {
+      final ffmpegPath = getBundledFfmpegPath();
+      final file = File(ffmpegPath);
+
+      if (await file.exists()) {
+        // On Unix-like systems, check execute permission
+        if (!Platform.isWindows) {
+          final stat = await file.stat();
+          if (stat.mode & 0x1 == 0) {
+            // No execute permission
+            if (kDebugMode) {
+              print('ffmpeg exists but is not executable: $ffmpegPath');
+            }
+            return false;
+          }
+        }
+        return true;
+      }
+      return false;
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error verifying bundled ffmpeg: $e');
+      }
+      return false;
+    }
+  }
+
+  /// Executes an FFmpeg command with process management
+  /// [args] - Command line arguments for FFmpeg
+  /// [cancelToken] - Optional cancellation token
+  /// Returns an [FfmpegResult] containing execution status and logs
+  static Future<FfmpegResult> _executeFfmpegCommand(
+    List<String> args, {
+    Future<void>? cancelToken,
+  }) async {
+    final logBuffer = StringBuffer();
+    int? processPid;
+    Process? process;
+
+    try {
+      // Verify bundled ffmpeg is available
+      final hasBundledFfmpeg = await verifyBundledFfmpeg();
+      if (!hasBundledFfmpeg) {
+        throw Exception('Bundled ffmpeg not found or not accessible');
+      }
+
+      final ffmpegPath = getBundledFfmpegPath();
+      if (kDebugMode) {
+        print('Using bundled ffmpeg at: $ffmpegPath');
+      }
+
+      process = await Process.start(ffmpegPath, args, runInShell: true);
+      processPid = process.pid;
+      FfmpegProcessManager().addProcess(processPid);
+      if (kDebugMode) {
+        print('FFmpeg process initiated with PID: $processPid');
+      }
+
+      final completer = Completer<void>();
+
+      // Capture standard output
+      process.stdout.transform(utf8.decoder).listen((data) {
+        logBuffer.write(data);
+      });
+
+      // Capture standard error
+      process.stderr.transform(utf8.decoder).listen((data) {
+        logBuffer.write(data);
+      }, onDone: () => completer.complete());
+
+      // Handle cancellation request
+      final cancelSub = cancelToken?.asStream().listen((_) {
+        if (kDebugMode) {
+          print('Cancellation initiated for process PID: $processPid');
+        }
+        process?.kill();
+        FfmpegProcessManager().killProcess(processPid!);
+      });
+
+      final exitCode = await process.exitCode;
+      await completer.future;
+      cancelSub?.cancel();
+
+      return FfmpegResult(
+        exitCode == 0,
+        'Exit Code: $exitCode\n${logBuffer.toString()}',
+      );
+    } catch (e) {
+      return FfmpegResult(
+        false,
+        'Execution error: $e\n${logBuffer.toString()}',
+      );
+    } finally {
+      if (processPid != null) {
+        FfmpegProcessManager().removeProcess(processPid);
+      }
+    }
+  }
+
+  /// Helper to format milliseconds into HH:MM:SS.mmm  format
+  static String _formatTime(int milliseconds) {
+    final duration = Duration(milliseconds: milliseconds);
+    final hours = duration.inHours.toString().padLeft(2, '0');
+    final minutes = (duration.inMinutes % 60).toString().padLeft(2, '0');
+    final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
+    final ms = (duration.inMilliseconds % 1000).toString().padLeft(3, '0');
+    return '$hours:$minutes:$seconds.$ms';
+  }
+
   /// Splits a media file into separate video and audio streams
   /// [inputPath] - Source media file path
   /// [outputVideoPath] - Destination path for video output
@@ -306,168 +480,146 @@ class FFmpegHelper {
     return buffer.toString();
   }
 
-  /// Gets the absolute path to the bundled ffprobe executable
-  static String getBundledFfprobePath() {
-    final binDir = path.join(
-      Directory.current.path,
-      'data',
-      'ffmpeg-release-full-shared',
-      'bin',
-    );
-
-    if (Platform.isWindows) {
-      return path.join(binDir, 'ffprobe.exe');
-    } else if (Platform.isLinux || Platform.isMacOS) {
-      return path.join(binDir, 'ffprobe');
-    }
-    throw UnsupportedError('Unsupported platform');
-  }
-
-  /// Gets the absolute path to the bundled ffmpeg executable
-  static String getBundledFfmpegPath() {
-    final binDir = path.join(
-      Directory.current.path,
-      'data',
-      'ffmpeg-release-full-shared',
-      'bin',
-    );
-
-    if (Platform.isWindows) {
-      return path.join(binDir, 'ffmpeg.exe');
-    } else if (Platform.isLinux || Platform.isMacOS) {
-      return path.join(binDir, 'ffmpeg');
-    }
-    throw UnsupportedError('Unsupported platform');
-  }
-
-  /// Verifies the bundled ffprobe exists and is accessible
-  static Future<bool> verifyBundledFfprobe() async {
-    try {
-      final ffprobePath = getBundledFfprobePath();
-      final file = File(ffprobePath);
-
-      if (await file.exists()) {
-        // On Unix-like systems, check execute permission
-        if (!Platform.isWindows) {
-          final stat = await file.stat();
-          if (stat.mode & 0x1 == 0) {
-            // No execute permission
-            if (kDebugMode) {
-              print('ffprobe exists but is not executable: $ffprobePath');
-            }
-            return false;
-          }
-        }
-        return true;
-      }
-      return false;
-    } catch (e) {
-      if (kDebugMode) {
-        print('Error verifying bundled ffprobe: $e');
-      }
-      return false;
-    }
-  }
-
-  /// Verifies the bundled ffmpeg exists and is accessible
-  static Future<bool> verifyBundledFfmpeg() async {
-    try {
-      final ffmpegPath = getBundledFfmpegPath();
-      final file = File(ffmpegPath);
-
-      if (await file.exists()) {
-        // On Unix-like systems, check execute permission
-        if (!Platform.isWindows) {
-          final stat = await file.stat();
-          if (stat.mode & 0x1 == 0) {
-            // No execute permission
-            if (kDebugMode) {
-              print('ffmpeg exists but is not executable: $ffmpegPath');
-            }
-            return false;
-          }
-        }
-        return true;
-      }
-      return false;
-    } catch (e) {
-      if (kDebugMode) {
-        print('Error verifying bundled ffmpeg: $e');
-      }
-      return false;
-    }
-  }
-
-  /// Executes an FFmpeg command with process management
-  /// [args] - Command line arguments for FFmpeg
+  /// Generates a media preview based on input file type
+  /// [inputPath] - Source media file path
+  /// [outputPath] - Destination path for preview output
+  /// [startMs] - Start time in milliseconds
+  /// [endMs] - End time in milliseconds
+  /// [isVideo] - Whether input is a video file
+  /// [apply4K] - Whether to apply 4K resolution
+  /// [localizedStrings] - Localization strings for logging
+  /// [onLog] - Optional callback for real-time logging
   /// [cancelToken] - Optional cancellation token
-  /// Returns an [FfmpegResult] containing execution status and logs
-  static Future<FfmpegResult> _executeFfmpegCommand(
-    List<String> args, {
+  /// Returns a formatted log of the operation
+  static Future<String> generatePreview({
+    required String inputPath,
+    required String outputPath,
+    required int startMs,
+    required int endMs,
+    required bool isVideo,
+    required bool apply4K,
+    required Map<String, String> localizedStrings,
+    void Function(String log)? onLog,
     Future<void>? cancelToken,
   }) async {
-    final logBuffer = StringBuffer();
-    int? processPid;
-    Process? process;
+    final buffer = StringBuffer();
+    final timestamp = DateTime.now().toIso8601String();
+
+    String format(String template, Map<String, dynamic> params) {
+      return params.entries.fold(
+        template,
+        (result, entry) =>
+            result.replaceAll('{{${entry.key}}}', entry.value.toString()),
+      );
+    }
 
     try {
-      // Verify bundled ffmpeg is available
-      final hasBundledFfmpeg = await verifyBundledFfmpeg();
-      if (!hasBundledFfmpeg) {
-        throw Exception('Bundled ffmpeg not found or not accessible');
+      // Verify ffmpeg is available
+      final hasFfmpeg = await verifyBundledFfmpeg();
+      if (!hasFfmpeg) {
+        final err = 'Bundled ffmpeg not found or not accessible';
+        buffer.writeln('[$timestamp]     ❌ $err');
+        onLog?.call(buffer.toString());
+        return buffer.toString();
       }
 
-      final ffmpegPath = getBundledFfmpegPath();
-      if (kDebugMode) {
-        print('Using bundled ffmpeg at: $ffmpegPath');
+      // Calculate duration in seconds
+      final durationSec = (endMs - startMs) / 1000;
+      if (durationSec <= 0) {
+        final err = 'Invalid duration (end time must be after start time)';
+        buffer.writeln('[$timestamp]    ❌ $err');
+        onLog?.call(buffer.toString());
+        return buffer.toString();
       }
 
-      process = await Process.start(ffmpegPath, args, runInShell: true);
-      processPid = process.pid;
-      FfmpegProcessManager().addProcess(processPid);
-      if (kDebugMode) {
-        print('FFmpeg process initiated with PID: $processPid');
-      }
-
-      final completer = Completer<void>();
-
-      // Capture standard output
-      process.stdout.transform(utf8.decoder).listen((data) {
-        logBuffer.write(data);
-      });
-
-      // Capture standard error
-      process.stderr.transform(utf8.decoder).listen((data) {
-        logBuffer.write(data);
-      }, onDone: () => completer.complete());
-
-      // Handle cancellation request
-      final cancelSub = cancelToken?.asStream().listen((_) {
-        if (kDebugMode) {
-          print('Cancellation initiated for process PID: $processPid');
+      // Get media info for video files to calculate resolution
+      MediaInfo? mediaInfo;
+      if (isVideo) {
+        mediaInfo = await _getMediaInfo(inputPath);
+        if (mediaInfo == null) {
+          final err = 'Unable to retrieve video metadata';
+          buffer.writeln('[$timestamp]    ❌ $err');
+          onLog?.call(buffer.toString());
+          return buffer.toString();
         }
-        process?.kill();
-        FfmpegProcessManager().killProcess(processPid!);
-      });
-
-      final exitCode = await process.exitCode;
-      await completer.future;
-      cancelSub?.cancel();
-
-      return FfmpegResult(
-        exitCode == 0,
-        'Exit Code: $exitCode\n${logBuffer.toString()}',
-      );
-    } catch (e) {
-      return FfmpegResult(
-        false,
-        'Execution error: $e\n${logBuffer.toString()}',
-      );
-    } finally {
-      if (processPid != null) {
-        FfmpegProcessManager().removeProcess(processPid);
       }
+
+      // Prepare FFmpeg command
+      final List<String> cmd = [
+        '-ss', _formatTime(startMs), // Start position
+        '-i', inputPath, // Input file
+        '-t', durationSec.toString(), // Duration
+      ];
+
+      // Video specific options
+      if (isVideo) {
+        // Calculate target resolution
+        int targetHeight = mediaInfo!.height;
+        int targetWidth = mediaInfo.width;
+
+        if (!apply4K && mediaInfo.height > 1080) {
+          final aspectRatio = mediaInfo.width / mediaInfo.height;
+          targetHeight = 1080;
+          targetWidth = (1080 * aspectRatio).round();
+        }
+
+        cmd.addAll([
+          '-c:v', 'libx264', // Video codec
+          '-vf', 'scale=$targetWidth:$targetHeight', // Scaling
+          '-c:a', 'libvorbis', // Audio codec
+        ]);
+      } else {
+        // Audio only options
+        cmd.addAll([
+          '-vn', // No video
+          '-c:a', 'libvorbis', // Audio codec
+        ]);
+      }
+
+      cmd.addAll([
+        '-y', // Overwrite output
+        outputPath, // Output file
+      ]);
+
+      // Prepare localized log messages
+      final previewCmdLog = format(
+        localizedStrings['previewCmd'] ?? 'Preview command: {{cmd}}',
+        {'cmd': cmd.join('    ')},
+      );
+      final previewSuccessLog = format(
+        localizedStrings['previewSuccess'] ??
+            'Preview successfully generated: {{path}}',
+        {'path': outputPath},
+      );
+      final previewFailedLog =
+          localizedStrings['previewFailed'] ?? 'Preview generation failed';
+
+      // Execute command
+      buffer.writeln('[$timestamp]    $previewCmdLog');
+      onLog?.call(buffer.toString());
+
+      final result = await _executeFfmpegCommand(cmd, cancelToken: cancelToken);
+
+      buffer.writeln(result.log);
+      onLog?.call(buffer.toString());
+
+      if (result.success) {
+        buffer.writeln('[$timestamp]    ✅ $previewSuccessLog');
+        onLog?.call(buffer.toString());
+      } else {
+        buffer.writeln('[$timestamp]    ❌ $previewFailedLog');
+        onLog?.call(buffer.toString());
+      }
+    } catch (e) {
+      final errLog = 'Preview generation error: $e';
+      if (kDebugMode) {
+        print(errLog);
+      }
+      buffer.writeln('[$timestamp]    ❌ $errLog');
+      onLog?.call(buffer.toString());
     }
+
+    return buffer.toString();
   }
 }
 

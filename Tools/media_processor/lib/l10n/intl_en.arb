@@ -29,5 +29,15 @@
   "taskStatusRunning": "Running",
   "taskStatusSuccess": "Success",
   "taskStatusFailed": "Failed",
-  "taskStatusCanceled": "Canceled"
+  "taskStatusCanceled": "Canceled",
+  "previewOptions": "Preview Options",
+  "previewSettings": "Preview Settings",
+  "startTimeMs": "Start Time (ms)",
+  "endTimeMs": "End Time (ms)",
+  "generatePreview": "Generate Preview",
+  "previewCmd": "Preview command: {cmd}",
+  "previewSuccess": "Preview generated: {path}",
+  "previewFailed": "Preview generation failed",
+  "generatingPreview": "Generating preview...",
+  "invalidTimeRange": "Invalid time range (end must be after start)"
 }

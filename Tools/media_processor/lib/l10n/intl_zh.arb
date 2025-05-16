@@ -29,5 +29,15 @@
   "taskStatusRunning": "运行中",
   "taskStatusSuccess": "成功",
   "taskStatusFailed": "失败",
-  "taskStatusCanceled": "已取消"
+  "taskStatusCanceled": "已取消",
+  "previewOptions": "预览选项",
+  "previewSettings": "预览设置",
+  "startTimeMs": "开始时间(ms)",
+  "endTimeMs": "结束时间(ms)",
+  "generatePreview": "生成预览",
+  "previewCmd": "预览命令：{cmd}",
+  "previewSuccess": "预览生成成功：{path}",
+  "previewFailed": "预览生成失败",
+  "generatingPreview": "处理中，请稍候...",
+  "invalidTimeRange": "无效时间范围（结束时间必须晚于开始时间）"
 }
