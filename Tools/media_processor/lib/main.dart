@@ -124,6 +124,8 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
     'wav',
     'ogg',
     'aac',
+    'm4a',
+    'flac',
   ];
 
   @override
@@ -248,7 +250,7 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
   }
 
   /// Executes the audio/video separation process
-  Future<void> _splitAudioVideo() async {
+  Future<void> _generateFullMedia() async {
     if (_selectedFilePath == null) {
       setState(() {
         _log =
@@ -271,40 +273,33 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
     _currentTaskCompleter = Completer<void>();
 
     try {
-      final hasFfprobe = await FFmpegHelper.verifyBundledFfprobe();
-      if (!hasFfprobe) {
-        throw Exception(
-          'Bundled ffprobe not found. Please ensure FFmpeg binaries are properly installed.',
-        );
-      }
       final inputFile = File(_selectedFilePath!);
       final dir = inputFile.parent.path.replaceAll('\\', '/');
       final baseName = inputFile.uri.pathSegments.last.split('.').first;
 
-      // Generate initial and unique output paths
-      final outputVideoPathInitial = '$dir/${baseName}_video_only.mp4';
-      final outputAudioPathInitial = '$dir/${baseName}_audio.ogg';
+      // Generate output paths
+      final outputVideoPath = '$dir/${baseName}_video_only.mp4';
+      final outputAudioPath = '$dir/${baseName}_audio.ogg';
 
-      final outputVideoPath = generateUniqueFilePath(outputVideoPathInitial);
-      final outputAudioPath = generateUniqueFilePath(outputAudioPathInitial);
+      // Track output files
+      _outputFiles = [outputAudioPath];
 
-      // Track output file paths for cleanup
-      _outputFiles = [outputVideoPath, outputAudioPath];
+      // Only add video path if it's actually a video file
+      final mediaType = await FFmpegHelper.detectMediaType(_selectedFilePath!);
+      if (mediaType == MediaType.video) {
+        _outputFiles.add(outputVideoPath);
+      }
 
-      // Prepare localized strings for FFmpeg commands
       final localizedStringsMap = {
-        'videoSplitCmd': S.of(context)!.videoSplitCmd(''),
-        'videoSplitSuccess': S.of(context)!.videoSplitSuccess(''),
-        'videoSplitFailed': S.of(context)!.videoSplitFailed(''),
-        'audioSplitCmd': S.of(context)!.audioSplitCmd(''),
-        'audioSplitSuccess': S.of(context)!.audioSplitSuccess(''),
-        'audioSplitFailed': S.of(context)!.audioSplitFailed(''),
+        'videoSplitCmd':
+            S.of(context)?.videoSplitCmd('') ?? 'Video command: {{cmd}}',
+        'audioSplitCmd':
+            S.of(context)?.audioSplitCmd('') ?? 'Audio command: {{cmd}}',
       };
 
-      // Execute the FFmpeg processing
-      final log = await FFmpegHelper.splitAudioVideo(
+      final log = await FFmpegHelper.generateFullMedia(
         inputPath: _selectedFilePath!,
-        outputVideoPath: outputVideoPath,
+        outputVideoPath: mediaType == MediaType.video ? outputVideoPath : null,
         outputAudioPath: outputAudioPath,
         localizedStrings: localizedStringsMap,
         apply4K: _videoOutputApply4K,
@@ -319,24 +314,18 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
         cancelToken: _currentTaskCompleter?.future,
       );
 
-      // Update status based on processing outcome
       if (_taskStatus != TaskStatus.canceled) {
         setState(() {
           _log = log;
-          if (log.contains('❌')) {
-            _taskStatus = TaskStatus.failed;
-          } else {
-            _taskStatus = TaskStatus.success;
-          }
+          _taskStatus =
+              log.contains('❌') ? TaskStatus.failed : TaskStatus.success;
         });
         _scrollLogToBottom();
       }
     } catch (e) {
       if (_taskStatus != TaskStatus.canceled) {
         setState(() {
-          _log =
-              S.of(context)?.errorOccurred(e.toString()) ??
-              'An error occurred: $e';
+          _log = S.of(context)?.errorOccurred(e.toString()) ?? 'Error: $e';
           _taskStatus = TaskStatus.failed;
         });
         _scrollLogToBottom();
@@ -420,22 +409,18 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
             S.of(context)?.previewFailed ?? 'Preview generation failed',
       };
 
-      // Execute preview generation
+      final outputVideoPath = '$dir/${baseName}_preview.mp4';
+      final outputAudioPath = '$dir/${baseName}_preview.ogg';
+
       final log = await FFmpegHelper.generatePreview(
         inputPath: _selectedFilePath!,
-        outputPath: outputPath,
+        outputVideoPath: isVideo ? outputVideoPath : null,
+        outputAudioPath: outputAudioPath,
         startMs: startMs,
         endMs: endMs,
-        isVideo: isVideo,
-        apply4K: _videoOutputApply4K,
         localizedStrings: localizedStringsMap,
         onLog: (partialLog) {
-          if (_currentTaskCompleter?.isCompleted == false) {
-            setState(() {
-              _log = partialLog;
-            });
-            _scrollLogToBottom();
-          }
+          // 处理日志
         },
         cancelToken: _currentTaskCompleter?.future,
       );
@@ -710,14 +695,14 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
                 // Split Audio/Video button
                 Expanded(
                   child: ElevatedButton.icon(
-                    icon: const Icon(Icons.content_cut),
+                    icon: const Icon(Icons.video_library),
                     label: Text(
-                      S.of(context)?.splitAudioVideo ?? 'Split Audio and Video',
+                      S.of(context)?.generateFullMedia ?? 'Generate Full Media',
                     ),
                     onPressed:
                         (_selectedFilePath == null || _isProcessing)
                             ? null
-                            : _splitAudioVideo,
+                            : _generateFullMedia,
                     style: ElevatedButton.styleFrom(
                       minimumSize: const Size.fromHeight(48),
                       backgroundColor: Colors.deepPurple,
@@ -853,7 +838,7 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       margin: const EdgeInsets.symmetric(vertical: 12),
       child: Container(
-        constraints: const BoxConstraints(minHeight: 150, maxHeight: 150),
+        constraints: const BoxConstraints(minHeight: 200, maxHeight: 200),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: Colors.white,

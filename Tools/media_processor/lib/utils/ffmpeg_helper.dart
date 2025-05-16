@@ -4,6 +4,9 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
 
+/// Enhanced media type detection with proper MIME type checking
+enum MediaType { video, audio, unknown }
+
 /// Represents the result of an FFmpeg operation
 class FfmpegResult {
   final bool success; // Indicates whether the operation succeeded
@@ -32,9 +35,8 @@ class FFmpegHelper {
   /// Retrieves media metadata using the bundled ffprobe
   static Future<MediaInfo?> _getMediaInfo(String inputPath) async {
     try {
-      // Verify bundled ffprobe is available
-      final hasBundledFfprobe = await verifyBundledFfprobe();
-      if (!hasBundledFfprobe) {
+      final hasFfprobe = await verifyBundledFfprobe();
+      if (!hasFfprobe) {
         throw Exception('Bundled ffprobe not found or not accessible');
       }
 
@@ -43,77 +45,80 @@ class FFmpegHelper {
         print('Using bundled ffprobe at: $ffprobePath');
       }
 
-      // Configure arguments for video stream analysis
-      final videoArgs = [
-        '-v',
-        'error',
-        '-select_streams',
-        'v:0',
-        '-show_entries',
-        'stream=bit_rate,width,height',
-        '-of',
-        'json',
-        inputPath,
-      ];
+      // First detect if the file has video streams
+      final hasVideo = await _hasVideoStream(inputPath);
+      final hasAudio = await _hasAudioStream(inputPath);
 
-      final videoProcess = await Process.run(ffprobePath, videoArgs);
-
-      if (videoProcess.exitCode != 0) {
+      if (!hasVideo && !hasAudio) {
         if (kDebugMode) {
+          print('No video or audio streams detected in the input file');
+        }
+        return null;
+      }
+
+      // Initialize default values
+      int videoBitrate = 0;
+      int width = 0;
+      int height = 0;
+      int audioBitrate = 0;
+
+      // Only fetch video info if video streams exist
+      if (hasVideo) {
+        final videoArgs = [
+          '-v',
+          'error',
+          '-select_streams',
+          'v:0',
+          '-show_entries',
+          'stream=bit_rate,width,height',
+          '-of',
+          'json',
+          inputPath,
+        ];
+
+        final videoProcess = await Process.run(ffprobePath, videoArgs);
+        if (videoProcess.exitCode == 0) {
+          final videoJson = json.decode(videoProcess.stdout as String);
+          final videoStreams = videoJson['streams'] as List<dynamic>?;
+          if (videoStreams != null && videoStreams.isNotEmpty) {
+            final videoStream = videoStreams.first;
+            videoBitrate =
+                int.tryParse(videoStream['bit_rate']?.toString() ?? '') ?? 0;
+            width = videoStream['width'] ?? 0;
+            height = videoStream['height'] ?? 0;
+          }
+        } else if (kDebugMode) {
           print('ffprobe video stream analysis failed: ${videoProcess.stderr}');
         }
-        return null;
       }
 
-      final videoJson = json.decode(videoProcess.stdout as String);
-      final videoStreams = videoJson['streams'] as List<dynamic>?;
-      if (videoStreams == null || videoStreams.isEmpty) {
-        if (kDebugMode) {
-          print('No video stream detected in the input file');
-        }
-        return null;
-      }
+      // Only fetch audio info if audio streams exist
+      if (hasAudio) {
+        final audioArgs = [
+          '-v',
+          'error',
+          '-select_streams',
+          'a:0',
+          '-show_entries',
+          'stream=bit_rate',
+          '-of',
+          'json',
+          inputPath,
+        ];
 
-      final videoStream = videoStreams.first;
-      final int videoBitrate =
-          int.tryParse(videoStream['bit_rate']?.toString() ?? '') ?? 0;
-      final int width = videoStream['width'] ?? 0;
-      final int height = videoStream['height'] ?? 0;
-
-      // Configure arguments for audio stream analysis
-      final audioArgs = [
-        '-v',
-        'error',
-        '-select_streams',
-        'a:0',
-        '-show_entries',
-        'stream=bit_rate',
-        '-of',
-        'json',
-        inputPath,
-      ];
-
-      final audioProcess = await Process.run(ffprobePath, audioArgs);
-
-      if (audioProcess.exitCode != 0) {
-        if (kDebugMode) {
+        final audioProcess = await Process.run(ffprobePath, audioArgs);
+        if (audioProcess.exitCode == 0) {
+          final audioJson = json.decode(audioProcess.stdout as String);
+          final audioStreams = audioJson['streams'] as List<dynamic>?;
+          if (audioStreams != null && audioStreams.isNotEmpty) {
+            final audioStream = audioStreams.first;
+            audioBitrate =
+                int.tryParse(audioStream['bit_rate']?.toString() ?? '') ?? 0;
+          }
+        } else if (kDebugMode) {
           print('ffprobe audio stream analysis failed: ${audioProcess.stderr}');
         }
-        return null;
       }
-
-      final audioJson = json.decode(audioProcess.stdout as String);
-      final audioStreams = audioJson['streams'] as List<dynamic>?;
-      if (audioStreams == null || audioStreams.isEmpty) {
-        if (kDebugMode) {
-          print('No audio stream detected in the input file');
-        }
-        return null;
-      }
-
-      final audioStream = audioStreams.first;
-      final int audioBitrate =
-          int.tryParse(audioStream['bit_rate']?.toString() ?? '') ?? 0;
 
       return MediaInfo(
         videoBitrate: videoBitrate,
@@ -125,7 +130,59 @@ class FFmpegHelper {
       if (kDebugMode) {
         print('Exception occurred while retrieving media info: $e');
       }
-      rethrow; // Rethrow to let caller handle the error
+      return null;
+    }
+  }
+
+  /// Helper method to check if file has video streams
+  static Future<bool> _hasVideoStream(String inputPath) async {
+    try {
+      final ffprobePath = getBundledFfprobePath();
+      final args = [
+        '-v',
+        'error',
+        '-select_streams',
+        'v',
+        '-show_entries',
+        'stream=codec_type',
+        '-of',
+        'csv=p=0',
+        inputPath,
+      ];
+
+      final result = await Process.run(ffprobePath, args);
+      return result.exitCode == 0 && result.stdout.toString().trim().isNotEmpty;
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error checking for video streams: $e');
+      }
+      return false;
+    }
+  }
+
+  /// Helper method to check if file has audio streams
+  static Future<bool> _hasAudioStream(String inputPath) async {
+    try {
+      final ffprobePath = getBundledFfprobePath();
+      final args = [
+        '-v',
+        'error',
+        '-select_streams',
+        'a',
+        '-show_entries',
+        'stream=codec_type',
+        '-of',
+        'csv=p=0',
+        inputPath,
+      ];
+
+      final result = await Process.run(ffprobePath, args);
+      return result.exitCode == 0 && result.stdout.toString().trim().isNotEmpty;
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error checking for audio streams: $e');
+      }
+      return false;
     }
   }
 
@@ -221,6 +278,63 @@ class FFmpegHelper {
     }
   }
 
+  static Future<MediaType> detectMediaType(String filePath) async {
+    try {
+      final hasFfprobe = await verifyBundledFfprobe();
+      if (!hasFfprobe) {
+        throw Exception('FFprobe not available for media type detection');
+      }
+
+      final ffprobePath = getBundledFfprobePath();
+      final args = [
+        '-v',
+        'error',
+        '-show_entries',
+        'stream=codec_type',
+        '-of',
+        'default=noprint_wrappers=1',
+        filePath,
+      ];
+
+      final result = await Process.run(ffprobePath, args);
+      if (result.exitCode != 0) {
+        throw Exception('FFprobe failed: ${result.stderr}');
+      }
+
+      final output = result.stdout.toString();
+      if (output.contains('codec_type=video')) {
+        return MediaType.video;
+      } else if (output.contains('codec_type=audio')) {
+        return MediaType.audio;
+      }
+      return MediaType.unknown;
+    } catch (e) {
+      if (kDebugMode) {
+        print('Media type detection error: $e');
+      }
+      // Fallback to extension check if ffprobe fails
+      return _fallbackMediaTypeDetection(filePath);
+    }
+  }
+
+  /// Fallback media type detection using file extensions
+  static MediaType _fallbackMediaTypeDetection(String filePath) {
+    const videoExtensions = ['mp4', 'avi', 'mkv', 'mov', 'flv', 'wmv', 'webm'];
+    const audioExtensions = ['mp3', 'wav', 'ogg', 'aac', 'm4a', 'flac'];
+
+    final extension = path
+        .extension(filePath)
+        .toLowerCase()
+        .replaceAll('.', '');
+
+    if (videoExtensions.contains(extension)) {
+      return MediaType.video;
+    } else if (audioExtensions.contains(extension)) {
+      return MediaType.audio;
+    }
+    return MediaType.unknown;
+  }
+
   /// Executes an FFmpeg command with process management
   /// [args] - Command line arguments for FFmpeg
   /// [cancelToken] - Optional cancellation token
@@ -303,17 +417,12 @@ class FFmpegHelper {
     return '$hours:$minutes:$seconds.$ms';
   }
 
-  /// Splits a media file into separate video and audio streams
-  /// [inputPath] - Source media file path
-  /// [outputVideoPath] - Destination path for video output
-  /// [outputAudioPath] - Destination path for audio output
-  /// [localizedStrings] - Localization strings for logging
-  /// [onLog] - Optional callback for real-time logging
-  /// [cancelToken] - Optional cancellation token for aborting the operation
-  /// Returns a formatted log of the operation
-  static Future<String> splitAudioVideo({
+  /// Generates full media output based on input type
+  /// For video: outputs video-only and audio-only files
+  /// For audio: outputs a single ogg file with same quality
+  static Future<String> generateFullMedia({
     required String inputPath,
-    required String outputVideoPath,
+    String? outputVideoPath,
     required String outputAudioPath,
     required Map<String, String> localizedStrings,
     bool apply4K = false,
@@ -323,7 +432,6 @@ class FFmpegHelper {
     final buffer = StringBuffer();
     final timestamp = DateTime.now().toIso8601String();
 
-    /// Formats template strings with provided parameters
     String format(String template, Map<String, dynamic> params) {
       return params.entries.fold(
         template,
@@ -333,147 +441,228 @@ class FFmpegHelper {
     }
 
     try {
-      // Verify both ffprobe and ffmpeg are available
+      // Verify required binaries
       final hasFfprobe = await verifyBundledFfprobe();
       final hasFfmpeg = await verifyBundledFfmpeg();
 
       if (!hasFfprobe || !hasFfmpeg) {
         final err = 'Required FFmpeg binaries not found or not accessible';
-        buffer.writeln('[$timestamp]    ❌ $err');
-        onLog?.call(buffer.toString());
-        return buffer.toString();
-      }
-      final mediaInfo = await _getMediaInfo(inputPath);
-
-      if (mediaInfo == null) {
-        final err = 'Unable to retrieve media metadata from input file';
         buffer.writeln('[$timestamp]   ❌ $err');
         onLog?.call(buffer.toString());
         return buffer.toString();
       }
 
-      // Calculate target resolution
-      int targetHeight = mediaInfo.height;
-      int targetWidth = mediaInfo.width;
+      final mediaInfo = await _getMediaInfo(inputPath);
+      final mediaType = await detectMediaType(inputPath);
 
-      // If 4K is not selected and original height exceeds 1080, scale down
-      if (!apply4K && mediaInfo.height > 1080) {
-        final aspectRatio = mediaInfo.width / mediaInfo.height;
-        targetHeight = 1080;
-        targetWidth = (1080 * aspectRatio).round();
+      // Default bitrates
+      const int defaultVideoBitrate = 30 * 1000 * 1000; // 30 Mbps
+      const int defaultAudioBitrate = 320 * 1000; // 320 kbps
+
+      // Function to calculate recommended video bitrate based on resolution
+      int calculateRecommendedVideoBitrate(int width, int height) {
+        final resolution = width * height;
+
+        // Bitrate recommendations based on resolution (in bits per pixel per frame)
+        // These are general guidelines and can be adjusted
+        if (resolution >= 3840 * 2160) {
+          // 4K
+          return 50 * 1000 * 1000; // 50 Mbps
+        } else if (resolution >= 2560 * 1440) {
+          // 1440p
+          return 30 * 1000 * 1000; // 30 Mbps
+        } else if (resolution >= 1920 * 1080) {
+          // 1080p
+          return 20 * 1000 * 1000; // 20 Mbps
+        } else if (resolution >= 1280 * 720) {
+          // 720p
+          return 10 * 1000 * 1000; // 10 Mbps
+        } else {
+          // SD
+          return 6 * 1000 * 1000; // 6 Mbps
+        }
       }
 
-      // Calculate bitrates with 5% margin
-      final videoBitrate =
-          mediaInfo.videoBitrate > 0
-              ? (mediaInfo.videoBitrate * 1.05).toInt()
-              : 1000 * 1000; // Default to 1Mbps if bitrate unavailable
+      if (mediaType == MediaType.video) {
+        // Video processing logic
+        if (outputVideoPath == null) {
+          throw ArgumentError('outputVideoPath is required for video input');
+        }
 
-      // Adjust bitrate proportionally if resolution was scaled down
-      final adjustedBitrate =
-          !apply4K && mediaInfo.height > 1080
-              ? (videoBitrate * (1080 / mediaInfo.height)).toInt()
-              : videoBitrate;
+        // Get input video properties
+        final inputWidth = mediaInfo?.width ?? 1920;
+        final inputHeight = mediaInfo?.height ?? 1080;
+        final inputVideoBitrate =
+            mediaInfo?.videoBitrate ?? defaultVideoBitrate;
+        final inputAudioBitrate =
+            mediaInfo?.audioBitrate ?? defaultAudioBitrate;
 
-      final audioBitrate =
-          mediaInfo.audioBitrate > 0
-              ? (mediaInfo.audioBitrate * 1.05).toInt()
-              : 128 * 1000; // Default to 128kbps if bitrate unavailable
+        // Calculate target resolution
+        int targetHeight = inputHeight;
+        int targetWidth = inputWidth;
 
-      // Video extraction command configuration
-      final videoCmd = [
-        '-i', inputPath,
-        '-c:v', 'libx264',
-        '-b:v', adjustedBitrate.toString(),
-        '-vf', 'scale=$targetWidth:$targetHeight',
-        '-an', // Disable audio
-        '-y', // Overwrite output without confirmation
-        outputVideoPath,
-      ];
+        if (!apply4K && inputHeight > 1080) {
+          final aspectRatio = inputWidth / inputHeight;
+          targetHeight = 1080;
+          targetWidth = (1080 * aspectRatio).round();
+        }
 
-      // Audio extraction command configuration
-      final audioCmd = [
-        '-i', inputPath,
-        '-vn', // Disable video
-        '-c:a', 'libvorbis',
-        '-b:a', audioBitrate.toString(),
-        '-y', // Overwrite output without confirmation
-        outputAudioPath,
-      ];
+        // Calculate target video bitrate
+        int targetVideoBitrate;
+        if (inputVideoBitrate < defaultVideoBitrate) {
+          // If input bitrate is lower than default, use input bitrate
+          targetVideoBitrate = inputVideoBitrate;
+        } else {
+          // Calculate recommended bitrate based on output resolution
+          final recommendedBitrate = calculateRecommendedVideoBitrate(
+            targetWidth,
+            targetHeight,
+          );
 
-      // Prepare localized log messages
-      final videoSplitCmdLog = format(
-        localizedStrings['videoSplitCmd'] ??
-            'Video extraction command: {{cmd}}',
-        {'cmd': videoCmd.join('   ')},
-      );
-      final videoSplitSuccessLog = format(
-        localizedStrings['videoSplitSuccess'] ??
-            'Video successfully extracted to: {{path}}',
-        {'path': outputVideoPath},
-      );
-      final videoSplitFailedLog =
-          localizedStrings['videoSplitFailed'] ?? 'Video extraction failed';
+          // If input is higher than default, use the higher of recommended or default
+          targetVideoBitrate =
+              recommendedBitrate > defaultVideoBitrate
+                  ? recommendedBitrate
+                  : defaultVideoBitrate;
+        }
 
-      final audioSplitCmdLog = format(
-        localizedStrings['audioSplitCmd'] ??
-            'Audio extraction command: {{cmd}}',
-        {'cmd': audioCmd.join('   ')},
-      );
-      final audioSplitSuccessLog = format(
-        localizedStrings['audioSplitSuccess'] ??
-            'Audio successfully extracted to: {{path}}',
-        {'path': outputAudioPath},
-      );
-      final audioSplitFailedLog =
-          localizedStrings['audioSplitFailed'] ?? 'Audio extraction failed';
+        // For 4K output, ensure minimum bitrate
+        if (apply4K &&
+            targetHeight >= 2160 &&
+            targetVideoBitrate < 50 * 1000 * 1000) {
+          targetVideoBitrate = 50 * 1000 * 1000; // 50 Mbps for 4K
+        }
 
-      // Execute video extraction
-      buffer.writeln('[$timestamp]   $videoSplitCmdLog');
-      onLog?.call(buffer.toString());
+        // Calculate target audio bitrate
+        int targetAudioBitrate;
+        if (inputAudioBitrate < defaultAudioBitrate) {
+          // If input audio bitrate is lower than default, use input bitrate
+          targetAudioBitrate = inputAudioBitrate;
+        } else {
+          // For high quality audio, use 320kbps or higher if input is higher
+          targetAudioBitrate =
+              inputAudioBitrate > defaultAudioBitrate
+                  ? inputAudioBitrate
+                  : defaultAudioBitrate;
+        }
 
-      final videoResult = await _executeFfmpegCommand(
-        videoCmd,
-        cancelToken: cancelToken,
-      );
-
-      buffer.writeln(videoResult.log);
-      onLog?.call(buffer.toString());
-
-      if (videoResult.success) {
-        buffer.writeln('[$timestamp]   ✅ $videoSplitSuccessLog');
+        // Log the bitrate decisions
+        buffer.writeln(
+          '[$timestamp]   Input video resolution: ${inputWidth}x$inputHeight',
+        );
+        buffer.writeln(
+          '[$timestamp]   Input video bitrate: ${inputVideoBitrate ~/ 1000} kbps',
+        );
+        buffer.writeln(
+          '[$timestamp]   Output video resolution: ${targetWidth}x$targetHeight',
+        );
+        buffer.writeln(
+          '[$timestamp]   Selected video bitrate: ${targetVideoBitrate ~/ 1000} kbps',
+        );
+        buffer.writeln(
+          '[$timestamp]   Selected audio bitrate: ${targetAudioBitrate ~/ 1000} kbps',
+        );
         onLog?.call(buffer.toString());
+
+        // Video extraction command
+        final videoCmd = [
+          '-i', inputPath,
+          '-c:v', 'libx264',
+          '-b:v', targetVideoBitrate.toString(),
+          '-vf', 'scale=$targetWidth:$targetHeight',
+          '-an', // No audio
+          '-y', // Overwrite
+          outputVideoPath,
+        ];
+
+        // Audio extraction command
+        final audioCmd = [
+          '-i', inputPath,
+          '-vn', // No video
+          '-c:a', 'libvorbis',
+          '-b:a', targetAudioBitrate.toString(),
+          '-y', // Overwrite
+          outputAudioPath,
+        ];
+
+        // Execute both commands
+        final videoResult = await _executeFfmpegCommand(
+          videoCmd,
+          cancelToken: cancelToken,
+        );
+        buffer.writeln(videoResult.log);
+        onLog?.call(buffer.toString());
+
+        if (!videoResult.success) {
+          buffer.writeln('[$timestamp]   ❌ Video extraction failed');
+          onLog?.call(buffer.toString());
+          return buffer.toString();
+        }
+
+        final audioResult = await _executeFfmpegCommand(
+          audioCmd,
+          cancelToken: cancelToken,
+        );
+        buffer.writeln(audioResult.log);
+        onLog?.call(buffer.toString());
+
+        if (!audioResult.success) {
+          buffer.writeln('[$timestamp]   ❌ Audio extraction failed');
+          onLog?.call(buffer.toString());
+        }
+
+        buffer.writeln(
+          '[$timestamp]  ✅ Video and audio extracted successfully',
+        );
       } else {
-        buffer.writeln('[$timestamp]   ❌ $videoSplitFailedLog');
+        // Audio-only processing
+        final inputAudioBitrate =
+            mediaInfo?.audioBitrate ?? defaultAudioBitrate;
+
+        // Calculate target audio bitrate
+        int targetAudioBitrate;
+        if (inputAudioBitrate < defaultAudioBitrate) {
+          // If input audio bitrate is lower than default, use input bitrate
+          targetAudioBitrate = inputAudioBitrate;
+        } else {
+          // For high quality audio, use 320kbps or higher if input is higher
+          targetAudioBitrate =
+              inputAudioBitrate > defaultAudioBitrate
+                  ? inputAudioBitrate
+                  : defaultAudioBitrate;
+        }
+
+        buffer.writeln(
+          '[$timestamp]   Input audio bitrate: ${inputAudioBitrate ~/ 1000} kbps',
+        );
+        buffer.writeln(
+          '[$timestamp]   Selected audio bitrate: ${targetAudioBitrate ~/ 1000} kbps',
+        );
         onLog?.call(buffer.toString());
-        return buffer.toString();
-      }
 
-      // Execute audio extraction
-      buffer.writeln('[$timestamp]   $audioSplitCmdLog');
-      onLog?.call(buffer.toString());
+        final audioCmd = [
+          '-i', inputPath,
+          '-c:a', 'copy', // Keep original codec
+          '-b:a', targetAudioBitrate.toString(),
+          '-y', // Overwrite
+          outputAudioPath,
+        ];
 
-      final audioResult = await _executeFfmpegCommand(
-        audioCmd,
-        cancelToken: cancelToken,
-      );
-
-      buffer.writeln(audioResult.log);
-      onLog?.call(buffer.toString());
-
-      if (audioResult.success) {
-        buffer.writeln('[$timestamp]   ✅ $audioSplitSuccessLog');
+        final result = await _executeFfmpegCommand(
+          audioCmd,
+          cancelToken: cancelToken,
+        );
+        buffer.writeln(result.log);
         onLog?.call(buffer.toString());
-      } else {
-        buffer.writeln('[$timestamp]   ❌ $audioSplitFailedLog');
-        onLog?.call(buffer.toString());
+
+        if (result.success) {
+          buffer.writeln('[$timestamp]   ✅ Audio extracted successfully');
+        } else {
+          buffer.writeln('[$timestamp]   ❌ Audio extraction failed');
+        }
       }
     } catch (e) {
-      final errLog = 'FFmpeg operation encountered an error: $e';
-      if (kDebugMode) {
-        print(errLog);
-      }
-      buffer.writeln('[$timestamp]   ❌ $errLog');
+      buffer.writeln('[$timestamp]   ❌ Error: $e');
       onLog?.call(buffer.toString());
     }
 
@@ -485,19 +674,16 @@ class FFmpegHelper {
   /// [outputPath] - Destination path for preview output
   /// [startMs] - Start time in milliseconds
   /// [endMs] - End time in milliseconds
-  /// [isVideo] - Whether input is a video file
-  /// [apply4K] - Whether to apply 4K resolution
   /// [localizedStrings] - Localization strings for logging
   /// [onLog] - Optional callback for real-time logging
   /// [cancelToken] - Optional cancellation token
   /// Returns a formatted log of the operation
   static Future<String> generatePreview({
     required String inputPath,
-    required String outputPath,
+    String? outputVideoPath,
+    required String outputAudioPath,
     required int startMs,
     required int endMs,
-    required bool isVideo,
-    required bool apply4K,
     required Map<String, String> localizedStrings,
     void Function(String log)? onLog,
     Future<void>? cancelToken,
@@ -518,7 +704,7 @@ class FFmpegHelper {
       final hasFfmpeg = await verifyBundledFfmpeg();
       if (!hasFfmpeg) {
         final err = 'Bundled ffmpeg not found or not accessible';
-        buffer.writeln('[$timestamp]     ❌ $err');
+        buffer.writeln('[$timestamp]      ❌ $err');
         onLog?.call(buffer.toString());
         return buffer.toString();
       }
@@ -527,95 +713,169 @@ class FFmpegHelper {
       final durationSec = (endMs - startMs) / 1000;
       if (durationSec <= 0) {
         final err = 'Invalid duration (end time must be after start time)';
-        buffer.writeln('[$timestamp]    ❌ $err');
+        buffer.writeln('[$timestamp]     ❌ $err');
         onLog?.call(buffer.toString());
         return buffer.toString();
       }
 
-      // Get media info for video files to calculate resolution
-      MediaInfo? mediaInfo;
+      // Detect media type
+      final mediaType = await detectMediaType(inputPath);
+      final isVideo = mediaType == MediaType.video;
+
+      // Track output files for cleanup
+      final outputFiles = <String>[outputAudioPath];
+      if (isVideo && outputVideoPath != null) {
+        outputFiles.add(outputVideoPath);
+      }
+
+      // Get media info to determine input parameters
+      final mediaInfo = await _getMediaInfo(inputPath);
+
+      // Set maximum limits
+      const int maxVideoBitrate = 20 * 1000 * 1000; // 20 Mbps
+      const int maxAudioBitrate = 128 * 1000; // 128 kbps
+      const int maxHeight = 1080; // 1080p
+
+      // Calculate target parameters
+      int targetVideoBitrate = maxVideoBitrate;
+      int targetAudioBitrate = maxAudioBitrate;
+      int targetWidth = 1920;
+      int targetHeight = 1080;
+
+      if (mediaInfo != null) {
+        // Video parameters
+        if (isVideo) {
+          // Use input bitrate if it's lower than our max
+          targetVideoBitrate =
+              mediaInfo.videoBitrate < maxVideoBitrate
+                  ? mediaInfo.videoBitrate
+                  : maxVideoBitrate;
+
+          // Calculate target resolution while maintaining aspect ratio
+          if (mediaInfo.height > maxHeight) {
+            final aspectRatio = mediaInfo.width / mediaInfo.height;
+            targetHeight = maxHeight;
+            targetWidth = (maxHeight * aspectRatio).round();
+          } else {
+            targetHeight = mediaInfo.height;
+            targetWidth = mediaInfo.width;
+          }
+        }
+
+        // Audio parameters
+        targetAudioBitrate =
+            mediaInfo.audioBitrate < maxAudioBitrate
+                ? mediaInfo.audioBitrate
+                : maxAudioBitrate;
+      }
+
+      buffer.writeln(
+        '[$timestamp]    Input file type: ${isVideo ? 'Video' : 'Audio'}',
+      );
       if (isVideo) {
-        mediaInfo = await _getMediaInfo(inputPath);
-        if (mediaInfo == null) {
-          final err = 'Unable to retrieve video metadata';
-          buffer.writeln('[$timestamp]    ❌ $err');
+        buffer.writeln(
+          '[$timestamp]    Target resolution: ${targetWidth}x$targetHeight',
+        );
+        buffer.writeln(
+          '[$timestamp]    Target video bitrate: ${targetVideoBitrate ~/ 1000} kbps',
+        );
+      }
+      buffer.writeln(
+        '[$timestamp]    Target audio bitrate: ${targetAudioBitrate ~/ 1000} kbps',
+      );
+      onLog?.call(buffer.toString());
+
+      // Execute commands based on media type
+      if (isVideo && outputVideoPath != null) {
+        // Video preview command - extract video portion
+        final videoCmd = [
+          '-ss', _formatTime(startMs), // Start position
+          '-i', inputPath, // Input file
+          '-t', durationSec.toString(), // Duration
+          '-c:v', 'libx264', // Video codec
+          '-b:v', targetVideoBitrate.toString(), // Video bitrate
+          '-vf', 'scale=$targetWidth:$targetHeight', // Scaling
+          '-an', // No audio
+          '-y', // Overwrite
+          outputVideoPath,
+        ];
+
+        // Audio preview command - extract audio portion
+        final audioCmd = [
+          '-ss', _formatTime(startMs), // Start position
+          '-i', inputPath, // Input file
+          '-t', durationSec.toString(), // Duration
+          '-vn', // No video
+          '-c:a', 'libvorbis', // Audio codec
+          '-b:a', targetAudioBitrate.toString(), // Audio bitrate
+          '-y', // Overwrite
+          outputAudioPath,
+        ];
+
+        // Execute video extraction
+        final videoResult = await _executeFfmpegCommand(
+          videoCmd,
+          cancelToken: cancelToken,
+        );
+        buffer.writeln(videoResult.log);
+        onLog?.call(buffer.toString());
+
+        if (!videoResult.success) {
+          buffer.writeln('[$timestamp]    ❌ Video preview extraction failed');
           onLog?.call(buffer.toString());
           return buffer.toString();
         }
-      }
 
-      // Prepare FFmpeg command
-      final List<String> cmd = [
-        '-ss', _formatTime(startMs), // Start position
-        '-i', inputPath, // Input file
-        '-t', durationSec.toString(), // Duration
-      ];
+        // Execute audio extraction
+        final audioResult = await _executeFfmpegCommand(
+          audioCmd,
+          cancelToken: cancelToken,
+        );
+        buffer.writeln(audioResult.log);
+        onLog?.call(buffer.toString());
 
-      // Video specific options
-      if (isVideo) {
-        // Calculate target resolution
-        int targetHeight = mediaInfo!.height;
-        int targetWidth = mediaInfo.width;
-
-        if (!apply4K && mediaInfo.height > 1080) {
-          final aspectRatio = mediaInfo.width / mediaInfo.height;
-          targetHeight = 1080;
-          targetWidth = (1080 * aspectRatio).round();
+        if (!audioResult.success) {
+          buffer.writeln('[$timestamp]    ❌ Audio preview extraction failed');
+          onLog?.call(buffer.toString());
         }
 
-        cmd.addAll([
-          '-c:v', 'libx264', // Video codec
-          '-vf', 'scale=$targetWidth:$targetHeight', // Scaling
-          '-c:a', 'libvorbis', // Audio codec
-        ]);
+        buffer.writeln(
+          '[$timestamp]   ✅ Video and audio preview extracted successfully',
+        );
       } else {
-        // Audio only options
-        cmd.addAll([
+        // Audio-only preview command
+        final audioCmd = [
+          '-ss', _formatTime(startMs), // Start position
+          '-i', inputPath, // Input file
+          '-t', durationSec.toString(), // Duration
           '-vn', // No video
           '-c:a', 'libvorbis', // Audio codec
-        ]);
-      }
+          '-b:a', targetAudioBitrate.toString(), // Audio bitrate
+          '-y', // Overwrite
+          outputAudioPath,
+        ];
 
-      cmd.addAll([
-        '-y', // Overwrite output
-        outputPath, // Output file
-      ]);
-
-      // Prepare localized log messages
-      final previewCmdLog = format(
-        localizedStrings['previewCmd'] ?? 'Preview command: {{cmd}}',
-        {'cmd': cmd.join('    ')},
-      );
-      final previewSuccessLog = format(
-        localizedStrings['previewSuccess'] ??
-            'Preview successfully generated: {{path}}',
-        {'path': outputPath},
-      );
-      final previewFailedLog =
-          localizedStrings['previewFailed'] ?? 'Preview generation failed';
-
-      // Execute command
-      buffer.writeln('[$timestamp]    $previewCmdLog');
-      onLog?.call(buffer.toString());
-
-      final result = await _executeFfmpegCommand(cmd, cancelToken: cancelToken);
-
-      buffer.writeln(result.log);
-      onLog?.call(buffer.toString());
-
-      if (result.success) {
-        buffer.writeln('[$timestamp]    ✅ $previewSuccessLog');
+        final result = await _executeFfmpegCommand(
+          audioCmd,
+          cancelToken: cancelToken,
+        );
+        buffer.writeln(result.log);
         onLog?.call(buffer.toString());
-      } else {
-        buffer.writeln('[$timestamp]    ❌ $previewFailedLog');
-        onLog?.call(buffer.toString());
+
+        if (result.success) {
+          buffer.writeln(
+            '[$timestamp]    ✅ Audio preview extracted successfully',
+          );
+        } else {
+          buffer.writeln('[$timestamp]    ❌ Audio preview extraction failed');
+        }
       }
     } catch (e) {
       final errLog = 'Preview generation error: $e';
       if (kDebugMode) {
         print(errLog);
       }
-      buffer.writeln('[$timestamp]    ❌ $errLog');
+      buffer.writeln('[$timestamp]     ❌ $errLog');
       onLog?.call(buffer.toString());
     }
 

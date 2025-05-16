@@ -10,7 +10,7 @@
   "operation": "操作",
   "output4K": "输出4K视频",
   "state": "状态",
-  "splitAudioVideo": "分离音视频",
+  "generateFullMedia": "生成完整媒体",
   "cancelTask": "取消任务",
   "cancelAllTasks": "取消所有任务",
   "taskCanceled": "任务已取消",

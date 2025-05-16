@@ -10,7 +10,7 @@
   "operation": "Operation",
   "output4K": "Output 4K Video Resolution",
   "state": "State",
-  "splitAudioVideo": "Split Audio and Video",
+  "generateFullMedia": "Generate Full Media",
   "cancelTask": "Cancel Task",
   "taskCanceled": "Task canceled",
   "processingPleaseWait": "Processing, please wait...",
