@@ -5,6 +5,7 @@ This project is a Flutter application designed primarily for media file processi
 ## Build Instructions
 
 ### Compile and Build
+[Flutter](https://flutter.dev/) is required to build this project.
 ```bash
 flutter clean
 flutter pub get

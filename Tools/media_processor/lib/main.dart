@@ -475,7 +475,7 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
     });
   }
 
-  /// Builds the preview options UI
+  /// Builds the preview options UI with improved layout
   Widget _buildPreviewOptions() {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
@@ -491,14 +491,7 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
           _showPreviewOptions
               ? Column(
                 children: [
-                  Text(
-                    S.of(context)?.previewSettings ?? 'Preview Settings',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.deepPurple,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
+                  // Time range inputs
                   Row(
                     children: [
                       Expanded(
@@ -531,15 +524,20 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
                     ],
                   ),
                   const SizedBox(height: 16),
-                  ElevatedButton.icon(
-                    icon: const Icon(Icons.play_arrow),
-                    label: Text(
-                      S.of(context)?.generatePreview ?? 'Generate Preview',
-                    ),
-                    onPressed: _isProcessing ? null : _generatePreview,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.deepPurple,
-                      foregroundColor: Colors.white,
+
+                  // Generate Preview button
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.play_arrow),
+                      label: Text(
+                        S.of(context)?.generatePreview ?? 'Generate Preview',
+                      ),
+                      onPressed: _isProcessing ? null : _generatePreview,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.deepPurple,
+                        foregroundColor: Colors.white,
+                      ),
                     ),
                   ),
                 ],
@@ -650,7 +648,7 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
     );
   }
 
-  /// Builds the operation control UI component
+  /// Builds the operation control UI component with improved layout
   Widget _buildOperationCard() {
     String statusText;
     Color statusColor;
@@ -701,29 +699,15 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
               ),
             ),
 
-            //  Resolution Toggle
+            // Resolution Toggle
             const SizedBox(height: 16),
             _buildResolutionToggle(),
             const SizedBox(height: 16),
 
-            //  Preview Options
-            ElevatedButton.icon(
-              icon: Icon(
-                _showPreviewOptions ? Icons.expand_less : Icons.expand_more,
-              ),
-              label: Text(S.of(context)?.previewOptions ?? 'Preview Options'),
-              onPressed: _isProcessing ? null : _togglePreviewOptions,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.deepPurple.shade100,
-                foregroundColor: Colors.deepPurple,
-              ),
-            ),
-            const SizedBox(height: 12),
-            _buildPreviewOptions(),
-            const SizedBox(height: 16),
-
+            // Main operation buttons in a row
             Row(
               children: [
+                // Split Audio/Video button
                 Expanded(
                   child: ElevatedButton.icon(
                     icon: const Icon(Icons.content_cut),
@@ -743,23 +727,67 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
                     ),
                   ),
                 ),
-                if (_isProcessing) ...[
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      icon: const Icon(Icons.cancel),
-                      label: Text(S.of(context)?.cancelTask ?? 'Cancel Task'),
-                      onPressed: _cancelCurrentTask,
-                      style: ElevatedButton.styleFrom(
-                        minimumSize: const Size.fromHeight(48),
-                        backgroundColor: Colors.redAccent,
-                        foregroundColor: Colors.white,
-                      ),
+                const SizedBox(width: 16),
+
+                // Preview Options toggle button
+                Expanded(
+                  child: ElevatedButton.icon(
+                    icon: Icon(
+                      _showPreviewOptions
+                          ? Icons.expand_less
+                          : Icons.expand_more,
+                    ),
+                    label: Text(
+                      S.of(context)?.generatePreviewMedia ??
+                          'Generate Preview Media',
+                    ),
+                    onPressed:
+                        (_selectedFilePath == null || _isProcessing)
+                            ? null
+                            : _togglePreviewOptions,
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(48),
+                      backgroundColor:
+                          _selectedFilePath == null || _isProcessing
+                              ? Colors.deepPurple.shade100
+                              : Colors.deepPurple.shade100,
+                      foregroundColor:
+                          _selectedFilePath == null || _isProcessing
+                              ? Colors.deepPurple
+                              : Colors.deepPurple,
+                      disabledBackgroundColor: Colors.deepPurple.shade100,
+                      disabledForegroundColor: Colors.deepPurple,
                     ),
                   ),
-                ],
+                ),
               ],
             ),
+
+            // Preview options section
+            const SizedBox(height: 16),
+            _buildPreviewOptions(),
+
+            // Cancel all button (only shown when processing)
+            if (_isProcessing) ...[
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  icon: const Icon(Icons.cancel),
+                  label: Text(
+                    S.of(context)?.cancelAllTasks ?? 'Cancel All Tasks',
+                  ),
+                  onPressed: _cancelCurrentTask,
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(48),
+                    backgroundColor: Colors.redAccent,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+
+            // Status indicator
             if (_isProcessing || _taskStatus != TaskStatus.idle)
               Padding(
                 padding: const EdgeInsets.only(top: 16),
@@ -790,7 +818,7 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
     );
   }
 
-  /// Builds the resolution toggle
+  /// Builds the resolution toggle switch
   Widget _buildResolutionToggle() {
     return Row(
       children: [
