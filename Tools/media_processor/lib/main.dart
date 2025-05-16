@@ -260,7 +260,7 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
   }
 
   Widget _buildFileSelector() {
-    final formats = _allowedExtensions.join(',   ');
+    final formats = _allowedExtensions.join(',  ');
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -346,7 +346,33 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
     );
   }
 
-  Widget _buildActionButtons() {
+  Widget _buildOperationCard() {
+    String statusText;
+    Color statusColor;
+    IconData? statusIcon;
+
+    switch (_taskStatus) {
+      case TaskStatus.running:
+        statusText = S.of(context)?.taskStatusRunning ?? 'Running';
+        statusColor = Colors.blue;
+        break;
+      case TaskStatus.success:
+        statusText = S.of(context)?.taskStatusSuccess ?? 'Success';
+        statusColor = Colors.green;
+        statusIcon = Icons.check_circle;
+        break;
+      case TaskStatus.failed:
+        statusText = S.of(context)?.taskStatusFailed ?? 'Failed';
+        statusColor = Colors.red;
+        statusIcon = Icons.error;
+        break;
+      case TaskStatus.idle:
+      default:
+        statusText = S.of(context)?.taskStatusIdle ?? 'Idle';
+        statusColor = Colors.grey;
+        break;
+    }
+
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -382,90 +408,30 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
                 disabledForegroundColor: Colors.deepPurple,
               ),
             ),
-            if (_isProcessing)
+            if (_isProcessing || _taskStatus != TaskStatus.idle)
               Padding(
                 padding: const EdgeInsets.only(top: 16),
                 child: Row(
                   children: [
-                    const CircularProgressIndicator(),
+                    if (_taskStatus == TaskStatus.running)
+                      const CircularProgressIndicator()
+                    else if (statusIcon != null)
+                      Icon(statusIcon, color: statusColor),
                     const SizedBox(width: 16),
                     Text(
-                      S.of(context)?.processingPleaseWait ??
-                          'Processing, please wait...',
-                      style: const TextStyle(
+                      _isProcessing
+                          ? S.of(context)?.processingPleaseWait ??
+                              'Processing, please wait...'
+                          : statusText,
+                      style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w500,
+                        color: statusColor,
                       ),
                     ),
                   ],
                 ),
               ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTaskStatusWidget() {
-    String statusText;
-    Color statusColor;
-
-    switch (_taskStatus) {
-      case TaskStatus.running:
-        statusText = S.of(context)?.taskStatusRunning ?? 'Running';
-        statusColor = Colors.blue;
-        break;
-      case TaskStatus.success:
-        statusText = S.of(context)?.taskStatusSuccess ?? 'Success';
-        statusColor = Colors.green;
-        break;
-      case TaskStatus.failed:
-        statusText = S.of(context)?.taskStatusFailed ?? 'Failed';
-        statusColor = Colors.red;
-        break;
-      case TaskStatus.idle:
-      default:
-        statusText = S.of(context)?.taskStatusIdle ?? 'Idle';
-        statusColor = Colors.grey;
-        break;
-    }
-
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      margin: const EdgeInsets.symmetric(vertical: 12),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
-        child: Row(
-          children: [
-            Text(
-              '${S.of(context)?.state ?? 'State'}: ',
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.deepPurple,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              statusText,
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                color: statusColor,
-              ),
-            ),
-            const SizedBox(width: 8),
-            if (_taskStatus == TaskStatus.running)
-              const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            if (_taskStatus == TaskStatus.success)
-              const Icon(Icons.check_circle, color: Colors.green),
-            if (_taskStatus == TaskStatus.failed)
-              const Icon(Icons.error, color: Colors.red),
           ],
         ),
       ),
@@ -478,14 +444,11 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       margin: const EdgeInsets.symmetric(vertical: 12),
       child: Container(
-        constraints: const BoxConstraints(
-          minHeight: 150, // 与黑色部分的最小高度一致
-          maxHeight: 150, // 与黑色部分的最大高度一致
-        ),
+        constraints: const BoxConstraints(minHeight: 150, maxHeight: 150),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white, // 背景颜色设置为白色
-          borderRadius: BorderRadius.circular(16), // 保持圆角
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -500,7 +463,6 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
             ),
             const SizedBox(height: 12),
             Expanded(
-              // 使用 Expanded 使其适应父级
               child: Container(
                 width: double.infinity,
                 decoration: BoxDecoration(
@@ -569,7 +531,7 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
                 fontWeight: FontWeight.bold,
                 fontSize: 24,
                 letterSpacing: 1.2,
-                color: Colors.white, // 更改为白色
+                color: Colors.white,
                 shadows: [
                   Shadow(
                     color: Colors.black26,
@@ -584,7 +546,7 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
               S.of(context)?.appSubtitle ?? 'Audio & Video Processing Tool',
               style: TextStyle(
                 fontSize: 12,
-                color: Colors.white70, // 更改为更浅的白色
+                color: Colors.white70,
                 fontWeight: FontWeight.w400,
               ),
             ),
@@ -621,8 +583,7 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         _buildFileSelector(),
-                        _buildActionButtons(),
-                        _buildTaskStatusWidget(),
+                        _buildOperationCard(),
                         Expanded(child: _buildLogOutput()),
                         _buildFooter(),
                       ],
