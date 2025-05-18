@@ -461,7 +461,7 @@ class FFmpegHelper {
         },
         1440: {
           // QHD
-          'crf': 19,
+          'crf': 20,
           'bitrate': 22000,
           'profile': isHDR ? 'high10' : 'high',
           'pixelFormat': isHDR ? 'yuv420p10le' : 'yuv420p',
@@ -472,7 +472,7 @@ class FFmpegHelper {
         },
         1080: {
           // Full HD
-          'crf': 20,
+          'crf': 22,
           'bitrate': 18000,
           'profile': isHDR ? 'high10' : 'high',
           'pixelFormat': isHDR ? 'yuv420p10le' : 'yuv420p',
@@ -483,7 +483,7 @@ class FFmpegHelper {
         },
         720: {
           // HD
-          'crf': 21,
+          'crf': 23,
           'bitrate': 10000,
           'profile': 'high',
           'pixelFormat': 'yuv420p',
@@ -491,14 +491,14 @@ class FFmpegHelper {
         },
         480: {
           // SD
-          'crf': 22,
+          'crf': 24,
           'bitrate': 6000,
           'profile': 'main',
           'pixelFormat': 'yuv420p',
           'hdrParams': 'colorprim=bt709:transfer=bt709:colormatrix=bt709',
         },
         360: {
-          'crf': 23,
+          'crf': 25,
           'bitrate': 3000,
           'profile': 'main',
           'pixelFormat': 'yuv420p',
@@ -509,8 +509,8 @@ class FFmpegHelper {
       const Map<String, int> audioBitrateRecommendations = {
         'aac': 320,
         'mp3': 320,
-        'opus': 192,
-        'vorbis': 192,
+        'opus': 320,
+        'vorbis': 320,
         'flac': 0,
       };
 
@@ -632,26 +632,31 @@ class FFmpegHelper {
                     ? 320 * 1000
                     : inputAudioBitrate)
                 : audioBitrateRecommendations['opus']! * 1000;
+        final audioInfo = await _analyzeAudio(inputPath);
+        final isAlreadyNormalized =
+            audioInfo['format_tags']?['encoder']?.toString().contains(
+              'loudnorm',
+            ) ??
+            false;
+        final audioFilters =
+            isAlreadyNormalized
+                ? 'acompressor=threshold=-6dB:ratio=2:attack=30:release=200,alimiter=level=1'
+                : 'loudnorm=I=-14:TP=-1.5:LRA=11:linear=true:print_format=summary,' +
+                    'acompressor=threshold=-6dB:ratio=2:attack=30:release=200,' +
+                    'alimiter=level=1';
         // Audio extraction with higher quality
         final audioCmd = [
           '-i', inputPath,
+          '-map', '0:a:0',
           '-vn',
           '-ar', '48000', // Force 48KHz for Unity
-
-          if (Platform.isWindows) ...[
-            '-af',
-            'loudnorm=I=-16:TP=-1.5:LRA=11:print_format=summary,alimiter=level=1',
-          ] else ...[
-            '-filter:a',
-            'loudnorm=I=-16:TP=-1.5:LRA=11:print_format=summary,alimiter=level=1',
-          ],
-
+          // '-filter:a', audioFilters,  // TODO：to be implemented
           '-c:a', 'libopus', // Use Opus for better quality
           '-b:a', targetAudioBitrate.toString(),
           '-vbr', 'on', // Enable variable bitrate
           '-compression_level', '10', // Highest compression quality
-          '-frame_duration', '60', // Optimal for game audio
-          '-application', 'audio', // Optimize for voice/music
+          '-frame_duration', '20', // Optimal for game audio
+          '-application', 'lowdelay', // Optimize
           '-y',
           outputAudioPath,
         ];
@@ -703,24 +708,31 @@ class FFmpegHelper {
         );
         onLog?.call(buffer.toString());
 
+        final audioInfo = await _analyzeAudio(inputPath);
+        final isAlreadyNormalized =
+            audioInfo['format_tags']?['encoder']?.toString().contains(
+              'loudnorm',
+            ) ??
+            false;
+        final audioFilters =
+            isAlreadyNormalized
+                ? 'acompressor=threshold=-6dB:ratio=2:attack=30:release=200,alimiter=level=1'
+                : 'loudnorm=I=-14:TP=-1.5:LRA=11:linear=true:print_format=summary,' +
+                    'acompressor=threshold=-6dB:ratio=2:attack=30:release=200,' +
+                    'alimiter=level=1';
         // Try to preserve original codec first
         final audioCmd = [
           '-i', inputPath,
+          '-map', '0:a:0',
           '-vn',
           '-ar', '48000', // Force 48KHz for Unity
-          if (Platform.isWindows) ...[
-            '-af',
-            'loudnorm=I=-16:TP=-1.5:LRA=11:print_format=summary,alimiter=level=1',
-          ] else ...[
-            '-filter:a',
-            'loudnorm=I=-16:TP=-1.5:LRA=11:print_format=summary,alimiter=level=1',
-          ],
+          // '-filter:a', audioFilters,  // TODO：to be implemented
           '-c:a', 'libopus', // Use Opus for better quality
           '-b:a', targetAudioBitrate.toString(),
           '-vbr', 'on', // Enable variable bitrate
           '-compression_level', '10', // Highest compression quality
-          '-frame_duration', '60', // Optimal for game audio
-          '-application', 'audio', // Optimize for voice/music
+          '-frame_duration', '20', // Optimal for game audio
+          '-application', 'lowdelay', // Optimize
           '-y',
           outputAudioPath,
         ];
@@ -737,23 +749,30 @@ class FFmpegHelper {
           );
           onLog?.call(buffer.toString());
 
+          final audioInfo = await _analyzeAudio(inputPath);
+          final isAlreadyNormalized =
+              audioInfo['format_tags']?['encoder']?.toString().contains(
+                'loudnorm',
+              ) ??
+              false;
+          final audioFilters =
+              isAlreadyNormalized
+                  ? 'acompressor=threshold=-6dB:ratio=2:attack=30:release=200,alimiter=level=1'
+                  : 'loudnorm=I=-14:TP=-1.5:LRA=11:linear=true:print_format=summary,' +
+                      'acompressor=threshold=-6dB:ratio=2:attack=30:release=200,' +
+                      'alimiter=level=1';
           final fallbackCmd = [
             '-i', inputPath,
+            '-map', '0:a:0',
             '-vn',
             '-ar', '48000', // Force 48KHz for Unity
-            if (Platform.isWindows) ...[
-              '-af',
-              'loudnorm=I=-16:TP=-1.5:LRA=11:print_format=summary,alimiter=level=1',
-            ] else ...[
-              '-filter:a',
-              'loudnorm=I=-16:TP=-1.5:LRA=11:print_format=summary,alimiter=level=1',
-            ],
+            // '-filter:a', audioFilters,  // TODO：to be implemented
             '-c:a', 'libopus', // Use Opus for better quality
             '-b:a', targetAudioBitrate.toString(),
             '-vbr', 'on', // Enable variable bitrate
             '-compression_level', '10', // Highest compression quality
-            '-frame_duration', '60', // Optimal for game audio
-            '-application', 'audio', // Optimize for voice/music
+            '-frame_duration', '20', // Optimal for game audio
+            '-application', 'lowdelay', // Optimize
             '-y',
             outputAudioPath,
           ];
@@ -831,55 +850,6 @@ class FFmpegHelper {
     }
   }
 
-  /// Checks if hardware acceleration is available on the current platform
-  static Future<bool> _hasHardwareAcceleration() async {
-    try {
-      if (Platform.isWindows) {
-        // Check for DXVA2, D3D11VA, NVDEC, CUDA on Windows
-        final result = await Process.run(getBundledFfmpegPath(), [
-          '-hide_banner',
-          '-hwaccels',
-        ]);
-
-        if (result.exitCode == 0) {
-          final output = result.stdout.toString().toLowerCase();
-          return output.contains('dxva2') ||
-              output.contains('d3d11va') ||
-              output.contains('nvdec') ||
-              output.contains('cuda');
-        }
-      } else if (Platform.isMacOS) {
-        // Check for VideoToolbox on macOS
-        final result = await Process.run(getBundledFfmpegPath(), [
-          '-hide_banner',
-          '-hwaccels',
-        ]);
-
-        return result.exitCode == 0 &&
-            result.stdout.toString().toLowerCase().contains('videotoolbox');
-      } else if (Platform.isLinux) {
-        // Check for VAAPI, VDPAU, NVDEC on Linux
-        final result = await Process.run(getBundledFfmpegPath(), [
-          '-hide_banner',
-          '-hwaccels',
-        ]);
-
-        if (result.exitCode == 0) {
-          final output = result.stdout.toString().toLowerCase();
-          return output.contains('vaapi') ||
-              output.contains('vdpau') ||
-              output.contains('nvdec');
-        }
-      }
-      return false;
-    } catch (e) {
-      if (kDebugMode) {
-        print('Hardware acceleration check failed: $e');
-      }
-      return false;
-    }
-  }
-
   /// Gets the most appropriate hardware acceleration method for the current platform
   static Future<String?> _getBestHardwareAccelerationMethod() async {
     try {
@@ -911,6 +881,36 @@ class FFmpegHelper {
         print('Hardware acceleration method detection failed: $e');
       }
       return null;
+    }
+  }
+
+  static Future<Map<String, dynamic>> _analyzeAudio(String inputPath) async {
+    try {
+      final ffprobePath = getBundledFfprobePath();
+      final args = [
+        '-v',
+        'error',
+        '-select_streams',
+        'a:0',
+        '-show_entries',
+        'stream=bit_rate,sample_rate,channels',
+        '-show_entries',
+        'format_tags=encoder',
+        '-of',
+        'json',
+        inputPath,
+      ];
+
+      final result = await Process.run(ffprobePath, args);
+      if (result.exitCode != 0) return {};
+
+      final jsonData = json.decode(result.stdout as String);
+      return jsonData;
+    } catch (e) {
+      if (kDebugMode) {
+        print('Audio analysis error: $e');
+      }
+      return {};
     }
   }
 
@@ -1028,7 +1028,7 @@ class FFmpegHelper {
           '-t', durationSec.toString(), // Duration
           '-c:v', 'libx264', // Video codec (Unity compatible)
           '-preset', 'fast', // Faster encoding with good quality
-          '-crf', '22', // Balanced quality (18-28 range, lower=better quality)
+          '-crf', '23', // Balanced quality (18-28 range, lower=better quality)
           '-maxrate', '${maxVideoBitrate ~/ 1000}k', // Maximum bitrate
           '-bufsize', '${maxVideoBitrate ~/ 500}k', // Buffer size
           '-pix_fmt', 'yuv420p', // Unity compatible pixel format
@@ -1041,25 +1041,32 @@ class FFmpegHelper {
           outputVideoPath,
         ];
 
+        final audioInfo = await _analyzeAudio(inputPath);
+        final isAlreadyNormalized =
+            audioInfo['format_tags']?['encoder']?.toString().contains(
+              'loudnorm',
+            ) ??
+            false;
+        final audioFilters =
+            isAlreadyNormalized
+                ? 'acompressor=threshold=-6dB:ratio=2:attack=30:release=200,alimiter=level=1'
+                : 'loudnorm=I=-14:TP=-1.5:LRA=11:linear=true:print_format=summary,' +
+                    'acompressor=threshold=-6dB:ratio=2:attack=30:release=200,' +
+                    'alimiter=level=1';
         // Audio preview command - optimized for Unity
         final audioCmd = [
           '-ss', _formatTime(startMs), // Start position
           '-i', inputPath, // Input file
           '-t', durationSec.toString(), // Duration
+          '-map', '0:a:0',
           '-vn', // No video
           '-ar', '48000', // Force 48KHz for Unity
-          if (Platform.isWindows) ...[
-            '-af',
-            'loudnorm=I=-16:TP=-1.5:LRA=11:print_format=summary,alimiter=level=1',
-          ] else ...[
-            '-filter:a',
-            'loudnorm=I=-16:TP=-1.5:LRA=11:print_format=summary,alimiter=level=1',
-          ],
+          // '-filter:a', audioFilters,  // TODO：to be implemented
           '-c:a', 'libopus', // opus codec (Unity recommended)
           '-b:a', '${targetAudioBitrate ~/ 1000}k', // Audio bitrate
           '-vbr', 'on', // Variable bitrate
-          '-frame_duration', '60', // Optimal for game audio
-          '-application', 'audio', // Optimize for voice/music
+          '-frame_duration', '20', // Optimal for game audio
+          '-application', 'lowdelay', // Optimize
           '-compression_level', '10', // Highest quality
           '-ac', '2', // Stereo audio
           '-y', // Overwrite
@@ -1098,25 +1105,32 @@ class FFmpegHelper {
         );
       } else {
         // Audio-only preview command - optimized for Unity
+        final audioInfo = await _analyzeAudio(inputPath);
+        final isAlreadyNormalized =
+            audioInfo['format_tags']?['encoder']?.toString().contains(
+              'loudnorm',
+            ) ??
+            false;
+        final audioFilters =
+            isAlreadyNormalized
+                ? 'acompressor=threshold=-6dB:ratio=2:attack=30:release=200,alimiter=level=1'
+                : 'loudnorm=I=-14:TP=-1.5:LRA=11:linear=true:print_format=summary,' +
+                    'acompressor=threshold=-6dB:ratio=2:attack=30:release=200,' +
+                    'alimiter=level=1';
         final audioCmd = [
           '-ss', _formatTime(startMs), // Start position
           '-i', inputPath, // Input file
           '-t', durationSec.toString(), // Duration
+          '-map', '0:a:0',
           '-vn', // No video
           '-ar', '48000', // Standard sample rate
-          if (Platform.isWindows) ...[
-            '-af',
-            'loudnorm=I=-16:TP=-1.5:LRA=11:print_format=summary,alimiter=level=1',
-          ] else ...[
-            '-filter:a',
-            'loudnorm=I=-16:TP=-1.5:LRA=11:print_format=summary,alimiter=level=1',
-          ],
+          // '-filter:a', audioFilters,  // TODO：to be implemented
           '-c:a', 'libopus', // opus codec
           '-b:a', '${targetAudioBitrate ~/ 1000}k', // Audio bitrate
           '-vbr', 'on', // Enable variable bitrate
           '-compression_level', '10', // Highest compression quality
-          '-frame_duration', '60', // Optimal for game audio
-          '-application', 'audio', // Optimize for voice/music
+          '-frame_duration', '20', // Optimal for game audio
+          '-application', 'lowdelay', // Optimize
           '-ac', '2', // Stereo audio
           '-y', // Overwrite
           outputAudioPath,
