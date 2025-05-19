@@ -210,7 +210,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   parentReference:
     TypeName: RhythmPulse.ProjectSharedLifetimeScope
-  autoRun: 0
+  autoRun: 1
   autoInjectGameObjects: []
 --- !u!1660057539 &9223372036854775807
 SceneRoots:

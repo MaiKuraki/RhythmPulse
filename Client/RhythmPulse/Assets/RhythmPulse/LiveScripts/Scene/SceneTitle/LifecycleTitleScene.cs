@@ -14,7 +14,7 @@ namespace RhythmPulse.Scene
 {
     public class LifecycleTitleScene : ISceneLifecycle
     {
-        [Inject] IUIService uiService;
+        [Inject] private readonly IUIService uiService;
 
         public UniTask OnEditorFirstPreInitialize(ISceneDataWriter writer, CancellationToken cancellationToken)
         {
@@ -33,6 +33,7 @@ namespace RhythmPulse.Scene
 
         public UniTask OnFinalize(ISceneDataWriter writer, IProgress<IProgressDataStore> progress, CancellationToken cancellationToken)
         {
+            uiService.CloseUI(UIWindowName.Title);
             return UniTask.CompletedTask;
         }
 

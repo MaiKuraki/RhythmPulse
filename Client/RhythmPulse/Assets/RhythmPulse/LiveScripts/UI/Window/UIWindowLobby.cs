@@ -1,13 +1,17 @@
 using CycloneGames.Logger;
 using CycloneGames.UIFramework;
 using R3;
+using RhythmPulse.APIGateway;
+using RhythmPulse.Scene;
 using UnityEngine;
 using UnityEngine.UI;
+using VContainer;
 
 namespace RhythmPulse.UI
 {
     public class UIWindowLobby : UIWindow
     {
+        [Inject] private readonly ISceneManagementAPIGateway sceneManagementAPIGateway;
         private enum EGameMode // should not be public
         {
             Beats,
@@ -29,12 +33,14 @@ namespace RhythmPulse.UI
             switch (gameMode)
             {
                 case EGameMode.Beats:
-                CLogger.LogInfo("[UIWindowLobby] Enter Beats Game");
+                    CLogger.LogInfo("[UIWindowLobby] Enter Beats Game");
                     break;
                 case EGameMode.Dance:
-                CLogger.LogInfo("[UIWindowLobby] Enter Dance Game");
+                    CLogger.LogInfo("[UIWindowLobby] Enter Dance Game");
                     break;
             }
+            
+            sceneManagementAPIGateway.Push(SceneDefinitions.Gameplay);
         }
     }
 }

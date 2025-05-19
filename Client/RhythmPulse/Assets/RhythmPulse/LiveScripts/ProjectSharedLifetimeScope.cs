@@ -4,6 +4,7 @@ using CycloneGames.Logger;
 using CycloneGames.Factory;
 using CycloneGames.Service;
 using CycloneGames.UIFramework;
+using RhythmPulse.APIGateway;
 
 namespace RhythmPulse
 {
@@ -18,6 +19,7 @@ namespace RhythmPulse
             builder.Register<IMainCameraService, MainCameraService>(Lifetime.Singleton);
             builder.Register<IAssetPathBuilderFactory, AssetPathBuilderFactory>(Lifetime.Singleton);
             builder.Register<IUIService, UIService>(Lifetime.Singleton);
+            builder.Register<ISceneManagementAPIGateway, SceneManagementAPIGateway>(Lifetime.Singleton);
         }
     }
 }

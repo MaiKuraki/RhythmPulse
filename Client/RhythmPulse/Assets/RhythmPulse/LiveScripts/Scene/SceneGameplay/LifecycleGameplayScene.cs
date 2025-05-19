@@ -4,16 +4,11 @@ using Cysharp.Threading.Tasks;
 using MackySoft.Navigathena;
 using MackySoft.Navigathena.SceneManagement;
 using MackySoft.Navigathena.SceneManagement.VContainer;
-using VContainer;
-using CycloneGames.UIFramework;
-using RhythmPulse.UI;
 
 namespace RhythmPulse.Scene
 {
-    public class LifecycleLobbyScene : ISceneLifecycle
+    public class LifecycleGameplayScene : ISceneLifecycle
     {
-        [Inject] private readonly IUIService uiService;
-
         public UniTask OnEditorFirstPreInitialize(ISceneDataWriter writer, CancellationToken cancellationToken)
         {
             return UniTask.CompletedTask;
@@ -31,13 +26,11 @@ namespace RhythmPulse.Scene
 
         public UniTask OnFinalize(ISceneDataWriter writer, IProgress<IProgressDataStore> progress, CancellationToken cancellationToken)
         {
-            uiService.CloseUI(UIWindowName.Lobby);
             return UniTask.CompletedTask;
         }
 
         public UniTask OnInitialize(ISceneDataReader reader, IProgress<IProgressDataStore> progress, CancellationToken cancellationToken)
         {
-            uiService.OpenUI(UIWindowName.Lobby);
             return UniTask.CompletedTask;
         }
     }
