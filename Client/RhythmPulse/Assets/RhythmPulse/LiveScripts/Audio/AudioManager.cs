@@ -100,8 +100,24 @@ namespace RhythmPulse.Audio
         // Event to notify when an audio clip needs to be stopped before unloading.
         public event Action<AudioClip> OnStopAudioRequested;
 
+        public static AudioManager Instance { get; private set; }
+
+        [SerializeField] bool _singleton = true;
+
         private void Awake()
         {
+            if (_singleton)
+            {
+                if (Instance != null && Instance != this)
+                {
+                    Destroy(gameObject);
+                    return;
+                }
+
+                Instance = this;
+                DontDestroyOnLoad(gameObject);
+            }
+
             audioLoader = new UnityAudioLoader();
 
             // Initialize dictionaries for each audio category.

@@ -509,7 +509,6 @@ class FFmpegHelper {
       const Map<String, int> audioBitrateRecommendations = {
         'aac': 320,
         'mp3': 320,
-        'opus': 320,
         'vorbis': 320,
         'flac': 0,
       };
@@ -631,7 +630,7 @@ class FFmpegHelper {
                 ? (inputAudioBitrate > 320 * 1000
                     ? 320 * 1000
                     : inputAudioBitrate)
-                : audioBitrateRecommendations['opus']! * 1000;
+                : audioBitrateRecommendations['vorbis']! * 1000;
         final audioInfo = await _analyzeAudio(inputPath);
         final isAlreadyNormalized =
             audioInfo['format_tags']?['encoder']?.toString().contains(
@@ -651,7 +650,7 @@ class FFmpegHelper {
           '-vn',
           '-ar', '48000', // Force 48KHz for Unity
           // '-filter:a', audioFilters,  // TODO：to be implemented
-          '-c:a', 'libopus', // Use Opus for better quality
+          '-c:a', 'libvorbis', // vorbis codec (Unity recommended)
           '-b:a', targetAudioBitrate.toString(),
           '-vbr', 'on', // Enable variable bitrate
           '-compression_level', '10', // Highest compression quality
@@ -698,7 +697,7 @@ class FFmpegHelper {
                 ? (inputAudioBitrate > 320 * 1000
                     ? 320 * 1000
                     : inputAudioBitrate)
-                : audioBitrateRecommendations['opus']! * 1000;
+                : audioBitrateRecommendations['vorbis']! * 1000;
 
         buffer.writeln(
           '[$timestamp]    Input audio bitrate: ${inputAudioBitrate ~/ 1000} kbps',
@@ -727,7 +726,7 @@ class FFmpegHelper {
           '-vn',
           '-ar', '48000', // Force 48KHz for Unity
           // '-filter:a', audioFilters,  // TODO：to be implemented
-          '-c:a', 'libopus', // Use Opus for better quality
+          '-c:a', 'libvorbis', // vorbis codec (Unity recommended)
           '-b:a', targetAudioBitrate.toString(),
           '-vbr', 'on', // Enable variable bitrate
           '-compression_level', '10', // Highest compression quality
@@ -767,7 +766,7 @@ class FFmpegHelper {
             '-vn',
             '-ar', '48000', // Force 48KHz for Unity
             // '-filter:a', audioFilters,  // TODO：to be implemented
-            '-c:a', 'libopus', // Use Opus for better quality
+            '-c:a', 'libvorbis', // vorbis codec (Unity recommended)
             '-b:a', targetAudioBitrate.toString(),
             '-vbr', 'on', // Enable variable bitrate
             '-compression_level', '10', // Highest compression quality
@@ -1062,7 +1061,7 @@ class FFmpegHelper {
           '-vn', // No video
           '-ar', '48000', // Force 48KHz for Unity
           // '-filter:a', audioFilters,  // TODO：to be implemented
-          '-c:a', 'libopus', // opus codec (Unity recommended)
+          '-c:a', 'libvorbis', // vorbis codec (Unity recommended)
           '-b:a', '${targetAudioBitrate ~/ 1000}k', // Audio bitrate
           '-vbr', 'on', // Variable bitrate
           '-frame_duration', '20', // Optimal for game audio
@@ -1125,7 +1124,7 @@ class FFmpegHelper {
           '-vn', // No video
           '-ar', '48000', // Standard sample rate
           // '-filter:a', audioFilters,  // TODO：to be implemented
-          '-c:a', 'libopus', // opus codec
+          '-c:a', 'libvorbis', // vorbis codec (Unity recommended)
           '-b:a', '${targetAudioBitrate ~/ 1000}k', // Audio bitrate
           '-vbr', 'on', // Enable variable bitrate
           '-compression_level', '10', // Highest compression quality

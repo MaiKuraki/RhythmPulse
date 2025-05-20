@@ -11,27 +11,22 @@ namespace RhythmPulse.Cheat
     {
         private DebugPage debugPageRoot;
 
-        public static DebugSheetManager Insatnce;
-        [SerializeField] bool _isUnique = true;
+        public static DebugSheetManager Instance { get; private set; }
+        [SerializeField] bool _singleton = true;
 
         void Awake()
         {
-            if (_isUnique)
+            if (_singleton)
             {
-                MakeUnique();
-            }
-        }
+                if (Instance != null && Instance != this)
+                {
+                    Destroy(gameObject);
+                    return;
+                }
 
-        void MakeUnique()
-        {
-            if (Insatnce == null)
-            {
-                Insatnce = this;
+                Instance = this;
                 DontDestroyOnLoad(gameObject);
-                return;
             }
-
-            Destroy(gameObject);
         }
 
         void Start()

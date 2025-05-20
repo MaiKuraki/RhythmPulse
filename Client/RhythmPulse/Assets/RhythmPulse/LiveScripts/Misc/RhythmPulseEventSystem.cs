@@ -6,21 +6,21 @@ namespace RhythmPulse.Misc
     {
         public static RhythmPulseEventSystem Instance { get; private set; }
 
+        [SerializeField] private bool _singleton = true;
+
         void Awake()
         {
-            if (Instance == null)
+            if (_singleton)
             {
+                if (Instance != null && Instance != this)
+                {
+                    Destroy(gameObject);
+                    return;
+                }
+
                 Instance = this;
                 DontDestroyOnLoad(gameObject);
-                return;
             }
-
-            Destroy(gameObject);
-        }
-
-        void MakeUnique()
-        {
-
         }
     }
 }
