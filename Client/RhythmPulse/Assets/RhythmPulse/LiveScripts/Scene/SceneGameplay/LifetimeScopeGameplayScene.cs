@@ -1,6 +1,7 @@
 using VContainer;
 using VContainer.Unity;
 using MackySoft.Navigathena.SceneManagement.VContainer;
+using RhythmPulse.Gameplay;
 
 namespace RhythmPulse.Scene
 {
@@ -11,6 +12,7 @@ namespace RhythmPulse.Scene
             base.Configure(builder);
 
             builder.RegisterSceneLifecycle<LifecycleGameplayScene>();
+            builder.RegisterComponentInHierarchy<GameplayManager>();
         }
     }
 }
