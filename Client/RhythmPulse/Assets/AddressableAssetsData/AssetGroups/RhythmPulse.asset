@@ -25,6 +25,11 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
+  - m_GUID: 40a5d03a1ccf86842853137f8362b508
+    m_Address: Assets/RhythmPulse/LiveContent/Prefabs/Audio
+    m_ReadOnly: 0
+    m_SerializedLabels: []
+    FlaggedDuringContentUpdateRestriction: 0
   - m_GUID: 6fa4023fe1e1d7247836d89454905fd1
     m_Address: Assets/RhythmPulse/LiveContent/ScriptableObjects/UI
     m_ReadOnly: 0

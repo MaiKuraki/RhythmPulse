@@ -261,7 +261,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _camera: {fileID: 6546927}
-  _isSingleton: 1
+  _singleton: 1
 --- !u!1 &58526303
 GameObject:
   m_ObjectHideFlags: 0
@@ -365,6 +365,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a7c5f74a08eb4bc4a9fe3f145b93ba8f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  _singleton: 1
 --- !u!1001 &77056897
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -567,7 +568,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 09a440a244d551848a0101716ea6ce47, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _isUnique: 1
+  _singleton: 1
 --- !u!1 &502011477
 GameObject:
   m_ObjectHideFlags: 0
@@ -643,6 +644,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 27782ec2f7c344e499f27cf92643b19e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  _singleton: 1
+  audioSourcePrefab: {fileID: 7679605875739536528, guid: 91c62447878846747953d7e276e13b9d,
+    type: 3}
 --- !u!4 &1357562246
 Transform:
   m_ObjectHideFlags: 0

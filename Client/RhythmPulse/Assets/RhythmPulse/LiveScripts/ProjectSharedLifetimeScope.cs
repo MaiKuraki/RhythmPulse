@@ -5,6 +5,7 @@ using CycloneGames.Factory;
 using CycloneGames.Service;
 using CycloneGames.UIFramework;
 using RhythmPulse.APIGateway;
+using RhythmPulse.Audio;
 
 namespace RhythmPulse
 {
@@ -20,6 +21,7 @@ namespace RhythmPulse
             builder.Register<IAssetPathBuilderFactory, AssetPathBuilderFactory>(Lifetime.Singleton);
             builder.Register<IUIService, UIService>(Lifetime.Singleton);
             builder.Register<ISceneManagementAPIGateway, SceneManagementAPIGateway>(Lifetime.Singleton);
+            builder.RegisterComponentInHierarchy<AudioManager>();
         }
     }
 }

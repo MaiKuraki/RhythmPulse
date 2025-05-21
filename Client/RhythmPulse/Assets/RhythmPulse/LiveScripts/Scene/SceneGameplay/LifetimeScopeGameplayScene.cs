@@ -2,6 +2,7 @@ using VContainer;
 using VContainer.Unity;
 using MackySoft.Navigathena.SceneManagement.VContainer;
 using RhythmPulse.Gameplay;
+using RhythmPulse.Gameplay.Media;
 
 namespace RhythmPulse.Scene
 {
@@ -13,6 +14,7 @@ namespace RhythmPulse.Scene
 
             builder.RegisterSceneLifecycle<LifecycleGameplayScene>();
             builder.RegisterComponentInHierarchy<GameplayManager>();
+            builder.Register<GameplayMusicPlayer>(Lifetime.Singleton);
         }
     }
 }
