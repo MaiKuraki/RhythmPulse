@@ -2,7 +2,8 @@
     "name": "RhythmPulse.Editor",
     "rootNamespace": "",
     "references": [
-        "RhythmPulse.HotUpdate"
+        "RhythmPulse.HotUpdate",
+        "CycloneGames.Utility.Runtime"
     ],
     "includePlatforms": [
         "Editor"

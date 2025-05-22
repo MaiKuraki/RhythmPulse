@@ -1,14 +1,19 @@
 using CycloneGames.Factory;
-using CycloneGames.Logger;
-using Cysharp.Threading.Tasks;
 using RhythmPulse.Audio;
-using VContainer;
-using VContainer.Unity;
 
 namespace RhythmPulse.Gameplay.Media
 {
-    // public interface IGameplayMusicPlayer { }
-    public class GameplayMusicPlayer
+    public interface IGameplayMusicPlayer
+    {
+        void InitializeMusicPlayer(in string InAudioKey);
+        void Play();
+        void Stop();
+        void Pause();
+        void Resume();
+        long GetPlaybackTimeMSec();
+        void SeekTime(long milliSeconds);
+    }
+    public class GameplayMusicPlayer : IGameplayMusicPlayer
     {
         private const string DEBUG_FLAG = "[GameplayMusicPlayer] ";
         private IUnityObjectSpawner spawner;
@@ -54,9 +59,9 @@ namespace RhythmPulse.Gameplay.Media
             MusicPlayer.Resume();
         }
 
-        public void GetPlaybackTimeMSec()
+        public long GetPlaybackTimeMSec()
         {
-            MusicPlayer.GetPlaybackTimeMSec();
+            return MusicPlayer ? MusicPlayer.GetPlaybackTimeMSec() : 0;
         }
 
         public void SeekTime(long milliSeconds)

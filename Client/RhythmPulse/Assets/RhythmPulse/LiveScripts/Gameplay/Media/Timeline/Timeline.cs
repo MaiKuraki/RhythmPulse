@@ -1,4 +1,5 @@
 using System;
+using VContainer;
 
 namespace RhythmPulse.Gameplay.Media
 {
@@ -23,6 +24,15 @@ namespace RhythmPulse.Gameplay.Media
             stopCommand = new StopCommand(this);
             resumeCommand = new ResumeCommand(this);
         }
+
+        [Inject]
+        public void Construct(IGameplayMusicPlayer gameplayMusicPlayer, GameplayVideoPlayer gameplayVideoPlayer)
+        {
+            this.GameplayMusicPlayer = gameplayMusicPlayer;
+            this.GameplayVideoPlayer = gameplayVideoPlayer;
+        }
+        public IGameplayMusicPlayer GameplayMusicPlayer { get; private set; }
+        public GameplayVideoPlayer GameplayVideoPlayer { get; private set; }
 
         public long PlaybackTimeMSec { get; private set; }
         public void SetPlaybackTimeMSec(long milliSeconds) => PlaybackTimeMSec = milliSeconds;

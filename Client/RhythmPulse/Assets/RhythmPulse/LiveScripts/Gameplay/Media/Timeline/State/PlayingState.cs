@@ -36,8 +36,7 @@ namespace RhythmPulse.Gameplay.Media
         {
             base.OnUpdate();
 
-            long audioPlaybackTimeMsec = 0;
-
+            long audioPlaybackTimeMsec = _timeline.GameplayMusicPlayer.GetPlaybackTimeMSec();
             _timeline.SetPlaybackTimeMSec(audioPlaybackTimeMsec);
 
             // Check AVOffset every 2 seconds
@@ -53,11 +52,11 @@ namespace RhythmPulse.Gameplay.Media
         {
             if (ShouldAVSync())
             {
-                long videoPlaybackTimeMSec = 0; // get video playback time from video player
+                long videoPlaybackTimeMSec = _timeline.GameplayVideoPlayer.GetPlaybackTimeMSec();
                 if (UnityEngine.Mathf.Abs(audioPlaybackTimeMSec - videoPlaybackTimeMSec) > AVSyncErrorTime /* && !_timeline.VideoPlayer.IsSeeking */)
                 {
                     //  TODO: 
-                    // _timeline.VideoPlayer.Seek(audioPlaybackTimeMSec);
+                    _timeline.GameplayVideoPlayer.SeekTime(audioPlaybackTimeMSec);
                     CLogger.LogWarning($"[Timeline] AVSync, audioTime:{audioPlaybackTimeMSec} videoTime: {videoPlaybackTimeMSec}");
                 }
             }

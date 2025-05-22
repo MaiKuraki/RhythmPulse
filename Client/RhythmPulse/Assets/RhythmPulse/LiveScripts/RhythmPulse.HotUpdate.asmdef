@@ -15,7 +15,8 @@
         "MackySoft.Navigathena.SceneManagement.VContainer",
         "CycloneGames.Factory",
         "CycloneGames.Service",
-        "CycloneGames.UIFramework"
+        "CycloneGames.UIFramework",
+        "CycloneGames.Utility.Runtime"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

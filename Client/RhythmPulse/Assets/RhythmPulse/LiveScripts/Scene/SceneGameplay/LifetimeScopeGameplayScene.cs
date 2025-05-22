@@ -14,7 +14,9 @@ namespace RhythmPulse.Scene
 
             builder.RegisterSceneLifecycle<LifecycleGameplayScene>();
             builder.RegisterComponentInHierarchy<GameplayManager>();
-            builder.Register<GameplayMusicPlayer>(Lifetime.Singleton);
+            builder.Register<IGameplayMusicPlayer, GameplayMusicPlayer>(Lifetime.Singleton);
+            builder.RegisterComponentInHierarchy<GameplayVideoPlayer>(); // TODO: Maybe bind to IGameplayVideoPlayer?
+            builder.Register<ITimeline, Timeline>(Lifetime.Singleton);
         }
     }
 }

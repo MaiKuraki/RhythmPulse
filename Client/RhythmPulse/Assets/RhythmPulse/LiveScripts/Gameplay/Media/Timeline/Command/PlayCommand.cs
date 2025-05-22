@@ -11,6 +11,9 @@
         {
             if (_timeline.State != _timeline.PlayingState) 
             {
+                _timeline?.GameplayMusicPlayer?.Play();
+                // _timeline.AudioPlayer.SFXPauseEvent?.Invoke();
+                _timeline?.GameplayVideoPlayer?.Play();
                 _timeline.ChangeState(_timeline.PlayingState);
             }
         }

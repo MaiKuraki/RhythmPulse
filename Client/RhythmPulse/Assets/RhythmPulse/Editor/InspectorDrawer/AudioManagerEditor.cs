@@ -2,6 +2,7 @@ using UnityEditor;
 using UnityEngine;
 using System.Collections.Generic;
 using RhythmPulse.Audio;
+using CycloneGames.Utility.Runtime;
 
 [CustomEditor(typeof(AudioManager))]
 public class AudioManagerEditor : Editor
@@ -39,7 +40,7 @@ public class AudioManagerEditor : Editor
         EditorGUILayout.BeginHorizontal();
         {
             EditorGUILayout.LabelField("Total Audio Memory Usage:", EditorStyles.boldLabel);
-            EditorGUILayout.LabelField(FormatBytes(audioManager.TotalMemoryUsage), EditorStyles.boldLabel);
+            EditorGUILayout.LabelField(audioManager.TotalMemoryUsage.ToMemorySizeString(), EditorStyles.boldLabel);
         }
         EditorGUILayout.EndHorizontal();
         EditorGUILayout.Space();
@@ -78,24 +79,6 @@ public class AudioManagerEditor : Editor
             DrawMemoryUsageData(audioManager.GetAudioMemoryUsage(), audioManager);
             EditorGUI.indentLevel--;
         }
-    }
-
-    /// <summary>
-    /// Formats bytes into a human-readable string (KB, MB, etc.)
-    /// </summary>
-    private string FormatBytes(long bytes)
-    {
-        string[] suffixes = { "B", "KB", "MB", "GB", "TB" };
-        int suffixIndex = 0;
-        double size = bytes;
-
-        while (size >= 1024 && suffixIndex < suffixes.Length - 1)
-        {
-            size /= 1024;
-            suffixIndex++;
-        }
-
-        return $"{size:0.##} {suffixes[suffixIndex]}";
     }
 
     /// <summary>
@@ -143,13 +126,17 @@ public class AudioManagerEditor : Editor
                 // Draw status label with exact width (no padding)
                 GUILayout.Label(statusText, statusStyle, GUILayout.Width(statusWidth));
 
-                // Draw foldout with truncated key 
-                keyExpandedStates[key] = EditorGUILayout.Foldout(keyExpandedStates[key], foldoutLabel, true);
+                // Create a flexible space that will automatically handle the width 
+                EditorGUILayout.BeginHorizontal(GUILayout.ExpandWidth(true));
+                {
+                    // Draw foldout with truncated key 
+                    keyExpandedStates[key] = EditorGUILayout.Foldout(keyExpandedStates[key], foldoutLabel, true);
+                }
+                EditorGUILayout.EndHorizontal();
 
                 // Add memory info if available 
                 if (!string.IsNullOrEmpty(memoryInfo))
                 {
-                    GUILayout.FlexibleSpace();
                     EditorGUILayout.LabelField(memoryInfo, GUILayout.Width(80));
                 }
             }
@@ -181,7 +168,7 @@ public class AudioManagerEditor : Editor
 
         EditorGUILayout.Space();
     }
-
+    
     /// <summary>
     /// Truncates a key string to a maximum length, appending ellipsis if truncated.
     /// </summary>
@@ -250,7 +237,7 @@ public class AudioManagerEditor : Editor
                 if (state == AudioManager.AudioLoadState.Loaded)
                 {
                     audioManager.GetAudioMemoryUsage().TryGetValue(kvp.Key, out long memory);
-                    memoryInfo = FormatBytes(memory);
+                    memoryInfo = memory.ToMemorySizeString();
                 }
             }
             else if (typeof(T) == typeof(AudioManager.AudioLoadState))
@@ -259,11 +246,11 @@ public class AudioManagerEditor : Editor
                 valueText = state.ToString();
                 valueColor = GetStateColor(state);
 
-                // Add memory info if loaded
+                // Add memory info if loaded 
                 if (state == AudioManager.AudioLoadState.Loaded)
                 {
                     audioManager.GetAudioMemoryUsage().TryGetValue(kvp.Key, out long memory);
-                    memoryInfo = FormatBytes(memory);
+                    memoryInfo = memory.ToMemorySizeString();
                 }
             }
             else
@@ -287,7 +274,7 @@ public class AudioManagerEditor : Editor
 
         foreach (var kvp in sortedUsage)
         {
-            string memoryText = FormatBytes(kvp.Value);
+            string memoryText = kvp.Value.ToMemorySizeString();
             string stateText = "Unknown";
             Color stateColor = Color.white;
 
