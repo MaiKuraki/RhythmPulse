@@ -1,8 +1,10 @@
 using System.Threading;
 using CycloneGames.Service;
+using CycloneGames.UIFramework;
 using Cysharp.Threading.Tasks;
 using RhythmPulse.Audio;
 using RhythmPulse.Gameplay.Media;
+using RhythmPulse.UI;
 using UnityEngine;
 using VContainer;
 
@@ -14,8 +16,9 @@ namespace RhythmPulse.Gameplay
         private IMainCameraService mainCameraService;
         private AudioManager audioManager;
         private IGameplayMusicPlayer gameplayMusicPlayer;
-        private GameplayVideoPlayer gameplayVideoPlayer;
+        private IGameplayVideoPlayer gameplayVideoPlayer;
         private ITimeline gameplayTimeline;
+        private IUIService uiService;
         [SerializeField] Camera gameplayCamera;
         [SerializeField] GameplayVideoRender gameplayVideoRender;
 
@@ -23,14 +26,16 @@ namespace RhythmPulse.Gameplay
         public void Construct(IMainCameraService mainCameraService,
                         AudioManager audioManager,
                         IGameplayMusicPlayer gameplayMusicPlayer,
-                        GameplayVideoPlayer gameplayVideoPlayer,
-                        ITimeline gameplayTimeline)
+                        IGameplayVideoPlayer gameplayVideoPlayer,
+                        ITimeline gameplayTimeline,
+                        IUIService uiService)
         {
             this.mainCameraService = mainCameraService;
             this.audioManager = audioManager;
             this.gameplayMusicPlayer = gameplayMusicPlayer;
             this.gameplayVideoPlayer = gameplayVideoPlayer;
             this.gameplayTimeline = gameplayTimeline;
+            this.uiService = uiService;
 
             IsDIInitialized = true;
         }
@@ -39,12 +44,12 @@ namespace RhythmPulse.Gameplay
         {
             await UniTask.WaitUntil(() => IsDIInitialized, PlayerLoopTiming.Update, cancellationToken);
 
+            if (cancellationToken.IsCancellationRequested) return;
+            mainCameraService.AddCameraToStack(gameplayCamera, 0);
+
             //  Test code
             await InitializeMedias();
             gameplayTimeline.Play();
-
-            if (cancellationToken.IsCancellationRequested) return;
-            mainCameraService.AddCameraToStack(gameplayCamera);
         }
 
         void Awake()
@@ -60,7 +65,24 @@ namespace RhythmPulse.Gameplay
 
             gameplayMusicPlayer.InitializeMusicPlayer("D:/Downloads/MusicGameMedias/MusicGameMedias/GodKnows_audio.ogg");
             gameplayVideoPlayer.InitializeVideoPlayer("D:/Downloads/MusicGameMedias/MusicGameMedias/GodKnows_video.mp4");
-            gameplayVideoRender.SetTargetTexture(gameplayVideoPlayer.VideoTexture);
+            gameplayVideoRender.SetTargetTexture(((GameplayVideoPlayer)gameplayVideoPlayer).VideoTexture);
+        }
+
+        public void Pause()
+        {
+            if (gameplayTimeline.State == ((Timeline)gameplayTimeline).PlayingState)
+            {
+                gameplayTimeline.Pause();
+            }
+            else if (gameplayTimeline.State == ((Timeline)gameplayTimeline).PausedState)
+            {
+                gameplayTimeline.Resume();
+            }
+        }
+
+        public void Exit()
+        {
+            gameplayTimeline.Stop();
         }
 
         void OnDestroy()

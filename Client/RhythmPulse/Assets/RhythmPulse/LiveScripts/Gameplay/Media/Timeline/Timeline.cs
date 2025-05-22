@@ -9,6 +9,7 @@ namespace RhythmPulse.Gameplay.Media
         void Pause();
         void Stop();
         void Resume();
+        ITimelineState State { get; }
     }
 
     public partial class Timeline : ITimeline, IDisposable
@@ -26,13 +27,13 @@ namespace RhythmPulse.Gameplay.Media
         }
 
         [Inject]
-        public void Construct(IGameplayMusicPlayer gameplayMusicPlayer, GameplayVideoPlayer gameplayVideoPlayer)
+        public void Construct(IGameplayMusicPlayer gameplayMusicPlayer, IGameplayVideoPlayer gameplayVideoPlayer)
         {
             this.GameplayMusicPlayer = gameplayMusicPlayer;
             this.GameplayVideoPlayer = gameplayVideoPlayer;
         }
         public IGameplayMusicPlayer GameplayMusicPlayer { get; private set; }
-        public GameplayVideoPlayer GameplayVideoPlayer { get; private set; }
+        public IGameplayVideoPlayer GameplayVideoPlayer { get; private set; }
 
         public long PlaybackTimeMSec { get; private set; }
         public void SetPlaybackTimeMSec(long milliSeconds) => PlaybackTimeMSec = milliSeconds;

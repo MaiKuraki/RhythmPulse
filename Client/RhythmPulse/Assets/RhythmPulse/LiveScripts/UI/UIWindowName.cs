@@ -4,5 +4,6 @@ namespace RhythmPulse.UI
     {
         public const string Title = "UIWindowTitle";
         public const string Lobby = "UIWindowLobby";
+        public const string GameplayHUDBeatsGame = "UIWindowGameplayHUDBeatsGame";
     }
 }
