@@ -4,7 +4,8 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:localization/localization.dart';
 import 'package:path/path.dart' as path;
 import 'utils/ffmpeg_helper.dart';
 
@@ -56,6 +57,7 @@ class MediaProcessingMasterApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    LocalJsonLocalization.delegate.directories = ['lib/i18n'];
     return MaterialApp(
       title: 'Media Processor',
       debugShowCheckedModeBanner: false,
@@ -76,8 +78,13 @@ class MediaProcessingMasterApp extends StatelessWidget {
           ),
         ),
       ),
-      localizationsDelegates: S.localizationsDelegates,
-      supportedLocales: S.supportedLocales,
+      supportedLocales: const [Locale('en', 'US'), Locale('zh', 'CN')],
+      localizationsDelegates: [
+        LocalJsonLocalization.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       home: const MediaProcessingHomePage(),
     );
   }
@@ -155,7 +162,7 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
       setState(() {
         _taskStatus = TaskStatus.canceled;
         _isProcessing = false;
-        _log += '\n${S.of(context)?.taskCanceled ?? 'Task canceled by user'}';
+        _log += '\n${'taskCanceled'.i18n()}';
       });
       _scrollLogToBottom();
 
@@ -200,7 +207,7 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
         if (path != null) {
           setState(() {
             _selectedFilePath = path;
-            _log = '${S.of(context)?.selectedFile ?? 'Selected File:'}\n$path';
+            _log = '${'selectedFile'.i18n()}\n$path';
             _taskStatus = TaskStatus.idle;
           });
           _scrollLogToBottom();
@@ -208,9 +215,7 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
       }
     } catch (e) {
       setState(() {
-        _log =
-            S.of(context)?.fileSelectionFailed(e.toString()) ??
-            'File selection failed: $e';
+        _log = 'fileSelectionFailed'.i18n(['$e']);
         _taskStatus = TaskStatus.failed;
       });
       _scrollLogToBottom();
@@ -253,9 +258,7 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
   Future<void> _generateFullMedia() async {
     if (_selectedFilePath == null) {
       setState(() {
-        _log =
-            S.of(context)?.noFileSelected ??
-            'Please select a media file first.';
+        _log = 'noFileSelected'.i18n();
         _taskStatus = TaskStatus.failed;
       });
       _scrollLogToBottom();
@@ -265,8 +268,7 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
     setState(() {
       _isProcessing = true;
       _taskStatus = TaskStatus.running;
-      _log =
-          S.of(context)?.processingPleaseWait ?? 'Processing, please wait...';
+      _log = 'processingPleaseWait'.i18n();
     });
     _scrollLogToBottom();
 
@@ -291,10 +293,12 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
       }
 
       final localizedStringsMap = {
-        'videoSplitCmd':
-            S.of(context)?.videoSplitCmd('') ?? 'Video command: {{cmd}}',
-        'audioSplitCmd':
-            S.of(context)?.audioSplitCmd('') ?? 'Audio command: {{cmd}}',
+        'videoSplitCmd': 'videoSplitCmd'.i18n(['%s']),
+        'audioSplitCmd': 'audioSplitCmd'.i18n(['%s']),
+        'videoSplitSuccess': 'videoSplitSuccess'.i18n(['%s']),
+        'audioSplitSuccess': 'audioSplitSuccess'.i18n(['%s']),
+        'videoSplitFailed': 'videoSplitFailed'.i18n(['%s']),
+        'audioSplitFailed': 'audioSplitFailed'.i18n(['%s']),
       };
 
       final log = await FFmpegHelper.generateFullMedia(
@@ -325,7 +329,7 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
     } catch (e) {
       if (_taskStatus != TaskStatus.canceled) {
         setState(() {
-          _log = S.of(context)?.errorOccurred(e.toString()) ?? 'Error: $e';
+          _log = 'errorOccurred'.i18n(['$e']);
           _taskStatus = TaskStatus.failed;
         });
         _scrollLogToBottom();
@@ -345,9 +349,7 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
   Future<void> _generatePreview() async {
     if (_selectedFilePath == null) {
       setState(() {
-        _log =
-            S.of(context)?.noFileSelected ??
-            'Please select a media file first.';
+        _log = 'noFileSelected'.i18n();
         _taskStatus = TaskStatus.failed;
       });
       _scrollLogToBottom();
@@ -360,9 +362,7 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
 
     if (startMs < 0 || endMs <= startMs) {
       setState(() {
-        _log =
-            S.of(context)?.invalidTimeRange ??
-            'Invalid time range (end must be after start)';
+        _log = 'invalidTimeRange'.i18n();
         _taskStatus = TaskStatus.failed;
       });
       _scrollLogToBottom();
@@ -372,7 +372,7 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
     setState(() {
       _isProcessing = true;
       _taskStatus = TaskStatus.running;
-      _log = S.of(context)?.generatingPreview ?? 'Generating preview...';
+      _log = 'generatingPreview'.i18n();
     });
     _scrollLogToBottom();
 
@@ -401,12 +401,11 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
 
       // Prepare localized strings
       final localizedStringsMap = {
-        'previewCmd':
-            S.of(context)?.previewCmd('') ?? 'Preview command: {{cmd}}',
-        'previewSuccess':
-            S.of(context)?.previewSuccess('') ?? 'Preview generated: {{path}}',
-        'previewFailed':
-            S.of(context)?.previewFailed ?? 'Preview generation failed',
+        'previewCmd': 'previewCmd'.i18n(['%s']),
+        'previewVideoSplitSuccess': 'previewVideoSplitSuccess'.i18n(['%s']),
+        'previewAudioSplitSuccess': 'previewAudioSplitSuccess'.i18n(['%s']),
+        'previewVideoSplitFailed': 'previewVideoSplitFailed'.i18n(['%s']),
+        'previewAudioSplitFailed': 'previewAudioSplitFailed'.i18n(['%s']),
       };
 
       final outputVideoPath = '$dir/${baseName}_preview.mp4';
@@ -437,7 +436,7 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
     } catch (e) {
       if (_taskStatus != TaskStatus.canceled) {
         setState(() {
-          _log = S.of(context)?.errorOccurred(e.toString()) ?? 'Error: $e';
+          _log = 'errorOccurred'.i18n(['$e']);
           _taskStatus = TaskStatus.failed;
         });
         _scrollLogToBottom();
@@ -484,8 +483,7 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
                           controller: _startTimeController,
                           keyboardType: TextInputType.number,
                           decoration: InputDecoration(
-                            labelText:
-                                S.of(context)?.startTimeMs ?? 'Start Time (ms)',
+                            labelText: 'startTimeMs'.i18n(),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(8),
                             ),
@@ -498,8 +496,7 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
                           controller: _endTimeController,
                           keyboardType: TextInputType.number,
                           decoration: InputDecoration(
-                            labelText:
-                                S.of(context)?.endTimeMs ?? 'End Time (ms)',
+                            labelText: 'endTimeMs'.i18n(),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(8),
                             ),
@@ -515,9 +512,7 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
                     width: double.infinity,
                     child: ElevatedButton.icon(
                       icon: const Icon(Icons.play_arrow),
-                      label: Text(
-                        S.of(context)?.generatePreview ?? 'Generate Preview',
-                      ),
+                      label: Text('generatePreview'.i18n()),
                       onPressed: _isProcessing ? null : _generatePreview,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.deepPurple,
@@ -547,7 +542,7 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
 
   /// Builds the file selection UI component
   Widget _buildFileSelector() {
-    final formats = _allowedExtensions.join(',    ');
+    final formats = _allowedExtensions.join(',\t');
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -558,7 +553,7 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              S.of(context)?.selectMediaFile ?? 'Select Media File',
+              'selectMediaFile'.i18n(),
               style: const TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
@@ -585,9 +580,7 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
                       ),
                     ),
                     child: Text(
-                      _selectedFilePath ??
-                          S.of(context)?.noFileSelected ??
-                          'Please select a media file first.',
+                      _selectedFilePath ?? 'noFileSelected'.i18n(),
                       style: TextStyle(
                         fontSize: 14,
                         color:
@@ -603,9 +596,7 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
                 const SizedBox(width: 12),
                 ElevatedButton.icon(
                   icon: const Icon(Icons.folder_open),
-                  label: Text(
-                    S.of(context)?.selectMediaFile ?? 'Select Media File',
-                  ),
+                  label: Text('selectMediaFile'.i18n()),
                   onPressed: _isProcessing ? null : _pickMediaFile,
                 ),
                 const SizedBox(width: 8),
@@ -616,15 +607,14 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
                       foregroundColor: Colors.white,
                     ),
                     icon: const Icon(Icons.clear),
-                    label: Text(S.of(context)?.clear ?? 'Clear'),
+                    label: Text('clear'.i18n()),
                     onPressed: _isProcessing ? null : _clearSelectedFile,
                   ),
               ],
             ),
             const SizedBox(height: 8),
             Text(
-              S.of(context)?.supportedFormats(formats) ??
-                  'Supported formats: $formats',
+              'supportedFormats'.i18n([formats]),
               style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
             ),
           ],
@@ -642,26 +632,26 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
     // Determine status display properties
     switch (_taskStatus) {
       case TaskStatus.running:
-        statusText = S.of(context)?.taskStatusRunning ?? 'Running';
+        statusText = 'taskStatusRunning'.i18n();
         statusColor = Colors.blue;
         break;
       case TaskStatus.success:
-        statusText = S.of(context)?.taskStatusSuccess ?? 'Success';
+        statusText = 'taskStatusSuccess'.i18n();
         statusColor = Colors.green;
         statusIcon = Icons.check_circle;
         break;
       case TaskStatus.failed:
-        statusText = S.of(context)?.taskStatusFailed ?? 'Failed';
+        statusText = 'taskStatusFailed'.i18n();
         statusColor = Colors.red;
         statusIcon = Icons.error;
         break;
       case TaskStatus.canceled:
-        statusText = S.of(context)?.taskStatusCanceled ?? 'Canceled';
+        statusText = 'taskStatusCanceled'.i18n();
         statusColor = Colors.orange;
         statusIcon = Icons.warning;
         break;
       case TaskStatus.idle:
-        statusText = S.of(context)?.taskStatusIdle ?? 'Idle';
+        statusText = 'taskStatusIdle'.i18n();
         statusColor = Colors.grey;
         break;
     }
@@ -676,7 +666,7 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              S.of(context)?.operation ?? 'Operation',
+              'operation'.i18n(),
               style: const TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
@@ -696,9 +686,7 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
                 Expanded(
                   child: ElevatedButton.icon(
                     icon: const Icon(Icons.video_library),
-                    label: Text(
-                      S.of(context)?.generateFullMedia ?? 'Generate Full Media',
-                    ),
+                    label: Text('generateFullMedia'.i18n()),
                     onPressed:
                         (_selectedFilePath == null || _isProcessing)
                             ? null
@@ -722,10 +710,7 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
                           ? Icons.expand_less
                           : Icons.expand_more,
                     ),
-                    label: Text(
-                      S.of(context)?.generatePreviewMedia ??
-                          'Generate Preview Media',
-                    ),
+                    label: Text('generatePreviewMedia'.i18n()),
                     onPressed:
                         (_selectedFilePath == null || _isProcessing)
                             ? null
@@ -759,9 +744,7 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
                 width: double.infinity,
                 child: ElevatedButton.icon(
                   icon: const Icon(Icons.cancel),
-                  label: Text(
-                    S.of(context)?.cancelAllTasks ?? 'Cancel All Tasks',
-                  ),
+                  label: Text('cancelAllTasks'.i18n()),
                   onPressed: _cancelCurrentTask,
                   style: ElevatedButton.styleFrom(
                     minimumSize: const Size.fromHeight(48),
@@ -785,8 +768,7 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
                     const SizedBox(width: 16),
                     Text(
                       _isProcessing
-                          ? S.of(context)?.processingPleaseWait ??
-                              'Processing, please wait...'
+                          ? 'processingPleaseWait'.i18n()
                           : statusText,
                       style: TextStyle(
                         fontSize: 16,
@@ -821,7 +803,7 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
         ),
         const SizedBox(width: 8),
         Text(
-          S.of(context)?.output4K ?? 'Output 4K Video Resolution',
+          'output4K'.i18n(),
           style: TextStyle(
             fontSize: 14,
             color: _isProcessing ? Colors.grey : Colors.black87,
@@ -848,7 +830,7 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              S.of(context)?.executionLog ?? 'Execution Log',
+              'executionLog'.i18n(),
               style: const TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
@@ -893,8 +875,7 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
       padding: const EdgeInsets.symmetric(vertical: 12),
       child: Center(
         child: Text(
-          S.of(context)?.copyright ??
-              '© 2025 CycloneGames. All rights reserved.',
+          'copyright'.i18n(),
           style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
         ),
       ),
@@ -921,7 +902,7 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              S.of(context)?.appTitle ?? 'Media Processor',
+              'appTitle'.i18n(),
               style: const TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 24,
@@ -938,7 +919,7 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
             ),
             const SizedBox(height: 4),
             Text(
-              S.of(context)?.appSubtitle ?? 'Audio & Video Processing Tool',
+              'appSubtitle'.i18n(),
               style: TextStyle(
                 fontSize: 12,
                 color: Colors.white70,
@@ -950,15 +931,13 @@ class _MediaProcessingHomePageState extends State<MediaProcessingHomePage>
         actions: [
           IconButton(
             icon: const Icon(Icons.info_outline),
-            tooltip: S.of(context)?.about ?? 'About',
+            tooltip: 'about'.i18n(),
             onPressed: () {
               showAboutDialog(
                 context: context,
-                applicationName: S.of(context)?.appTitle ?? 'Media Processor',
+                applicationName: 'appTitle'.i18n(),
                 applicationVersion: 'v1.0.0',
-                applicationLegalese:
-                    S.of(context)?.copyright ??
-                    '© 2025 CycloneGames. All rights reserved.',
+                applicationLegalese: 'copyright'.i18n(),
               );
             },
           ),

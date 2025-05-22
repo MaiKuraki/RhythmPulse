@@ -33,7 +33,7 @@ dependencies:
   file_picker: ^10.1.9
   flutter_localizations:
     sdk: flutter
-  intl: ^0.19.0
+  localization: ^2.1.1
   ffmpeg_kit_flutter_new: ^1.4.1
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
@@ -93,7 +93,6 @@ flutter:
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
 
-  # 配置本地化资源路径
   generate: true
-  #assets:
-  #  - assets/ffmpeg-release-full-shared/bin/
+  assets:
+      - lib/i18n/

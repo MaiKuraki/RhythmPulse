@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:convert';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:path/path.dart' as path;
 
 /// Enhanced media type detection with proper MIME type checking
@@ -437,7 +438,7 @@ class FFmpegHelper {
 
       if (!hasFfprobe || !hasFfmpeg) {
         final err = 'Required FFmpeg binaries not found or not accessible';
-        buffer.writeln('[$timestamp]      ❌ $err');
+        buffer.writeln('[$timestamp]    ❌ $err');
         onLog?.call(buffer.toString());
         return buffer.toString();
       }
@@ -637,6 +638,7 @@ class FFmpegHelper {
               'loudnorm',
             ) ??
             false;
+        //  filter is nolonger used
         final audioFilters =
             isAlreadyNormalized
                 ? 'acompressor=threshold=-6dB:ratio=2:attack=30:release=200,alimiter=level=1'
@@ -661,6 +663,10 @@ class FFmpegHelper {
         ];
 
         // Execute both commands
+        final videoCmdString = videoCmd.join('  ');
+        buffer.writeln(
+          '[$timestamp]    ${localizedStrings["videoSplitCmd"]?.replaceFirst("%s", videoCmdString)}',
+        );
         final videoResult = await _executeFfmpegCommand(
           videoCmd,
           cancelToken: cancelToken,
@@ -669,26 +675,42 @@ class FFmpegHelper {
         onLog?.call(buffer.toString());
 
         if (!videoResult.success) {
-          buffer.writeln('[$timestamp]      ❌ Video extraction failed');
+          buffer.writeln(
+            '[$timestamp]    ❌ ${localizedStrings["videoSplitFailed"]?.replaceFirst("%s", inputPath)}',
+          );
           onLog?.call(buffer.toString());
           return buffer.toString();
         }
 
+        final audioCmdString = audioCmd.join(' ');
+        buffer.writeln(
+          '[$timestamp]    ${localizedStrings["audioSplitCmd"]?.replaceFirst("%s", audioCmdString)}',
+        );
         final audioResult = await _executeFfmpegCommand(
           audioCmd,
           cancelToken: cancelToken,
         );
+
         buffer.writeln(audioResult.log);
         onLog?.call(buffer.toString());
 
         if (!audioResult.success) {
-          buffer.writeln('[$timestamp]      ❌ Audio extraction failed');
+          buffer.writeln(
+            '[$timestamp]    ❌ ${localizedStrings["audioSplitFailed"]?.replaceFirst("%s", inputPath)}',
+          );
           onLog?.call(buffer.toString());
         }
 
-        buffer.writeln(
-          '[$timestamp]   ✅ Video and audio extracted successfully',
-        );
+        if (videoResult.success) {
+          buffer.writeln(
+            '[$timestamp]    ✅ ${localizedStrings["videoSplitSuccess"]?.replaceFirst("%s", outputVideoPath)}',
+          );
+        }
+        if (audioResult.success) {
+          buffer.writeln(
+            '[$timestamp]    ✅ ${localizedStrings["audioSplitSuccess"]?.replaceFirst("%s", outputAudioPath)}',
+          );
+        }
       } else {
         // Audio-only processing with higher quality
         final inputAudioBitrate = mediaInfo?.audioBitrate ?? 0;
@@ -744,7 +766,7 @@ class FFmpegHelper {
         // If copy failed, use Opus with high quality settings
         if (!result.success) {
           buffer.writeln(
-            '[$timestamp]     ⚠️ Original codec not supported, converting to Opus',
+            '[$timestamp]    ⚠️ Original codec not supported, converting to Opus',
           );
           onLog?.call(buffer.toString());
 
@@ -786,13 +808,17 @@ class FFmpegHelper {
         onLog?.call(buffer.toString());
 
         if (result.success) {
-          buffer.writeln('[$timestamp]      ✅ Audio extracted successfully');
+          buffer.writeln(
+            '[$timestamp]    ✅ ${localizedStrings["audioSplitSuccess"]?.replaceFirst("%s", outputAudioPath)}',
+          );
         } else {
-          buffer.writeln('[$timestamp]      ❌ Audio extraction failed');
+          buffer.writeln(
+            '[$timestamp]    ❌ ${localizedStrings["audioSplitFailed"]?.replaceFirst("%s", inputPath)}',
+          );
         }
       }
     } catch (e) {
-      buffer.writeln('[$timestamp]      ❌ Error: $e');
+      buffer.writeln('[$timestamp]    ❌ Error: $e');
       onLog?.call(buffer.toString());
     }
 
@@ -940,7 +966,7 @@ class FFmpegHelper {
       final hasFfmpeg = await verifyBundledFfmpeg();
       if (!hasFfmpeg) {
         final err = 'Bundled ffmpeg not found or not accessible';
-        buffer.writeln('[$timestamp]  ❌ $err');
+        buffer.writeln('[$timestamp]    ❌ $err');
         onLog?.call(buffer.toString());
         return buffer.toString();
       }
@@ -949,7 +975,7 @@ class FFmpegHelper {
       final durationSec = (endMs - startMs) / 1000;
       if (durationSec <= 0) {
         final err = 'Invalid duration (end time must be after start time)';
-        buffer.writeln('[$timestamp]  ❌ $err');
+        buffer.writeln('[$timestamp]    ❌ $err');
         onLog?.call(buffer.toString());
         return buffer.toString();
       }
@@ -1003,18 +1029,18 @@ class FFmpegHelper {
       }
 
       buffer.writeln(
-        '[$timestamp]  Input file type: ${isVideo ? 'Video' : 'Audio'}',
+        '[$timestamp]    Input file type: ${isVideo ? 'Video' : 'Audio'}',
       );
       if (isVideo) {
         buffer.writeln(
-          '[$timestamp]  Target resolution: ${targetWidth}x$targetHeight',
+          '[$timestamp]    Target resolution: ${targetWidth}x$targetHeight',
         );
         buffer.writeln(
-          '[$timestamp]  Target video bitrate: ${targetVideoBitrate ~/ 1000} kbps',
+          '[$timestamp]    Target video bitrate: ${targetVideoBitrate ~/ 1000} kbps',
         );
       }
       buffer.writeln(
-        '[$timestamp]  Target audio bitrate: ${targetAudioBitrate ~/ 1000} kbps',
+        '[$timestamp]    Target audio bitrate: ${targetAudioBitrate ~/ 1000} kbps',
       );
       onLog?.call(buffer.toString());
 
@@ -1081,7 +1107,9 @@ class FFmpegHelper {
         onLog?.call(buffer.toString());
 
         if (!videoResult.success) {
-          buffer.writeln('[$timestamp]  ❌ Video preview extraction failed');
+          buffer.writeln(
+            '[$timestamp]    ❌ ${localizedStrings["previewVideoSplitFailed"]?.replaceFirst("%s", inputPath)}',
+          );
           onLog?.call(buffer.toString());
           return buffer.toString();
         }
@@ -1095,13 +1123,22 @@ class FFmpegHelper {
         onLog?.call(buffer.toString());
 
         if (!audioResult.success) {
-          buffer.writeln('[$timestamp]  ❌ Audio preview extraction failed');
+          buffer.writeln(
+            '[$timestamp]    ❌ ${localizedStrings["previewAudioSplitFailed"]?.replaceFirst("%s", inputPath)}',
+          );
           onLog?.call(buffer.toString());
         }
 
-        buffer.writeln(
-          '[$timestamp]  ✅ Video and audio preview extracted successfully',
-        );
+        if (videoResult.success) {
+          buffer.writeln(
+            '[$timestamp]    ✅ ${localizedStrings["previewVideoSplitSuccess"]?.replaceFirst("%s", outputVideoPath)}',
+          );
+        }
+        if (audioResult.success) {
+          buffer.writeln(
+            '[$timestamp]    ✅ ${localizedStrings["previewAudioSplitSuccess"]?.replaceFirst("%s", outputAudioPath)}',
+          );
+        }
       } else {
         // Audio-only preview command - optimized for Unity
         final audioInfo = await _analyzeAudio(inputPath);
@@ -1144,10 +1181,12 @@ class FFmpegHelper {
 
         if (result.success) {
           buffer.writeln(
-            '[$timestamp]  ✅ Audio preview extracted successfully',
+            '[$timestamp]    ✅ ${localizedStrings["previewAudioSplitSuccess"]?.replaceFirst("%s", inputPath)}',
           );
         } else {
-          buffer.writeln('[$timestamp]  ❌ Audio preview extraction failed');
+          buffer.writeln(
+            '[$timestamp]    ❌ ${localizedStrings["previewAudioSplitFailed"]?.replaceFirst("%s", inputPath)}',
+          );
         }
       }
     } catch (e) {
@@ -1155,7 +1194,7 @@ class FFmpegHelper {
       if (kDebugMode) {
         print(errLog);
       }
-      buffer.writeln('[$timestamp]  ❌ $errLog');
+      buffer.writeln('[$timestamp]    ❌ $errLog');
       onLog?.call(buffer.toString());
     }
 
