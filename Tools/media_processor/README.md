@@ -2,6 +2,10 @@
 
 This project is a Flutter application designed primarily for media file processing. Its main features include extracting audio from video files and converting videos into standardized formats compatible with Unity.
 
+## Supported Platforms
+
+- Windows Only
+
 ## Build Instructions
 
 ### Compile and Build
@@ -9,7 +13,6 @@ This project is a Flutter application designed primarily for media file processi
 ```bash
 flutter clean
 flutter pub get
-flutter gen-l10n
 flutter build windows --release
 ```
 ### Deploying the Package
