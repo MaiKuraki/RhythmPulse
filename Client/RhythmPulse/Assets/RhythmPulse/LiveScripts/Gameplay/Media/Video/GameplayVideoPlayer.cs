@@ -44,6 +44,7 @@ namespace RhythmPulse.Gameplay.Media
 
         private void OnDestroy()
         {
+            Stop();
             if (videoTexture != null)
             {
                 videoTexture.Release();
@@ -93,22 +94,22 @@ namespace RhythmPulse.Gameplay.Media
 
         public void Play()
         {
-            videoPlayer.Play();
+            videoPlayer?.Play();
         }
 
         public void Stop()
         {
-            videoPlayer.Stop();
+            videoPlayer?.Stop();
         }
 
         public void Pause()
         {
-            videoPlayer.Pause();
+            videoPlayer?.Pause();
         }
 
         public void Resume()
         {
-            videoPlayer.Play();
+            videoPlayer?.Play();
         }
 
         public long GetPlaybackTimeMSec()

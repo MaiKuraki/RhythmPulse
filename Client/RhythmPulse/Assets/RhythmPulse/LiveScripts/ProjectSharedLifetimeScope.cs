@@ -16,10 +16,7 @@ namespace RhythmPulse
             base.Configure(builder);
 
             CLogger.Instance.AddLogger(new UnityLogger());
-            builder.Register<IUnityObjectSpawner, RhythmObjectSpawner>(Lifetime.Singleton);
             builder.Register<IMainCameraService, MainCameraService>(Lifetime.Singleton);
-            builder.Register<IAssetPathBuilderFactory, AssetPathBuilderFactory>(Lifetime.Singleton);
-            builder.Register<IUIService, UIService>(Lifetime.Singleton);
             builder.Register<ISceneManagementAPIGateway, SceneManagementAPIGateway>(Lifetime.Singleton);
             builder.RegisterComponentInHierarchy<AudioManager>();
         }

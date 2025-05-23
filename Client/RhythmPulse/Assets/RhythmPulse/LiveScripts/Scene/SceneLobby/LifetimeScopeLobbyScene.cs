@@ -4,7 +4,7 @@ using MackySoft.Navigathena.SceneManagement.VContainer;
 
 namespace RhythmPulse.Scene
 {
-    public class LifetimeScopeLobbyScene : LifetimeScope
+    public class LifetimeScopeLobbyScene : SceneBaseLifetimeScope
     {
         protected override void Configure(IContainerBuilder builder)
         {

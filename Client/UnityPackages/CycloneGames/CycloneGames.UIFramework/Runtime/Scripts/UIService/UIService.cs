@@ -28,13 +28,18 @@ namespace CycloneGames.UIFramework
             this.objectSpawner = objectSpawner;
             this.mainCamera = mainCamera;
 
-            Initialize(assetPathBuilderFactory, objectSpawner, mainCamera);
+            InitializeUIManager();
         }
 
-        public void Initialize(IAssetPathBuilderFactory assetPathBuilderFactory, IUnityObjectSpawner objectSpawner, IMainCameraService mainCamera)
+        public void InitializeUIManager()
         {
-            uiManager = new UnityEngine.GameObject("UIManager").AddComponent<UIManager>(); //   TODO: maybe use objectSpawner to create this object
-            UnityEngine.MonoBehaviour.DontDestroyOnLoad(uiManager.gameObject);
+            uiManager = UnityEngine.GameObject.FindFirstObjectByType<UIManager>();
+            if (uiManager == null)
+            {
+                uiManager = new UnityEngine.GameObject("UIManager").AddComponent<UIManager>(); //   TODO: maybe use objectSpawner to create this object
+                UnityEngine.MonoBehaviour.DontDestroyOnLoad(uiManager.gameObject);
+            }
+
             uiManager.Initialize(assetPathBuilderFactory, objectSpawner, mainCamera);
         }
 

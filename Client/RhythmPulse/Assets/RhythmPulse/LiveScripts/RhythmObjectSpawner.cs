@@ -6,7 +6,7 @@ namespace RhythmPulse
 {
     public class RhythmObjectSpawner : IUnityObjectSpawner
     {
-        [Inject] IObjectResolver objectResolver;
+        [Inject] private IObjectResolver objectResolver;
 
         public T Create<T>(T origin) where T : UnityEngine.Object
         {

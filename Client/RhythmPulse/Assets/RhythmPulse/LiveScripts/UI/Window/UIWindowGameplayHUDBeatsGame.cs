@@ -2,7 +2,6 @@ using CycloneGames.UIFramework;
 using R3;
 using RhythmPulse.APIGateway;
 using RhythmPulse.Gameplay;
-using RhythmPulse.Scene;
 using UnityEngine;
 using UnityEngine.UI;
 using VContainer;
@@ -12,7 +11,7 @@ namespace RhythmPulse.UI
     public class UIWindowGameplayHUDBeatsGame : UIWindow
     {
         [Inject] private readonly ISceneManagementAPIGateway sceneManagementAPIGateway;
-        // [Inject] private readonly GameplayManager gameplayManager;  //  TODO: Fix injection
+        [Inject] private readonly GameplayManager gameplayManager;  //  TODO: Fix injection
 
         [SerializeField] private Button buttonPause;
         [SerializeField] private Button buttonExit;
@@ -20,6 +19,13 @@ namespace RhythmPulse.UI
         protected override void Awake()
         {
             base.Awake();
+
+
+        }
+
+        protected override void Start()
+        {
+            base.Start();
 
             buttonPause.OnClickAsObservable().Subscribe(_ => ClickPause());
             buttonExit.OnClickAsObservable().Subscribe(_ => ClickExit());
@@ -33,12 +39,12 @@ namespace RhythmPulse.UI
         private bool bPaused = false;
         void ClickPause()
         {
-
+            gameplayManager.Pause();
         }
 
         void ClickExit()
         {
-            sceneManagementAPIGateway.Push(SceneDefinitions.Lobby); // TODO: Should not inject sceneManagement, using GameplayManager.
+            gameplayManager.Exit();
             Debug.Log("ClickExit");
         }
     }

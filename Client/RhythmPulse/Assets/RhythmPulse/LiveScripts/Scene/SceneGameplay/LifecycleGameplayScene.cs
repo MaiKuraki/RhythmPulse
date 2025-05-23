@@ -5,6 +5,7 @@ using Cysharp.Threading.Tasks;
 using MackySoft.Navigathena;
 using MackySoft.Navigathena.SceneManagement;
 using MackySoft.Navigathena.SceneManagement.VContainer;
+using RhythmPulse.Gameplay;
 using RhythmPulse.UI;
 using VContainer;
 

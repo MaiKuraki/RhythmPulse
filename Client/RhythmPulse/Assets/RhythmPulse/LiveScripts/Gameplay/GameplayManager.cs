@@ -2,9 +2,10 @@ using System.Threading;
 using CycloneGames.Service;
 using CycloneGames.UIFramework;
 using Cysharp.Threading.Tasks;
+using RhythmPulse.APIGateway;
 using RhythmPulse.Audio;
 using RhythmPulse.Gameplay.Media;
-using RhythmPulse.UI;
+using RhythmPulse.Scene;
 using UnityEngine;
 using VContainer;
 
@@ -19,16 +20,18 @@ namespace RhythmPulse.Gameplay
         private IGameplayVideoPlayer gameplayVideoPlayer;
         private ITimeline gameplayTimeline;
         private IUIService uiService;
+        private ISceneManagementAPIGateway sceneManagementAPIGateway;
         [SerializeField] Camera gameplayCamera;
         [SerializeField] GameplayVideoRender gameplayVideoRender;
-
+    
         [Inject]
         public void Construct(IMainCameraService mainCameraService,
                         AudioManager audioManager,
                         IGameplayMusicPlayer gameplayMusicPlayer,
                         IGameplayVideoPlayer gameplayVideoPlayer,
                         ITimeline gameplayTimeline,
-                        IUIService uiService)
+                        IUIService uiService,
+                        ISceneManagementAPIGateway sceneManagementAPIGateway)
         {
             this.mainCameraService = mainCameraService;
             this.audioManager = audioManager;
@@ -36,6 +39,7 @@ namespace RhythmPulse.Gameplay
             this.gameplayVideoPlayer = gameplayVideoPlayer;
             this.gameplayTimeline = gameplayTimeline;
             this.uiService = uiService;
+            this.sceneManagementAPIGateway = sceneManagementAPIGateway;
 
             IsDIInitialized = true;
         }
@@ -83,6 +87,8 @@ namespace RhythmPulse.Gameplay
         public void Exit()
         {
             gameplayTimeline.Stop();
+            audioManager.UnloadAllAudio().Forget();
+            sceneManagementAPIGateway.Push(SceneDefinitions.Lobby);
         }
 
         void OnDestroy()
