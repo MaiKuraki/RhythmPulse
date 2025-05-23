@@ -6,7 +6,7 @@ namespace RhythmPulse.Gameplay.Media
 {
     public interface IGameplayVideoPlayer
     {
-        void InitializeVideoPlayer(string videoUrl);
+        void InitializeVideoPlayer(in string videoUrl);
         void Play();
         void Stop();
         void Pause();
@@ -122,7 +122,7 @@ namespace RhythmPulse.Gameplay.Media
             videoPlayer.time = milliSeconds / 1000.0;
         }
 
-        public void InitializeVideoPlayer(string videoUrl)
+        public void InitializeVideoPlayer(in string videoUrl)
         {
             videoPlayer.url = videoUrl;
         }

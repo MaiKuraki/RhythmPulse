@@ -145,3 +145,6 @@ mono_crash.*
 
 ## Log Example
 AppLog.txt
+
+## MediaFileForTest
+/[Mm]usic[Gg]ame[Mm]edias/*

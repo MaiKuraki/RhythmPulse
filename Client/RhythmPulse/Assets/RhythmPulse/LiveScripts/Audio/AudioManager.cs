@@ -230,34 +230,64 @@ namespace RhythmPulse.Audio
 
         /// <summary>
         /// Asynchronously unloads an AudioClip from memory.
+        /// If the clip is successfully unloaded, its entry will be removed from tracking.
+        /// If called on a path already marked as 'NotLoaded', its entry will also be removed.
         /// </summary>
         public async UniTask UnloadAudio(string path)
         {
-            if (!audioLoadStates.TryGetValue(path, out var state))
+            if (!audioLoadStates.TryGetValue(path, out var currentState))
+            {
+                // Path is not tracked or already fully unloaded and removed.
                 return;
+            }
+
+            var state = currentState; // Use a local variable for state that can be updated
 
             if (state == AudioLoadState.Loading)
             {
-                // Wait for loading to finish before unloading 
-                await WaitForStateChange(path, AudioLoadState.Loading);
-                // Re-check state after waiting 
-                state = audioLoadStates.TryGetValue(path, out var newState) ? newState : AudioLoadState.NotLoaded;
-                if (state != AudioLoadState.Loaded)
+                // Wait for the ongoing loading task to complete.
+                if (loadingTasks.TryGetValue(path, out var tcs))
+                {
+                    await tcs.Task; // Wait for the load attempt to finish
+                }
+                else
+                {
+                    // Fallback: if no specific task, wait for state change.
+                    // This might happen if the task was removed prematurely.
+                    await WaitForStateChange(path, AudioLoadState.Loading);
+                }
+
+                // After waiting, re-fetch the state as it might have changed by the loading process or another call.
+                if (!audioLoadStates.TryGetValue(path, out state))
+                {
+                    // Entry was removed during our wait (e.g., by ForceUnloadAll or another UnloadAudio call)
                     return;
+                }
+                // Note: LoadAudioAsync should have already removed the entry from loadingTasks upon its completion or failure.
             }
 
             if (state == AudioLoadState.Loaded)
             {
                 audioLoadStates[path] = AudioLoadState.Unloading;
+                // Consider UniTask.Yield() here if other systems need to react to the 'Unloading' state
+                await UniTask.Yield(); 
 
                 if (loadedClips.TryGetValue(path, out var clip))
                 {
-                    UpdateMemoryUsage(path, null); // Clear memory usage before destroying 
-                    Destroy(clip);
-                    loadedClips.Remove(path);
+                    UpdateMemoryUsage(path, null); // Clears memory usage and removes from audioMemoryUsage
+                    Destroy(clip);                 // Destroy the AudioClip object
+                    loadedClips.Remove(path);      // Remove from loadedClips
                 }
 
-                audioLoadStates[path] = AudioLoadState.NotLoaded;
+                // immediately remove data in dictionary
+                audioLoadStates.Remove(path);
+                // clear tasks
+                loadingTasks.Remove(path); 
+            }
+            else if (state == AudioLoadState.NotLoaded)
+            {
+                audioLoadStates.Remove(path);
+                loadingTasks.Remove(path);
             }
         }
 

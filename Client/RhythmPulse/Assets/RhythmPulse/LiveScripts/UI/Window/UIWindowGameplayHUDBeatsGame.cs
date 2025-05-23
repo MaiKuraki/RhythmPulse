@@ -11,15 +11,13 @@ namespace RhythmPulse.UI
     public class UIWindowGameplayHUDBeatsGame : UIWindow
     {
         [Inject] private readonly ISceneManagementAPIGateway sceneManagementAPIGateway;
-        [Inject] private readonly GameplayManager gameplayManager;  //  TODO: Fix injection
-
+        [Inject] private readonly GameplayManager gameplayManager;
         [SerializeField] private Button buttonPause;
         [SerializeField] private Button buttonExit;
 
         protected override void Awake()
         {
             base.Awake();
-
 
         }
 
@@ -36,7 +34,6 @@ namespace RhythmPulse.UI
             base.OnDestroy();
         }
 
-        private bool bPaused = false;
         void ClickPause()
         {
             gameplayManager.Pause();
@@ -45,7 +42,6 @@ namespace RhythmPulse.UI
         void ClickExit()
         {
             gameplayManager.Exit();
-            Debug.Log("ClickExit");
         }
     }
 }
