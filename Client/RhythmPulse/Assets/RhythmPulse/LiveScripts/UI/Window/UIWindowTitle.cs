@@ -23,7 +23,7 @@ namespace RhythmPulse.UI
 
         void ClickStart()
         {
-            CLogger.LogInfo("[UIWindowTitle] ClickStart");
+            // CLogger.LogInfo("[UIWindowTitle] ClickStart");
             sceneManagementAPIGateway.Push(SceneDefinitions.Lobby);
         }
     }
