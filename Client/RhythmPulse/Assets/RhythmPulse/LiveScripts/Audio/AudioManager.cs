@@ -42,15 +42,10 @@ namespace RhythmPulse.Audio
         }
     }
 
-    public interface IAudioManager
-    {
-
-    }
-
     /// <summary>
     /// Manages the loading, unloading, and playback of audio clips.
     /// </summary>
-    public class AudioManager : MonoBehaviour, IAudioManager
+    public class AudioManager : MonoBehaviour
     {
         /// <summary>
         /// Represents the current state of an audio clip.

@@ -17,15 +17,15 @@ namespace RhythmPulse.Audio
         private const string DEBUG_FLAG = "[GameAudio]";
         private IMemoryPool _pool;
         private GameAudioData _data = default;
-        private AudioManager audioManager;
+        private IAudioLoadService audioLoadService;
         private AudioSource audioSource;
         private AudioClip audioClip = null;
         private static long currentAudioClipLength = 0;
 
         [Inject]
-        public void Construct(AudioManager audioManager)
+        public void Construct(IAudioLoadService audioLoadService)
         {
-            this.audioManager = audioManager;
+            this.audioLoadService = audioLoadService;
         }
 
         void Awake()
@@ -38,16 +38,16 @@ namespace RhythmPulse.Audio
             Dispose();
         }
 
-        public GameAudioSource(AudioManager audioManager)
+        public GameAudioSource(IAudioLoadService audioLoadService)
         {
-            this.audioManager = audioManager;
+            this.audioLoadService = audioLoadService;
         }
 
         public void Play()
         {
             if (_data.Equals(default)) return;
 
-            if (!audioManager.GetLoadedClips().TryGetValue(_data.Key, out audioClip))
+            if (!audioLoadService.GetLoadedClips().TryGetValue(_data.Key, out audioClip))
             {
                 CLogger.LogWarning($"{DEBUG_FLAG} Audio clip not found for key: {_data.Key}");
                 return;

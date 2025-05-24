@@ -18,19 +18,19 @@ namespace RhythmPulse.Gameplay.Media
     {
         private const string DEBUG_FLAG = "[GameplayMusicPlayer] ";
         private IUnityObjectSpawner spawner;
-        private AudioManager audioManager;
+        private IAudioLoadService audioLoadService;
         private MonoObjectPool<GameAudioData, GameAudioSource> GameplayMusicPlayerSpawner;
 
         private GameAudioSource MusicPlayer;
 
-        public GameplayMusicPlayer(IUnityObjectSpawner spawner, AudioManager audioManager)
+        public GameplayMusicPlayer(IUnityObjectSpawner spawner, IAudioLoadService audioLoadService)
         {
             this.spawner = spawner;
-            this.audioManager = audioManager;
+            this.audioLoadService = audioLoadService;
 
             GameplayMusicPlayerSpawner = new MonoObjectPool<GameAudioData, GameAudioSource>(
                 spawner,
-                audioManager.AudioSourcePrefab,
+                audioLoadService.AudioSourcePrefab,
                 initialSize: 5,
                 autoExpand: true);
         }

@@ -19,7 +19,7 @@ namespace RhythmPulse.Gameplay
     {
         private bool IsDIInitialized = false;
         private IMainCameraService mainCameraService;
-        private AudioManager audioManager;
+        private IAudioLoadService audioLoadService;
         private IGameplayMusicPlayer gameplayMusicPlayer;
         private IGameplayVideoPlayer gameplayVideoPlayer;
         private ITimeline gameplayTimeline;
@@ -33,7 +33,7 @@ namespace RhythmPulse.Gameplay
 
         [Inject]
         public void Construct(IMainCameraService mainCameraService,
-                        AudioManager audioManager,
+                        IAudioLoadService audioLoadService,
                         IGameplayMusicPlayer gameplayMusicPlayer,
                         IGameplayVideoPlayer gameplayVideoPlayer,
                         ITimeline gameplayTimeline,
@@ -41,7 +41,7 @@ namespace RhythmPulse.Gameplay
                         ISceneManagementAPIGateway sceneManagementAPIGateway)
         {
             this.mainCameraService = mainCameraService;
-            this.audioManager = audioManager;
+            this.audioLoadService = audioLoadService;
             this.gameplayMusicPlayer = gameplayMusicPlayer;
             this.gameplayVideoPlayer = gameplayVideoPlayer;
             this.gameplayTimeline = gameplayTimeline;
@@ -90,12 +90,12 @@ namespace RhythmPulse.Gameplay
 
         private async UniTask InitializeMedias()
         {
-            await audioManager.LoadAudioAsync(FilePathUtility.GetUnityWebRequestUri(System.IO.Path.GetFullPath("./MusicGameMedias/AyaHirano-GodKnows/AyaHirano-GodKnows_audio.ogg"), UnityPathSource.AbsoluteOrFullUri));
-            await audioManager.LoadAudioAsync(FilePathUtility.GetUnityWebRequestUri(System.IO.Path.GetFullPath("./MusicGameMedias/Doa-Hero/Doa-Hero_audio.ogg"), UnityPathSource.AbsoluteOrFullUri));
-            await audioManager.LoadAudioAsync(FilePathUtility.GetUnityWebRequestUri(System.IO.Path.GetFullPath("./MusicGameMedias/MikaNakashima-GLAMOROUS_SKY/MikaNakashima-GLAMOROUS_SKY_audio.ogg"), UnityPathSource.AbsoluteOrFullUri));
+            await audioLoadService.LoadAudioAsync(FilePathUtility.GetUnityWebRequestUri(System.IO.Path.Combine(Application.streamingAssetsPath, "MusicGameMedias/AyaHirano-GodKnows/AyaHirano-GodKnows_audio.ogg"), UnityPathSource.StreamingAssets));
+            await audioLoadService.LoadAudioAsync(FilePathUtility.GetUnityWebRequestUri(System.IO.Path.Combine(Application.streamingAssetsPath, "MusicGameMedias/Doa-Hero/Doa-Hero_audio.ogg"), UnityPathSource.StreamingAssets));
+            await audioLoadService.LoadAudioAsync(FilePathUtility.GetUnityWebRequestUri(System.IO.Path.Combine(Application.streamingAssetsPath, "MusicGameMedias/MikaNakashima-GLAMOROUS_SKY/MikaNakashima-GLAMOROUS_SKY_audio.ogg"), UnityPathSource.StreamingAssets));
 
-            gameplayMusicPlayer.InitializeMusicPlayer(FilePathUtility.GetUnityWebRequestUri(System.IO.Path.GetFullPath("./MusicGameMedias/MikaNakashima-GLAMOROUS_SKY/MikaNakashima-GLAMOROUS_SKY_audio.ogg"), UnityPathSource.AbsoluteOrFullUri));
-            gameplayVideoPlayer.InitializeVideoPlayer(FilePathUtility.GetUnityWebRequestUri(System.IO.Path.GetFullPath("./MusicGameMedias/MikaNakashima-GLAMOROUS_SKY/MikaNakashima-GLAMOROUS_SKY_video.mp4"), UnityPathSource.AbsoluteOrFullUri));
+            gameplayMusicPlayer.InitializeMusicPlayer(FilePathUtility.GetUnityWebRequestUri(System.IO.Path.Combine(Application.streamingAssetsPath, "MusicGameMedias/MikaNakashima-GLAMOROUS_SKY/MikaNakashima-GLAMOROUS_SKY_audio.ogg"), UnityPathSource.AbsoluteOrFullUri));
+            gameplayVideoPlayer.InitializeVideoPlayer(FilePathUtility.GetUnityWebRequestUri(System.IO.Path.Combine(Application.streamingAssetsPath, "MusicGameMedias/MikaNakashima-GLAMOROUS_SKY/MikaNakashima-GLAMOROUS_SKY_video.mp4"), UnityPathSource.AbsoluteOrFullUri));
             gameplayVideoRender.SetTargetTexture(((GameplayVideoPlayer)gameplayVideoPlayer).VideoTexture);
         }
 
@@ -133,7 +133,7 @@ namespace RhythmPulse.Gameplay
         public void Exit()
         {
             StopGameplay();
-            audioManager.UnloadAllAudio().Forget();
+            audioLoadService.UnloadAllAudio().Forget();
             sceneManagementAPIGateway.Push(SceneDefinitions.Lobby);
         }
 
