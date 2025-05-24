@@ -20,6 +20,7 @@ namespace RhythmPulse.Audio
         private AudioManager audioManager;
         private AudioSource audioSource;
         private AudioClip audioClip = null;
+        private static long currentAudioClipLength = 0;
 
         [Inject]
         public void Construct(AudioManager audioManager)
@@ -53,12 +54,14 @@ namespace RhythmPulse.Audio
             }
 
             audioSource.clip = audioClip;
+            currentAudioClipLength = (long)(audioClip.length * 1000f);
             audioSource.Play();
         }
 
         public void Stop()
         {
             audioSource.Stop();
+            currentAudioClipLength = 0;
         }
 
         public void Pause()
@@ -74,6 +77,11 @@ namespace RhythmPulse.Audio
         public long GetPlaybackTimeMSec()
         {
             return (long)(audioSource.time * 1000f);
+        }
+
+        public long GetAudioClipLengthMSec()
+        {
+            return currentAudioClipLength;
         }
 
         public void SeekTime(long milliSeconds)

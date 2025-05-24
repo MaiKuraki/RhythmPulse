@@ -14,11 +14,13 @@ namespace RhythmPulse.UI
         [Inject] private readonly GameplayManager gameplayManager;
         [SerializeField] private Button buttonPause;
         [SerializeField] private Button buttonExit;
+        [SerializeField] private Slider progressBar;
 
         protected override void Awake()
         {
             base.Awake();
 
+            progressBar.value = 0;
         }
 
         protected override void Start()
@@ -27,6 +29,8 @@ namespace RhythmPulse.UI
 
             buttonPause.OnClickAsObservable().Subscribe(_ => ClickPause());
             buttonExit.OnClickAsObservable().Subscribe(_ => ClickExit());
+            gameplayManager.OnUpdatePlaybackProgress -= UpdateProgressValue;
+            gameplayManager.OnUpdatePlaybackProgress += UpdateProgressValue;
         }
 
         protected override void OnDestroy()
@@ -42,6 +46,11 @@ namespace RhythmPulse.UI
         void ClickExit()
         {
             gameplayManager.Exit();
+        }
+
+        void UpdateProgressValue(float progressValue)
+        {
+            progressBar.value = progressValue;
         }
     }
 }

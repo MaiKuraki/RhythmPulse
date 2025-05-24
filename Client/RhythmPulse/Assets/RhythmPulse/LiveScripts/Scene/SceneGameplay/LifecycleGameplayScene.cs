@@ -25,17 +25,19 @@ namespace RhythmPulse.Scene
         }
         public UniTask OnExit(ISceneDataWriter writer, CancellationToken cancellationToken)
         {
+            uiService.CloseUI(UIWindowName.GameplayHUDBeatsGame);
+            uiService.CloseUI(UIWindowName.UIWindowGameplayResult);
             return UniTask.CompletedTask;
         }
 
         public UniTask OnFinalize(ISceneDataWriter writer, IProgress<IProgressDataStore> progress, CancellationToken cancellationToken)
         {
-            uiService.CloseUI(UIWindowName.GameplayHUDBeatsGame);
+
             return UniTask.CompletedTask;
         }
 
         public UniTask OnInitialize(ISceneDataReader reader, IProgress<IProgressDataStore> progress, CancellationToken cancellationToken)
-        {   
+        {
             return UniTask.CompletedTask;
         }
     }

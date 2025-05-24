@@ -1,3 +1,4 @@
+using System;
 using System.Threading;
 using CycloneGames.Logger;
 using CycloneGames.Service;
@@ -8,6 +9,7 @@ using RhythmPulse.APIGateway;
 using RhythmPulse.Audio;
 using RhythmPulse.Gameplay.Media;
 using RhythmPulse.Scene;
+using RhythmPulse.UI;
 using UnityEngine;
 using VContainer;
 
@@ -27,6 +29,7 @@ namespace RhythmPulse.Gameplay
         [SerializeField] GameplayVideoRender gameplayVideoRender;
 
         public Timeline GameplayTimeline => (Timeline)gameplayTimeline;
+        public Action<float> OnUpdatePlaybackProgress { get; set; }
 
         [Inject]
         public void Construct(IMainCameraService mainCameraService,
@@ -67,7 +70,22 @@ namespace RhythmPulse.Gameplay
 
         private void Update()
         {
-            GameplayTimeline?.Tick();
+            if (GameplayTimeline != null)
+            {
+                GameplayTimeline?.Tick();
+
+                if (GameplayTimeline.State == GameplayTimeline.PlayingState)
+                {
+                    // CLogger.LogInfo($"CurrentAudioLength: {GameplayTimeline.GameplayMusicPlayer?.GetCurrentMusicLengthMSec()}");
+                    OnUpdatePlaybackProgress?.Invoke(GetCurrentMusicPlaybackProgress());
+
+                    if (GetPlaybackTimeRemainingMSec() <= 50)
+                    {
+                        StopGameplay();
+                        uiService.OpenUI(UIWindowName.UIWindowGameplayResult);
+                    }
+                }
+            }
         }
 
         private async UniTask InitializeMedias()
@@ -79,6 +97,20 @@ namespace RhythmPulse.Gameplay
             gameplayMusicPlayer.InitializeMusicPlayer(FilePathUtility.GetUnityWebRequestUri(System.IO.Path.GetFullPath("./MusicGameMedias/MikaNakashima-GLAMOROUS_SKY/MikaNakashima-GLAMOROUS_SKY_audio.ogg"), UnityPathSource.AbsoluteOrFullUri));
             gameplayVideoPlayer.InitializeVideoPlayer(FilePathUtility.GetUnityWebRequestUri(System.IO.Path.GetFullPath("./MusicGameMedias/MikaNakashima-GLAMOROUS_SKY/MikaNakashima-GLAMOROUS_SKY_video.mp4"), UnityPathSource.AbsoluteOrFullUri));
             gameplayVideoRender.SetTargetTexture(((GameplayVideoPlayer)gameplayVideoPlayer).VideoTexture);
+        }
+
+        public float GetCurrentMusicPlaybackProgress()
+        {
+            return GameplayTimeline != null && GameplayTimeline.GameplayMusicPlayer != null && GameplayTimeline.GameplayMusicPlayer.GetCurrentMusicLengthMSec() > 0
+                ? GameplayTimeline.PlaybackTimeMSec / (float)GameplayTimeline.GameplayMusicPlayer.GetCurrentMusicLengthMSec()
+                : 0;
+        }
+
+        public long GetPlaybackTimeRemainingMSec()
+        {
+            return GameplayTimeline != null && GameplayTimeline.GameplayMusicPlayer != null && GameplayTimeline.GameplayMusicPlayer.GetCurrentMusicLengthMSec() > 0
+                ? GameplayTimeline.GameplayMusicPlayer.GetCurrentMusicLengthMSec() - GameplayTimeline.PlaybackTimeMSec
+                : -1;   // -1 means invalid
         }
 
         public void Pause()
@@ -93,9 +125,14 @@ namespace RhythmPulse.Gameplay
             }
         }
 
-        public void Exit()
+        public void StopGameplay()
         {
             gameplayTimeline.Stop();
+        }
+
+        public void Exit()
+        {
+            StopGameplay();
             audioManager.UnloadAllAudio().Forget();
             sceneManagementAPIGateway.Push(SceneDefinitions.Lobby);
         }

@@ -11,6 +11,7 @@ namespace RhythmPulse.Gameplay.Media
         void Pause();
         void Resume();
         long GetPlaybackTimeMSec();
+        long GetCurrentMusicLengthMSec();
         void SeekTime(long milliSeconds);
     }
     public class GameplayMusicPlayer : IGameplayMusicPlayer
@@ -62,6 +63,11 @@ namespace RhythmPulse.Gameplay.Media
         public long GetPlaybackTimeMSec()
         {
             return MusicPlayer ? MusicPlayer.GetPlaybackTimeMSec() : 0;
+        }
+
+        public long GetCurrentMusicLengthMSec()
+        {
+            return MusicPlayer ? MusicPlayer.GetAudioClipLengthMSec() : 0;
         }
 
         public void SeekTime(long milliSeconds)
