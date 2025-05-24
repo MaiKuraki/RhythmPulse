@@ -230,7 +230,7 @@ namespace CycloneGames.Utility.Runtime
             // _currentFPS is not < 20.
             // The binary search correctly finds the tightest bound.
             int left = 0, right = FPSColors.Count - 1;
-            int bestMatchIndex = -1;
+            // int bestMatchIndex = -1;
 
             while (left <= right)
             {
