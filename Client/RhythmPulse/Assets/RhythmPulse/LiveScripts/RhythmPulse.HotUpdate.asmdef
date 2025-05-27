@@ -2,6 +2,9 @@
     "name": "RhythmPulse.HotUpdate",
     "rootNamespace": "",
     "references": [
+        "Unity.ResourceManager",
+        "Unity.Addressables",
+        "Addler",
         "UniTask",
         "CycloneGames.Logger",
         "Unity.TextMeshPro",

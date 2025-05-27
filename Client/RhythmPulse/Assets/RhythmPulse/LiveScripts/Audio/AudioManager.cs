@@ -3,6 +3,10 @@ using UnityEngine;
 using UnityEngine.Networking;
 using System.Collections.Generic;
 using System;
+using UnityEngine.AddressableAssets;
+using UnityEngine.ResourceManagement.AsyncOperations;
+using Addler.Runtime.Core.LifetimeBinding;
+using CycloneGames.Logger;
 
 namespace RhythmPulse.Audio
 {
@@ -85,9 +89,11 @@ namespace RhythmPulse.Audio
         public static AudioManager Instance { get; private set; }
 
         [SerializeField] private bool _singleton = true;
-
-        [SerializeField] GameAudioSource audioSourcePrefab;
+        [SerializeField] private string AudioSourcePrefabPath = "Assets/RhythmPulse/LiveContent/Prefabs/Audio/AudioSource.prefab";
+        GameAudioSource audioSourcePrefab;
         public GameAudioSource AudioSourcePrefab => audioSourcePrefab;
+        public bool IsInitialized => audioSourceReady;
+        bool audioSourceReady = false;
 
         private void Awake()
         {
@@ -104,12 +110,52 @@ namespace RhythmPulse.Audio
             }
 
             audioLoader = new UnityAudioLoader();
+            audioSourceReady = false;
+            LoadAudioSouceAsync().Forget();
         }
 
         private void OnDestroy()
         {
             // Forcefully unload all audio clips when the AudioManager is destroyed 
             ForceUnloadAll();
+        }
+
+        private async UniTask LoadAudioSouceAsync()
+        {
+            try
+            {
+                AsyncOperationHandle<GameObject> loadHandle =
+                    Addressables.LoadAssetAsync<GameObject>(AudioSourcePrefabPath);
+
+                await loadHandle.BindTo(this.gameObject);
+                await loadHandle.ToUniTask(PlayerLoopTiming.Update, destroyCancellationToken);
+
+                if (loadHandle.Status == AsyncOperationStatus.Succeeded)
+                {
+                    audioSourcePrefab = loadHandle.Result.GetComponent<GameAudioSource>();
+                    if (audioSourcePrefab != null)
+                    {
+                        audioSourceReady = true;
+                    }
+                    else
+                    {
+                        CLogger.LogError($"Loaded prefab from '{AudioSourcePrefabPath}' is missing the GameAudioSource component.");
+                    }
+                }
+                else
+                {
+                    CLogger.LogError($"Failed to load AudioSourcePrefab from '{AudioSourcePrefabPath}'. Status: {loadHandle.Status}, Error: {loadHandle.OperationException?.Message}");
+                    // audioSourcePrefab will remain null
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                CLogger.LogWarning($"AudioSourcePrefab loading was cancelled, likely because the AudioManager GameObject was destroyed.");
+            }
+            catch (Exception ex)
+            {
+                CLogger.LogError($"An unexpected error occurred while loading AudioSourcePrefab: {ex}");
+            }
         }
 
         /// <summary>
@@ -265,7 +311,7 @@ namespace RhythmPulse.Audio
             {
                 audioLoadStates[path] = AudioLoadState.Unloading;
                 // Consider UniTask.Yield() here if other systems need to react to the 'Unloading' state
-                await UniTask.Yield(); 
+                await UniTask.Yield();
 
                 if (loadedClips.TryGetValue(path, out var clip))
                 {
@@ -277,7 +323,7 @@ namespace RhythmPulse.Audio
                 // immediately remove data in dictionary
                 audioLoadStates.Remove(path);
                 // clear tasks
-                loadingTasks.Remove(path); 
+                loadingTasks.Remove(path);
             }
             else if (state == AudioLoadState.NotLoaded)
             {

@@ -90,12 +90,12 @@ namespace RhythmPulse.Gameplay
 
         private async UniTask InitializeMedias()
         {
-            await audioLoadService.LoadAudioAsync(FilePathUtility.GetUnityWebRequestUri(System.IO.Path.Combine(Application.streamingAssetsPath, "MusicGameMedias/AyaHirano-GodKnows/AyaHirano-GodKnows_audio.ogg"), UnityPathSource.StreamingAssets));
-            await audioLoadService.LoadAudioAsync(FilePathUtility.GetUnityWebRequestUri(System.IO.Path.Combine(Application.streamingAssetsPath, "MusicGameMedias/Doa-Hero/Doa-Hero_audio.ogg"), UnityPathSource.StreamingAssets));
-            await audioLoadService.LoadAudioAsync(FilePathUtility.GetUnityWebRequestUri(System.IO.Path.Combine(Application.streamingAssetsPath, "MusicGameMedias/MikaNakashima-GLAMOROUS_SKY/MikaNakashima-GLAMOROUS_SKY_audio.ogg"), UnityPathSource.StreamingAssets));
+            await audioLoadService.LoadAudioAsync(FilePathUtility.GetUnityWebRequestUri(System.IO.Path.GetFullPath("./MusicGameMedias/AyaHirano-GodKnows/AyaHirano-GodKnows_audio.ogg"), UnityPathSource.StreamingAssets));
+            await audioLoadService.LoadAudioAsync(FilePathUtility.GetUnityWebRequestUri(System.IO.Path.GetFullPath("./MusicGameMedias/Doa-Hero/Doa-Hero_audio.ogg"), UnityPathSource.StreamingAssets));
+            await audioLoadService.LoadAudioAsync(FilePathUtility.GetUnityWebRequestUri(System.IO.Path.GetFullPath("./MusicGameMedias/MikaNakashima-GLAMOROUS_SKY/MikaNakashima-GLAMOROUS_SKY_audio.ogg"), UnityPathSource.StreamingAssets));
 
-            gameplayMusicPlayer.InitializeMusicPlayer(FilePathUtility.GetUnityWebRequestUri(System.IO.Path.Combine(Application.streamingAssetsPath, "MusicGameMedias/MikaNakashima-GLAMOROUS_SKY/MikaNakashima-GLAMOROUS_SKY_audio.ogg"), UnityPathSource.AbsoluteOrFullUri));
-            gameplayVideoPlayer.InitializeVideoPlayer(FilePathUtility.GetUnityWebRequestUri(System.IO.Path.Combine(Application.streamingAssetsPath, "MusicGameMedias/MikaNakashima-GLAMOROUS_SKY/MikaNakashima-GLAMOROUS_SKY_video.mp4"), UnityPathSource.AbsoluteOrFullUri));
+            gameplayMusicPlayer.InitializeMusicPlayer(FilePathUtility.GetUnityWebRequestUri(System.IO.Path.GetFullPath("./MusicGameMedias/MikaNakashima-GLAMOROUS_SKY/MikaNakashima-GLAMOROUS_SKY_audio.ogg"), UnityPathSource.AbsoluteOrFullUri));
+            gameplayVideoPlayer.InitializeVideoPlayer(FilePathUtility.GetUnityWebRequestUri(System.IO.Path.GetFullPath("./MusicGameMedias/MikaNakashima-GLAMOROUS_SKY/MikaNakashima-GLAMOROUS_SKY_video.mp4"), UnityPathSource.AbsoluteOrFullUri));
             gameplayVideoRender.SetTargetTexture(((GameplayVideoPlayer)gameplayVideoPlayer).VideoTexture);
         }
 
