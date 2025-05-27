@@ -19,7 +19,8 @@
         "CycloneGames.Factory",
         "CycloneGames.Service",
         "CycloneGames.UIFramework",
-        "CycloneGames.Utility.Runtime"
+        "CycloneGames.Utility.Runtime",
+        "FancyScrollView"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
