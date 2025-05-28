@@ -1,0 +1,22 @@
+{
+  "name": "com.rhythmpulse.gameplaydata",
+  "version": "1.0.0",
+  "displayName": "RhythmPulse.GameplayData",
+  "description": "GameplayData for RhythmPulse",
+  "unity": "2022.3",
+  "unityRelease": "0f1",
+  "dependencies": {
+    "jp.hadashikick.vyaml": "1.0.0",
+    "com.github.messagepack-csharp": "3.1.0"
+  },
+  "keywords": [
+    "RhythmPulse",
+    "GameplayData"
+  ],
+  "author": {
+    "name": "RhythmPulse",
+    "email": "",
+    "url": ""
+  },
+  "samples": []
+}

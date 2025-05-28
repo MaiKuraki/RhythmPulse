@@ -70,6 +70,8 @@ namespace RhythmPulse.Gameplay
 
         private void Update()
         {
+            if (!IsDIInitialized) return;
+            
             if (GameplayTimeline != null)
             {
                 GameplayTimeline?.Tick();

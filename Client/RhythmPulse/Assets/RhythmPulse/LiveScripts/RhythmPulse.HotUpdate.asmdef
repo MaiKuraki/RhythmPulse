@@ -20,7 +20,8 @@
         "CycloneGames.Service",
         "CycloneGames.UIFramework",
         "CycloneGames.Utility.Runtime",
-        "FancyScrollView"
+        "FancyScrollView",
+        "RhythmPulse.GameplayData.Runtime"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
