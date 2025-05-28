@@ -52,7 +52,7 @@ namespace RhythmPulse.GameplayData.Runtime
     public partial struct BeatMapInfo
     {
         [YamlMember(Order = 0)]
-        public string DifficultyFileName { get; set; }
+        public string DifficultyFile { get; set; }
 
         [YamlMember(Order = 1)]
         public string[] BeatMapType { get; set; }

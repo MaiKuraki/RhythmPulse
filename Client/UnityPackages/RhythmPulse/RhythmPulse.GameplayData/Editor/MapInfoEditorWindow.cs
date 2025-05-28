@@ -3,12 +3,12 @@ using UnityEditor;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using RhythmPulse.GameplayData.Runtime; // Your runtime data namespace
-using VYaml.Serialization;            // For YamlSerializer, YamlSerializationException
-using VYaml.Parser;                   // For YamlParserException
-using System.Reflection;              // For reading BeatMapTypeConstant
+using RhythmPulse.GameplayData.Runtime;
+using VYaml.Serialization;
+using VYaml.Parser;
+using System.Reflection; // For reading BeatMapTypeConstant
 
-namespace RhythmPulse.GameplayData.Editor // Your editor script namespace
+namespace RhythmPulse.GameplayData.Editor
 {
     public class MapInfoEditorWindow : EditorWindow
     {
@@ -40,7 +40,7 @@ namespace RhythmPulse.GameplayData.Editor // Your editor script namespace
 
                 if (beatMapTypeOptions.Length == 0)
                 {
-                    Debug.LogWarning("[MapInfoEditorWindow] No string constants found in BeatMapTypeConstant. BeatMapType selection will be empty.");
+                    Debug.LogWarning("[MapInfoEditorWindow] No string constants found in BeatMapTypeConstant.BeatMapType selection will be empty.");
                 }
                 else if (beatMapTypeOptions.Length > 32)
                 {
@@ -54,7 +54,7 @@ namespace RhythmPulse.GameplayData.Editor // Your editor script namespace
             mapInfo = new MapInfo
             {
                 UniqueID = System.Guid.NewGuid().ToString(),
-                DisplayName = "New Song",
+                DisplayName = "Vocalist - NewSongName (BeatMapAuthor)",
                 AudioFile = "audio.ogg",
                 VideoFile = "",
                 PreviewAudioFile = "",
@@ -146,7 +146,7 @@ namespace RhythmPulse.GameplayData.Editor // Your editor script namespace
                 BeatMapInfo currentBeatmap = mapInfo.BeatmapDifficultyFiles[i];
                 EditorGUILayout.BeginVertical(EditorStyles.helpBox);
                 EditorGUILayout.LabelField($"Difficulty Entry #{i + 1}", EditorStyles.miniBoldLabel);
-                currentBeatmap.DifficultyFileName = EditorGUILayout.TextField("Difficulty File Name", currentBeatmap.DifficultyFileName);
+                currentBeatmap.DifficultyFile = EditorGUILayout.TextField("Difficulty File Name", currentBeatmap.DifficultyFile);
                 if (beatMapTypeOptions != null && beatMapTypeOptions.Length > 0)
                 {
                     int currentMask = ConvertStringArrayToMask(currentBeatmap.BeatMapType, beatMapTypeOptions);
@@ -178,7 +178,7 @@ namespace RhythmPulse.GameplayData.Editor // Your editor script namespace
             {
                 mapInfo.BeatmapDifficultyFiles.Add(new BeatMapInfo
                 {
-                    DifficultyFileName = "difficulty_new.yaml",
+                    DifficultyFile = "GameMode_DifficultyLevel.yaml",   // TODO: Maybe using MessagePack generate .bin files?
                     BeatMapType = new string[0],
                     Difficulty = 1
                 });

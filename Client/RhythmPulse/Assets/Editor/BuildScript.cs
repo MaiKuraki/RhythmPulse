@@ -4,6 +4,7 @@ using UnityEngine;
 using UnityEditor;
 using UnityEditor.Build;
 using CycloneGames.Editor.VersionControl;
+using RhythmPulse.Editor;
 
 namespace CycloneGames.Editor.Build
 {
@@ -239,6 +240,21 @@ namespace CycloneGames.Editor.Build
                 DeletePlatformBuildFolder(TargetPlatform);
             }
 
+            // ---- START: Auto-generate map manifest ----
+            Debug.Log($"{DEBUG_FLAG} Generating music map manifest...");
+            try
+            {
+                MusicGameMapManifestGenerator.GenerateManifest();
+                Debug.Log($"{DEBUG_FLAG} Music map manifest generation successful.");
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"{DEBUG_FLAG} Error during music map manifest generation: {ex.Message}. Build will continue, but manifest might be outdated or missing.");
+                // Optionally, make this a hard stop for critical errors:
+                // if (!EditorUtility.DisplayDialog("Build Warning", $"Failed to generate map manifest: {ex.Message}\n\nContinue build without updated manifest?", "Continue", "Cancel Build")) return;
+            }
+            // ---- END: Auto-generate map manifest ----
+
             InitializeVersionControl(DefaultVersionControlType);
             string commitHash = VersionControlProvider?.GetCommitHash();
             VersionControlProvider?.SaveVersionToJson(commitHash);
@@ -248,9 +264,9 @@ namespace CycloneGames.Editor.Build
             EditorUserBuildSettings.SwitchActiveBuildTarget(BuildTargetName, TargetPlatform);
 
             string originalVersion = PlayerSettings.bundleVersion;
-            string commitHashSuffix = string.IsNullOrEmpty(commitHash) 
-                                    ? ".Unknown" 
-                                    : (commitHash.Length < 8 ? $".{commitHash}" 
+            string commitHashSuffix = string.IsNullOrEmpty(commitHash)
+                                    ? ".Unknown"
+                                    : (commitHash.Length < 8 ? $".{commitHash}"
                                     : $".{commitHash.Substring(0, 8)}");
             string fullBuildVersion = $"{ApplicationVersion}{commitHashSuffix}";
 
