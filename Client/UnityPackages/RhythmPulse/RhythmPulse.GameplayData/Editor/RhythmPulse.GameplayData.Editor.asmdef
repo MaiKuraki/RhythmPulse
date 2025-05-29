@@ -2,7 +2,9 @@
     "name": "RhythmPulse.GameplayData.Editor",
     "rootNamespace": "",
     "references": [
-        "RhythmPulse.GameplayData.Runtime"
+        "RhythmPulse.GameplayData.Runtime",
+        "CycloneGames.Logger",
+        "CycloneGames.Utility.Runtime"
     ],
     "includePlatforms": [
         "Editor"

@@ -7,7 +7,9 @@
   "unityRelease": "0f1",
   "dependencies": {
     "jp.hadashikick.vyaml": "1.0.0",
-    "com.github.messagepack-csharp": "3.1.0"
+    "com.github.messagepack-csharp": "3.1.0",
+    "com.cyclone-games.logger": "1.0.0",
+    "com.cyclone-games.gameplay-utility": "1.0.0"
   },
   "keywords": [
     "RhythmPulse",

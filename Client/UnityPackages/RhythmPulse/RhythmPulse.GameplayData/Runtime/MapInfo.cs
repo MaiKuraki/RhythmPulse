@@ -9,41 +9,43 @@ namespace RhythmPulse.GameplayData.Runtime
     {
         [YamlMember(Order = 0)]
         public string UniqueID { get; set; }
-
         [YamlMember(Order = 1)]
-        public string DisplayName { get; set; }
+        public string LastModifiedTime { get; set; }
 
         [YamlMember(Order = 2)]
-        public string AudioFile { get; set; }
+        public string DisplayName { get; set; }
 
         [YamlMember(Order = 3)]
-        public string VideoFile { get; set; }
-        
+        public string AudioFile { get; set; }
+
         [YamlMember(Order = 4)]
-        public string PreviewAudioFile { get; set; }
-        
+        public string VideoFile { get; set; }
+
         [YamlMember(Order = 5)]
-        public string PreviewVideoFile { get; set; }
+        public string PreviewAudioFile { get; set; }
 
         [YamlMember(Order = 6)]
-        public string[] InGameBackgroundPictures { get; set; }
+        public string PreviewVideoFile { get; set; }
 
         [YamlMember(Order = 7)]
-        public string Vocalist { get; set; }
+        public string[] InGameBackgroundPictures { get; set; }
 
         [YamlMember(Order = 8)]
-        public string Composer { get; set; }
+        public string Vocalist { get; set; }
 
         [YamlMember(Order = 9)]
-        public string Arranger { get; set; }
+        public string Composer { get; set; }
 
         [YamlMember(Order = 10)]
-        public string Lyricist { get; set; }
+        public string Arranger { get; set; }
 
         [YamlMember(Order = 11)]
-        public string BeatmapAuthor { get; set; }
+        public string Lyricist { get; set; }
 
         [YamlMember(Order = 12)]
+        public string BeatmapAuthor { get; set; }
+
+        [YamlMember(Order = 13)]
         public List<BeatMapInfo> BeatmapDifficultyFiles { get; set; }
     }
 
@@ -53,11 +55,13 @@ namespace RhythmPulse.GameplayData.Runtime
     {
         [YamlMember(Order = 0)]
         public string DifficultyFile { get; set; }
-
         [YamlMember(Order = 1)]
-        public string[] BeatMapType { get; set; }
+        public string MD5 { get; set; }
 
         [YamlMember(Order = 2)]
+        public string[] BeatMapType { get; set; }
+
+        [YamlMember(Order = 3)]
         public int Difficulty { get; set; }
     }
 

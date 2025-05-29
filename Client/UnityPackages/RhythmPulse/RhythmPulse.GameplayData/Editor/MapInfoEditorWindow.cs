@@ -7,6 +7,10 @@ using RhythmPulse.GameplayData.Runtime;
 using VYaml.Serialization;
 using VYaml.Parser;
 using System.Reflection; // For reading BeatMapTypeConstant
+using System.Threading.Tasks; // For async MD5 calculation
+using CycloneGames.Utility.Runtime;
+using System; // For FileUtility
+
 
 namespace RhythmPulse.GameplayData.Editor
 {
@@ -18,12 +22,13 @@ namespace RhythmPulse.GameplayData.Editor
         private static string[] beatMapTypeOptions;
         private List<string> currentBackgroundPictures = new List<string>();
         private string newBackgroundPicturePath = "";
+        private string currentlyLoadedMapInfoPath = ""; // To resolve relative paths for difficulty files
 
         [MenuItem("Tools/RhythmPulse/MapInfo Editor")]
         public static void ShowWindow()
         {
             MapInfoEditorWindow window = GetWindow<MapInfoEditorWindow>("MapInfo Editor");
-            window.minSize = new Vector2(450, 350);
+            window.minSize = new Vector2(500, 400);
         }
 
         private void OnEnable()
@@ -40,7 +45,7 @@ namespace RhythmPulse.GameplayData.Editor
 
                 if (beatMapTypeOptions.Length == 0)
                 {
-                    Debug.LogWarning("[MapInfoEditorWindow] No string constants found in BeatMapTypeConstant.BeatMapType selection will be empty.");
+                    Debug.LogWarning("[MapInfoEditorWindow] No string constants found in BeatMapTypeConstant. BeatMapType selection will be empty.");
                 }
                 else if (beatMapTypeOptions.Length > 32)
                 {
@@ -54,6 +59,7 @@ namespace RhythmPulse.GameplayData.Editor
             mapInfo = new MapInfo
             {
                 UniqueID = System.Guid.NewGuid().ToString(),
+                LastModifiedTime = "", // Initialized as empty, will be set on save
                 DisplayName = "Vocalist - NewSongName (BeatMapAuthor)",
                 AudioFile = "audio.ogg",
                 VideoFile = "",
@@ -69,6 +75,7 @@ namespace RhythmPulse.GameplayData.Editor
             };
             currentBackgroundPictures = new List<string>(mapInfo.InGameBackgroundPictures);
             newBackgroundPicturePath = "";
+            currentlyLoadedMapInfoPath = ""; // Reset loaded path
         }
 
         void OnGUI()
@@ -94,11 +101,16 @@ namespace RhythmPulse.GameplayData.Editor
 
             EditorGUILayout.LabelField("Map Information", EditorStyles.boldLabel);
             mapInfo.UniqueID = EditorGUILayout.TextField(new GUIContent("Unique ID", "A unique identifier for this map (e.g., a GUID)."), mapInfo.UniqueID);
+            
+            GUI.enabled = false; // Make LastModifiedTime read-only
+            EditorGUILayout.TextField(new GUIContent("Last Modified Time", "Time this MapInfo was last saved (automatically updated)."), string.IsNullOrEmpty(mapInfo.LastModifiedTime) ? "Not saved yet" : mapInfo.LastModifiedTime);
+            GUI.enabled = true;
+
             mapInfo.DisplayName = EditorGUILayout.TextField(new GUIContent("Display Name", "The name of the song/map shown in-game."), mapInfo.DisplayName);
 
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("Media Files", EditorStyles.boldLabel);
-            mapInfo.AudioFile = EditorGUILayout.TextField(new GUIContent("Audio File", "Path to the main audio file (e.g., 'songs/my_song/audio.ogg')."), mapInfo.AudioFile);
+            mapInfo.AudioFile = EditorGUILayout.TextField(new GUIContent("Audio File", "Path to the main audio file (e.g., 'audio.ogg'). Should be relative to the MapInfo file or a common root."), mapInfo.AudioFile);
             mapInfo.PreviewAudioFile = EditorGUILayout.TextField(new GUIContent("Preview Audio File", "Optional path to a short audio preview clip."), mapInfo.PreviewAudioFile);
             mapInfo.VideoFile = EditorGUILayout.TextField(new GUIContent("Video File", "Optional path to a background video file."), mapInfo.VideoFile);
             mapInfo.PreviewVideoFile = EditorGUILayout.TextField(new GUIContent("Preview Video File", "Optional path to a short video preview clip."), mapInfo.PreviewVideoFile);
@@ -121,7 +133,7 @@ namespace RhythmPulse.GameplayData.Editor
                 {
                     currentBackgroundPictures.RemoveAt(i);
                     GUI.FocusControl(null);
-                    break;
+                    break; 
                 }
                 EditorGUILayout.EndHorizontal();
             }
@@ -141,12 +153,30 @@ namespace RhythmPulse.GameplayData.Editor
             {
                 mapInfo.BeatmapDifficultyFiles = new List<BeatMapInfo>();
             }
+
             for (int i = 0; i < mapInfo.BeatmapDifficultyFiles.Count; i++)
             {
-                BeatMapInfo currentBeatmap = mapInfo.BeatmapDifficultyFiles[i];
+                BeatMapInfo currentBeatmap = mapInfo.BeatmapDifficultyFiles[i]; // This is a struct, so it's a copy.
+                
                 EditorGUILayout.BeginVertical(EditorStyles.helpBox);
                 EditorGUILayout.LabelField($"Difficulty Entry #{i + 1}", EditorStyles.miniBoldLabel);
-                currentBeatmap.DifficultyFile = EditorGUILayout.TextField("Difficulty File Name", currentBeatmap.DifficultyFile);
+                
+                currentBeatmap.DifficultyFile = EditorGUILayout.TextField(new GUIContent("Difficulty File", "Filename of the beatmap data (e.g., 'mania_hard.yaml'). Relative to MapInfo file location."), currentBeatmap.DifficultyFile);
+
+                EditorGUILayout.BeginHorizontal();
+                currentBeatmap.MD5 = EditorGUILayout.TextField(new GUIContent("MD5 Hash", "MD5 hash of the difficulty file. Click 'Generate' to calculate."), currentBeatmap.MD5);
+                if (GUILayout.Button("Generate MD5", GUILayout.Width(100)))
+                {
+                    // Assign to a local variable for the async lambda
+                    int local_i = i; 
+                    BeatMapInfo beatmapToUpdate = mapInfo.BeatmapDifficultyFiles[local_i];
+
+                    // Asynchronously generate MD5
+                    _ = GenerateMD5ForBeatmapAsync(beatmapToUpdate.DifficultyFile, local_i);
+                }
+                EditorGUILayout.EndHorizontal();
+
+
                 if (beatMapTypeOptions != null && beatMapTypeOptions.Length > 0)
                 {
                     int currentMask = ConvertStringArrayToMask(currentBeatmap.BeatMapType, beatMapTypeOptions);
@@ -163,22 +193,25 @@ namespace RhythmPulse.GameplayData.Editor
                     EditorGUILayout.HelpBox("No BeatMapType options available. Check BeatMapTypeConstant.", MessageType.Warning);
                 }
                 currentBeatmap.Difficulty = EditorGUILayout.IntField("Difficulty Level", currentBeatmap.Difficulty);
+                
                 if (GUILayout.Button("Remove This Difficulty Entry", GUILayout.Height(20)))
                 {
                     mapInfo.BeatmapDifficultyFiles.RemoveAt(i);
                     GUI.FocusControl(null);
-                    EditorGUILayout.EndVertical();
-                    break;
+                    EditorGUILayout.EndVertical(); // Ensure EndVertical is called before break
+                    break; 
                 }
                 EditorGUILayout.EndVertical();
                 EditorGUILayout.Space(5);
-                mapInfo.BeatmapDifficultyFiles[i] = currentBeatmap;
+                mapInfo.BeatmapDifficultyFiles[i] = currentBeatmap; // Write the modified struct back
             }
+
             if (GUILayout.Button("Add New BeatMap Difficulty Entry"))
             {
                 mapInfo.BeatmapDifficultyFiles.Add(new BeatMapInfo
                 {
-                    DifficultyFile = "GameMode_DifficultyLevel.yaml",   // TODO: Maybe using MessagePack generate .bin files?
+                    DifficultyFile = "GameMode_DifficultyName.yaml",
+                    MD5 = "", // Initialize MD5 as empty
                     BeatMapType = new string[0],
                     Difficulty = 1
                 });
@@ -188,11 +221,84 @@ namespace RhythmPulse.GameplayData.Editor
             EditorGUILayout.Space(20);
             if (GUILayout.Button("Save MapInfo to YAML File", GUILayout.Height(30)))
             {
+                mapInfo.LastModifiedTime = System.DateTime.UtcNow.ToString("o"); // ISO 8601 format
                 mapInfo.InGameBackgroundPictures = currentBackgroundPictures.ToArray();
                 GenerateYaml();
             }
             EditorGUILayout.EndScrollView();
         }
+
+        private async Task GenerateMD5ForBeatmapAsync(string difficultyFileName, int beatmapIndex)
+        {
+            if (string.IsNullOrWhiteSpace(difficultyFileName))
+            {
+                Debug.LogWarning($"[MapInfoEditorWindow] Difficulty file name for entry #{beatmapIndex + 1} is empty. Cannot generate MD5.");
+                BeatMapInfo tempBeatmap = mapInfo.BeatmapDifficultyFiles[beatmapIndex];
+                tempBeatmap.MD5 = "Filename empty";
+                mapInfo.BeatmapDifficultyFiles[beatmapIndex] = tempBeatmap;
+                Repaint();
+                return;
+            }
+
+            string baseDirectory = Application.dataPath; // Default if no mapinfo loaded
+            if (!string.IsNullOrEmpty(currentlyLoadedMapInfoPath))
+            {
+                baseDirectory = Path.GetDirectoryName(currentlyLoadedMapInfoPath);
+            }
+            else
+            {
+                 Debug.LogWarning($"[MapInfoEditorWindow] MapInfo file not loaded or path unknown. Assuming difficulty file '{difficultyFileName}' is relative to Assets folder. For best results, load the MapInfo file first.");
+            }
+
+            string fullPath = Path.Combine(baseDirectory, difficultyFileName);
+
+            if (!File.Exists(fullPath))
+            {
+                Debug.LogError($"[MapInfoEditorWindow] Difficulty file not found at: {fullPath}. Cannot generate MD5 for entry #{beatmapIndex + 1}.");
+                BeatMapInfo tempBeatmap = mapInfo.BeatmapDifficultyFiles[beatmapIndex];
+                tempBeatmap.MD5 = "File not found";
+                mapInfo.BeatmapDifficultyFiles[beatmapIndex] = tempBeatmap;
+                Repaint(); // Update UI
+                return;
+            }
+
+            try
+            {
+                // We need a buffer to hold the hash. MD5 is 16 bytes.
+                byte[] hashBytes = new byte[FileUtility.GetHashSizeInBytes(HashAlgorithmType.MD5)];
+                Memory<byte> hashMemory = new Memory<byte>(hashBytes);
+
+                bool success = await FileUtility.ComputeFileHashAsync(fullPath, HashAlgorithmType.MD5, hashMemory, System.Threading.CancellationToken.None);
+
+                if (success)
+                {
+                    string md5Hex = FileUtility.ToHexString(hashBytes);
+                    BeatMapInfo tempBeatmap = mapInfo.BeatmapDifficultyFiles[beatmapIndex];
+                    tempBeatmap.MD5 = md5Hex;
+                    mapInfo.BeatmapDifficultyFiles[beatmapIndex] = tempBeatmap;
+                    Debug.Log($"[MapInfoEditorWindow] MD5 for '{difficultyFileName}' (Entry #{beatmapIndex + 1}): {md5Hex}");
+                }
+                else
+                {
+                    Debug.LogError($"[MapInfoEditorWindow] Failed to compute MD5 for: {fullPath} (Entry #{beatmapIndex + 1}).");
+                    BeatMapInfo tempBeatmap = mapInfo.BeatmapDifficultyFiles[beatmapIndex];
+                    tempBeatmap.MD5 = "Error computing";
+                    mapInfo.BeatmapDifficultyFiles[beatmapIndex] = tempBeatmap;
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"[MapInfoEditorWindow] Exception computing MD5 for {fullPath} (Entry #{beatmapIndex + 1}): {ex.ToString()}");
+                BeatMapInfo tempBeatmap = mapInfo.BeatmapDifficultyFiles[beatmapIndex];
+                tempBeatmap.MD5 = "Exception";
+                mapInfo.BeatmapDifficultyFiles[beatmapIndex] = tempBeatmap;
+            }
+            finally
+            {
+                Repaint(); // Ensure the UI updates after the async operation
+            }
+        }
+
 
         private void LoadYamlFromFile()
         {
@@ -204,6 +310,7 @@ namespace RhythmPulse.GameplayData.Editor
                     string yamlString = File.ReadAllText(path, System.Text.Encoding.UTF8);
                     byte[] yamlBytes = System.Text.Encoding.UTF8.GetBytes(yamlString);
                     mapInfo = VYaml.Serialization.YamlSerializer.Deserialize<MapInfo>(yamlBytes);
+                    currentlyLoadedMapInfoPath = path; // Store the path
 
                     if (mapInfo.InGameBackgroundPictures != null)
                     {
@@ -218,6 +325,12 @@ namespace RhythmPulse.GameplayData.Editor
                     {
                         mapInfo.BeatmapDifficultyFiles = new List<BeatMapInfo>();
                     }
+                    // Ensure LastModifiedTime has a value to display if it was missing in older files
+                    if (string.IsNullOrEmpty(mapInfo.LastModifiedTime))
+                    {
+                        mapInfo.LastModifiedTime = "N/A (loaded)";
+                    }
+
                     newBackgroundPicturePath = "";
 
                     Debug.Log($"[MapInfoEditorWindow] MapInfo loaded from: {path}");
@@ -225,23 +338,21 @@ namespace RhythmPulse.GameplayData.Editor
                     GUI.FocusControl(null);
                     Repaint();
                 }
-                catch (VYaml.Parser.YamlParserException ype) // For YAML syntax errors
+                catch (VYaml.Parser.YamlParserException ype) 
                 {
-                    // ype.Message from VYaml usually includes Line, Column, and Index.
-                    string detailedMessage = $"Error: {ype.Message}\n\nThis typically indicates a problem with the YAML file's formatting (e.g., incorrect indentation, missing colons, improper syntax). Please check the file structure around the location indicated in the error message.";
+                    string detailedMessage = $"Error: {ype.Message}\n\nThis typically indicates a problem with the YAML file's formatting. Please check the file structure around the location indicated in the error message.";
                     Debug.LogError($"[MapInfoEditorWindow] Error parsing YAML syntax in file: {path}\n{ype.Message}\nDetails: {ype.ToString()}");
                     EditorUtility.DisplayDialog("YAML Syntax Error",
                         $"Failed to parse YAML file: {Path.GetFileName(path)}\n\n{detailedMessage}\n\nCheck the console for the full file path and more details.", "OK");
                 }
-                catch (VYaml.Serialization.YamlSerializerException yse) // For data mapping/type errors
+                catch (VYaml.Serialization.YamlSerializerException yse) 
                 {
-                    // yse.Message might also contain location information if the error is tied to a specific YAML node.
-                    string detailedMessage = $"Error: {yse.Message}\n\nThis error often occurs if the YAML data doesn't match the expected structure or types (e.g., text where a number is expected, a missing required field, or an unexpected field).";
+                    string detailedMessage = $"Error: {yse.Message}\n\nThis error often occurs if the YAML data doesn't match the expected structure or types.";
                     Debug.LogError($"[MapInfoEditorWindow] Error deserializing YAML data from file: {path}\n{yse.Message}\nDetails: {yse.ToString()}");
                     EditorUtility.DisplayDialog("YAML Data/Structure Error",
                         $"Failed to map YAML data in file: {Path.GetFileName(path)}\n\n{detailedMessage}\n\nCheck the console for the full file path and more details.", "OK");
                 }
-                catch (System.Exception ex) // For other general errors (e.g., file IO)
+                catch (System.Exception ex) 
                 {
                     Debug.LogError($"[MapInfoEditorWindow] Error loading YAML file: {path}\nGeneral Error: {ex.ToString()}");
                     EditorUtility.DisplayDialog("Error Loading File",
@@ -253,17 +364,24 @@ namespace RhythmPulse.GameplayData.Editor
         private void GenerateYaml()
         {
             string defaultFileName = string.IsNullOrWhiteSpace(mapInfo.DisplayName) ? "mapinfo_untitled" : SanitizeFileName(mapInfo.DisplayName);
-            string path = EditorUtility.SaveFilePanel("Save MapInfo YAML", Application.dataPath, defaultFileName + ".yaml", "yaml");
+            // Default save directory to where the file was loaded from, or Application.dataPath
+            string initialSaveDirectory = string.IsNullOrEmpty(currentlyLoadedMapInfoPath) ? Application.dataPath : Path.GetDirectoryName(currentlyLoadedMapInfoPath);
+            string path = EditorUtility.SaveFilePanel("Save MapInfo YAML", initialSaveDirectory, defaultFileName + ".yaml", "yaml");
 
             if (!string.IsNullOrEmpty(path))
             {
                 try
                 {
+                    // Ensure LastModifiedTime is set before serialization
+                    mapInfo.LastModifiedTime = System.DateTime.UtcNow.ToString("o"); 
+                    
                     string yamlStr = VYaml.Serialization.YamlSerializer.SerializeToString(mapInfo);
                     File.WriteAllText(path, yamlStr, System.Text.Encoding.UTF8);
+                    currentlyLoadedMapInfoPath = path; // Update loaded path on successful save
 
                     Debug.Log($"[MapInfoEditorWindow] MapInfo YAML saved to: {path}");
                     EditorUtility.DisplayDialog("Save Successful", $"MapInfo YAML saved to:\n{path}", "OK");
+                    Repaint(); // To update LastModifiedTime display
                 }
                 catch (System.Exception ex)
                 {
