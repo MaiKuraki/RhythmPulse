@@ -17,6 +17,9 @@ namespace RhythmPulse.UI
             Beats,
             Dance
         }
+
+        [SerializeField] Transform GameModeSelectionTF;
+        [SerializeField] Transform MusicSelectionTF;
         [SerializeField] Button buttonBeatsGame;
         [SerializeField] Button buttonDanceGame;
 
@@ -24,11 +27,11 @@ namespace RhythmPulse.UI
         {
             base.Awake();
 
-            buttonBeatsGame.OnClickAsObservable().Subscribe(_ => EnterGame(EGameMode.Beats));
-            buttonDanceGame.OnClickAsObservable().Subscribe(_ => EnterGame(EGameMode.Dance));
+            buttonBeatsGame.OnClickAsObservable().Subscribe(_ => EnterMusicSelection(EGameMode.Beats));
+            buttonDanceGame.OnClickAsObservable().Subscribe(_ => EnterMusicSelection(EGameMode.Dance));
         }
 
-        void EnterGame(EGameMode gameMode)
+        void EnterMusicSelection(EGameMode gameMode)
         {
             switch (gameMode)
             {
@@ -40,7 +43,23 @@ namespace RhythmPulse.UI
                     break;
             }
             
+        }
+
+        void EnterGameplay()
+        {
             sceneManagementAPIGateway.Push(SceneDefinitions.Gameplay);
+        }
+
+        public void EnterGameModeSelection()
+        {
+            MusicSelectionTF.gameObject.SetActive(false);
+            GameModeSelectionTF.gameObject.SetActive(true);
+        }
+
+        public void EnterMusicSelection()
+        {
+            GameModeSelectionTF.gameObject.SetActive(false);
+            MusicSelectionTF.gameObject.SetActive(true);
         }
     }
 }
