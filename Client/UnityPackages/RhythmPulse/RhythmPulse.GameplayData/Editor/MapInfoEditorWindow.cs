@@ -10,7 +10,7 @@ using System.Reflection; // For reading BeatMapTypeConstant
 using System.Threading.Tasks; // For async MD5 calculation
 using CycloneGames.Utility.Runtime;
 using System; // For FileUtility
-
+using System.Text.RegularExpressions; // For more robust path validation
 
 namespace RhythmPulse.GameplayData.Editor
 {
@@ -23,6 +23,23 @@ namespace RhythmPulse.GameplayData.Editor
         private List<string> currentBackgroundPictures = new List<string>();
         private string newBackgroundPicturePath = "";
         private string currentlyLoadedMapInfoPath = ""; // To resolve relative paths for difficulty files
+
+        // Dictionary to hold validation messages for specific fields
+        private Dictionary<string, string> validationMessages = new Dictionary<string, string>();
+        private Dictionary<string, MessageType> validationMessageTypes = new Dictionary<string, MessageType>();
+
+
+        // Common invalid file/directory characters for Windows, Linux, macOS
+        private static readonly char[] InvalidPathChars = Path.GetInvalidPathChars();
+        private static readonly char[] InvalidFileNameChars = Path.GetInvalidFileNameChars();
+
+        // Reserved filenames on Windows (case-insensitive)
+        private static readonly string[] ReservedWindowsNames = new string[]
+        {
+            "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+            "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
+        };
+
 
         [MenuItem("Tools/RhythmPulse/MapInfo Editor")]
         public static void ShowWindow()
@@ -58,7 +75,7 @@ namespace RhythmPulse.GameplayData.Editor
         {
             mapInfo = new MapInfo
             {
-                UniqueID = System.Guid.NewGuid().ToString(),
+                UniqueID = System.Guid.NewGuid().ToString("N"), // Use "N" for a cleaner GUID without hyphens, suitable for folder names
                 LastModifiedTime = "", // Initialized as empty, will be set on save
                 DisplayName = "Vocalist - NewSongName (BeatMapAuthor)",
                 AudioFile = "audio.ogg",
@@ -76,12 +93,15 @@ namespace RhythmPulse.GameplayData.Editor
             currentBackgroundPictures = new List<string>(mapInfo.InGameBackgroundPictures);
             newBackgroundPicturePath = "";
             currentlyLoadedMapInfoPath = ""; // Reset loaded path
+            validationMessages.Clear(); // Clear validation messages on new/reset
+            validationMessageTypes.Clear();
         }
 
         void OnGUI()
         {
             scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition);
 
+            // --- File Operations ---
             EditorGUILayout.LabelField("File Operations", EditorStyles.boldLabel);
             EditorGUILayout.BeginHorizontal();
             if (GUILayout.Button("Load MapInfo from YAML"))
@@ -99,9 +119,17 @@ namespace RhythmPulse.GameplayData.Editor
             EditorGUILayout.EndHorizontal();
             EditorGUILayout.Space();
 
+            // --- Map Information ---
             EditorGUILayout.LabelField("Map Information", EditorStyles.boldLabel);
-            mapInfo.UniqueID = EditorGUILayout.TextField(new GUIContent("Unique ID", "A unique identifier for this map (e.g., a GUID)."), mapInfo.UniqueID);
-            
+            string newUniqueID = EditorGUILayout.TextField(new GUIContent("Unique ID", "A unique identifier for this map (e.g., a GUID). This should be a valid folder name."), mapInfo.UniqueID);
+            if (newUniqueID != mapInfo.UniqueID)
+            {
+                mapInfo.UniqueID = newUniqueID;
+                // Validate immediately to show feedback
+                ValidateUniqueID(mapInfo.UniqueID);
+            }
+            DisplayValidationMessage("UniqueID"); // Display message below the field
+
             GUI.enabled = false; // Make LastModifiedTime read-only
             EditorGUILayout.TextField(new GUIContent("Last Modified Time", "Time this MapInfo was last saved (automatically updated)."), string.IsNullOrEmpty(mapInfo.LastModifiedTime) ? "Not saved yet" : mapInfo.LastModifiedTime);
             GUI.enabled = true;
@@ -109,13 +137,29 @@ namespace RhythmPulse.GameplayData.Editor
             mapInfo.DisplayName = EditorGUILayout.TextField(new GUIContent("Display Name", "The name of the song/map shown in-game."), mapInfo.DisplayName);
 
             EditorGUILayout.Space();
+
+            // --- Media Files ---
             EditorGUILayout.LabelField("Media Files", EditorStyles.boldLabel);
             mapInfo.AudioFile = EditorGUILayout.TextField(new GUIContent("Audio File", "Path to the main audio file (e.g., 'audio.ogg'). Should be relative to the MapInfo file or a common root."), mapInfo.AudioFile);
+            ValidateRelativePath("AudioFile", mapInfo.AudioFile, currentlyLoadedMapInfoPath);
+            DisplayValidationMessage("AudioFile");
+
             mapInfo.PreviewAudioFile = EditorGUILayout.TextField(new GUIContent("Preview Audio File", "Optional path to a short audio preview clip."), mapInfo.PreviewAudioFile);
+            ValidateRelativePath("PreviewAudioFile", mapInfo.PreviewAudioFile, currentlyLoadedMapInfoPath, true);
+            DisplayValidationMessage("PreviewAudioFile");
+
             mapInfo.VideoFile = EditorGUILayout.TextField(new GUIContent("Video File", "Optional path to a background video file."), mapInfo.VideoFile);
+            ValidateRelativePath("VideoFile", mapInfo.VideoFile, currentlyLoadedMapInfoPath, true);
+            DisplayValidationMessage("VideoFile");
+
             mapInfo.PreviewVideoFile = EditorGUILayout.TextField(new GUIContent("Preview Video File", "Optional path to a short video preview clip."), mapInfo.PreviewVideoFile);
+            ValidateRelativePath("PreviewVideoFile", mapInfo.PreviewVideoFile, currentlyLoadedMapInfoPath, true);
+            DisplayValidationMessage("PreviewVideoFile");
+
 
             EditorGUILayout.Space();
+
+            // --- Credits ---
             EditorGUILayout.LabelField("Credits", EditorStyles.boldLabel);
             mapInfo.Vocalist = EditorGUILayout.TextField("Vocalist", mapInfo.Vocalist);
             mapInfo.Composer = EditorGUILayout.TextField("Composer", mapInfo.Composer);
@@ -124,6 +168,8 @@ namespace RhythmPulse.GameplayData.Editor
             mapInfo.BeatmapAuthor = EditorGUILayout.TextField(new GUIContent("Beatmap Author", "Creator of this specific beatmap data."), mapInfo.BeatmapAuthor);
 
             EditorGUILayout.Space();
+
+            // --- In-Game Background Pictures ---
             EditorGUILayout.LabelField("In-Game Background Pictures", EditorStyles.boldLabel);
             for (int i = 0; i < currentBackgroundPictures.Count; i++)
             {
@@ -132,22 +178,37 @@ namespace RhythmPulse.GameplayData.Editor
                 if (GUILayout.Button("X", GUILayout.Width(25)))
                 {
                     currentBackgroundPictures.RemoveAt(i);
+                    // Clear validation message for this specific entry after removal
+                    validationMessages.Remove($"BackgroundPicture_{i}");
+                    validationMessageTypes.Remove($"BackgroundPicture_{i}");
                     GUI.FocusControl(null);
-                    break; 
+                    break;
                 }
                 EditorGUILayout.EndHorizontal();
+                ValidateRelativePath($"BackgroundPicture_{i}", currentBackgroundPictures[i], currentlyLoadedMapInfoPath);
+                DisplayValidationMessage($"BackgroundPicture_{i}");
             }
             EditorGUILayout.BeginHorizontal();
             newBackgroundPicturePath = EditorGUILayout.TextField("New Picture Path", newBackgroundPicturePath);
             if (GUILayout.Button("Add Picture", GUILayout.Width(100)) && !string.IsNullOrWhiteSpace(newBackgroundPicturePath))
             {
-                currentBackgroundPictures.Add(newBackgroundPicturePath);
-                newBackgroundPicturePath = "";
-                GUI.FocusControl(null);
+                // Basic validation before adding
+                if (!PathContainsInvalidChars(newBackgroundPicturePath) && !PathIsReserved(newBackgroundPicturePath))
+                {
+                    currentBackgroundPictures.Add(newBackgroundPicturePath);
+                    newBackgroundPicturePath = "";
+                    GUI.FocusControl(null);
+                }
+                else
+                {
+                    EditorUtility.DisplayDialog("Invalid Path", "The new background picture path contains invalid characters or is a reserved filename. Please correct it.", "OK");
+                }
             }
             EditorGUILayout.EndHorizontal();
 
             EditorGUILayout.Space();
+
+            // --- Beatmap Difficulty Files ---
             EditorGUILayout.LabelField("Beatmap Difficulty Files", EditorStyles.boldLabel);
             if (mapInfo.BeatmapDifficultyFiles == null)
             {
@@ -157,22 +218,29 @@ namespace RhythmPulse.GameplayData.Editor
             for (int i = 0; i < mapInfo.BeatmapDifficultyFiles.Count; i++)
             {
                 BeatMapInfo currentBeatmap = mapInfo.BeatmapDifficultyFiles[i]; // This is a struct, so it's a copy.
-                
+
                 EditorGUILayout.BeginVertical(EditorStyles.helpBox);
                 EditorGUILayout.LabelField($"Difficulty Entry #{i + 1}", EditorStyles.miniBoldLabel);
-                
-                currentBeatmap.DifficultyFile = EditorGUILayout.TextField(new GUIContent("Difficulty File", "Filename of the beatmap data (e.g., 'mania_hard.yaml'). Relative to MapInfo file location."), currentBeatmap.DifficultyFile);
+
+                string newDifficultyFile = EditorGUILayout.TextField(new GUIContent("Difficulty File", "Filename of the beatmap data (e.g., 'mania_hard.yaml'). Relative to MapInfo file location."), currentBeatmap.DifficultyFile);
+                if (newDifficultyFile != currentBeatmap.DifficultyFile)
+                {
+                    currentBeatmap.DifficultyFile = newDifficultyFile;
+                    mapInfo.BeatmapDifficultyFiles[i] = currentBeatmap; // Write back immediately to reflect changes
+                }
+                ValidateRelativePath($"DifficultyFile_{i}", currentBeatmap.DifficultyFile, currentlyLoadedMapInfoPath);
+                DisplayValidationMessage($"DifficultyFile_{i}");
+
 
                 EditorGUILayout.BeginHorizontal();
                 currentBeatmap.MD5 = EditorGUILayout.TextField(new GUIContent("MD5 Hash", "MD5 hash of the difficulty file. Click 'Generate' to calculate."), currentBeatmap.MD5);
                 if (GUILayout.Button("Generate MD5", GUILayout.Width(100)))
                 {
                     // Assign to a local variable for the async lambda
-                    int local_i = i; 
-                    BeatMapInfo beatmapToUpdate = mapInfo.BeatmapDifficultyFiles[local_i];
-
-                    // Asynchronously generate MD5
-                    _ = GenerateMD5ForBeatmapAsync(beatmapToUpdate.DifficultyFile, local_i);
+                    int local_i = i;
+                    // Ensure the latest value is used
+                    string fileName = mapInfo.BeatmapDifficultyFiles[local_i].DifficultyFile;
+                    _ = GenerateMD5ForBeatmapAsync(fileName, local_i);
                 }
                 EditorGUILayout.EndHorizontal();
 
@@ -193,13 +261,15 @@ namespace RhythmPulse.GameplayData.Editor
                     EditorGUILayout.HelpBox("No BeatMapType options available. Check BeatMapTypeConstant.", MessageType.Warning);
                 }
                 currentBeatmap.Difficulty = EditorGUILayout.IntField("Difficulty Level", currentBeatmap.Difficulty);
-                
+
                 if (GUILayout.Button("Remove This Difficulty Entry", GUILayout.Height(20)))
                 {
                     mapInfo.BeatmapDifficultyFiles.RemoveAt(i);
+                    // Clear validation message for this specific entry after removal
+                    validationMessages.Remove($"DifficultyFile_{i}");
+                    validationMessageTypes.Remove($"DifficultyFile_{i}");
                     GUI.FocusControl(null);
-                    EditorGUILayout.EndVertical(); // Ensure EndVertical is called before break
-                    break; 
+                    break;
                 }
                 EditorGUILayout.EndVertical();
                 EditorGUILayout.Space(5);
@@ -221,18 +291,35 @@ namespace RhythmPulse.GameplayData.Editor
             EditorGUILayout.Space(20);
             if (GUILayout.Button("Save MapInfo to YAML File", GUILayout.Height(30)))
             {
-                mapInfo.LastModifiedTime = System.DateTime.UtcNow.ToString("o"); // ISO 8601 format
-                mapInfo.InGameBackgroundPictures = currentBackgroundPictures.ToArray();
-                GenerateYaml();
+                // Clear existing messages before full validation
+                validationMessages.Clear();
+                validationMessageTypes.Clear();
+
+                // Pre-save validation
+                if (PerformFullValidation())
+                {
+                    mapInfo.LastModifiedTime = System.DateTime.UtcNow.ToString("o"); // ISO 8601 format
+                    mapInfo.InGameBackgroundPictures = currentBackgroundPictures.ToArray();
+                    GenerateYaml();
+                }
+                else
+                {
+                    EditorUtility.DisplayDialog("Validation Failed", "Please correct the highlighted errors before saving.", "OK");
+                    Repaint(); // Force repaint to show all validation messages
+                }
             }
             EditorGUILayout.EndScrollView();
         }
 
         private async Task GenerateMD5ForBeatmapAsync(string difficultyFileName, int beatmapIndex)
         {
+            // Clear specific MD5 error message if it exists before recalculating
+            validationMessages.Remove($"DifficultyFile_{beatmapIndex}_MD5");
+            validationMessageTypes.Remove($"DifficultyFile_{beatmapIndex}_MD5");
+
             if (string.IsNullOrWhiteSpace(difficultyFileName))
             {
-                Debug.LogWarning($"[MapInfoEditorWindow] Difficulty file name for entry #{beatmapIndex + 1} is empty. Cannot generate MD5.");
+                SetValidationMessage($"DifficultyFile_{beatmapIndex}", "Difficulty file name is empty. Cannot generate MD5.", MessageType.Error);
                 BeatMapInfo tempBeatmap = mapInfo.BeatmapDifficultyFiles[beatmapIndex];
                 tempBeatmap.MD5 = "Filename empty";
                 mapInfo.BeatmapDifficultyFiles[beatmapIndex] = tempBeatmap;
@@ -247,14 +334,14 @@ namespace RhythmPulse.GameplayData.Editor
             }
             else
             {
-                 Debug.LogWarning($"[MapInfoEditorWindow] MapInfo file not loaded or path unknown. Assuming difficulty file '{difficultyFileName}' is relative to Assets folder. For best results, load the MapInfo file first.");
+                Debug.LogWarning($"[MapInfoEditorWindow] MapInfo file not loaded or path unknown. Assuming difficulty file '{difficultyFileName}' is relative to Assets folder. For best results, load the MapInfo file first.");
             }
 
             string fullPath = Path.Combine(baseDirectory, difficultyFileName);
 
             if (!File.Exists(fullPath))
             {
-                Debug.LogError($"[MapInfoEditorWindow] Difficulty file not found at: {fullPath}. Cannot generate MD5 for entry #{beatmapIndex + 1}.");
+                SetValidationMessage($"DifficultyFile_{beatmapIndex}", $"Difficulty file not found at: {fullPath}. Cannot generate MD5.", MessageType.Error);
                 BeatMapInfo tempBeatmap = mapInfo.BeatmapDifficultyFiles[beatmapIndex];
                 tempBeatmap.MD5 = "File not found";
                 mapInfo.BeatmapDifficultyFiles[beatmapIndex] = tempBeatmap;
@@ -264,7 +351,6 @@ namespace RhythmPulse.GameplayData.Editor
 
             try
             {
-                // We need a buffer to hold the hash. MD5 is 16 bytes.
                 byte[] hashBytes = new byte[FileUtility.GetHashSizeInBytes(HashAlgorithmType.MD5)];
                 Memory<byte> hashMemory = new Memory<byte>(hashBytes);
 
@@ -277,10 +363,12 @@ namespace RhythmPulse.GameplayData.Editor
                     tempBeatmap.MD5 = md5Hex;
                     mapInfo.BeatmapDifficultyFiles[beatmapIndex] = tempBeatmap;
                     Debug.Log($"[MapInfoEditorWindow] MD5 for '{difficultyFileName}' (Entry #{beatmapIndex + 1}): {md5Hex}");
+                    // Optionally, clear the warning if it was previously set for this specific field
+                    SetValidationMessage($"DifficultyFile_{beatmapIndex}", "", MessageType.None); // Clear message
                 }
                 else
                 {
-                    Debug.LogError($"[MapInfoEditorWindow] Failed to compute MD5 for: {fullPath} (Entry #{beatmapIndex + 1}).");
+                    SetValidationMessage($"DifficultyFile_{beatmapIndex}", $"Failed to compute MD5 for: {fullPath}.", MessageType.Error);
                     BeatMapInfo tempBeatmap = mapInfo.BeatmapDifficultyFiles[beatmapIndex];
                     tempBeatmap.MD5 = "Error computing";
                     mapInfo.BeatmapDifficultyFiles[beatmapIndex] = tempBeatmap;
@@ -288,7 +376,7 @@ namespace RhythmPulse.GameplayData.Editor
             }
             catch (System.Exception ex)
             {
-                Debug.LogError($"[MapInfoEditorWindow] Exception computing MD5 for {fullPath} (Entry #{beatmapIndex + 1}): {ex.ToString()}");
+                SetValidationMessage($"DifficultyFile_{beatmapIndex}", $"Exception computing MD5 for {fullPath}: {ex.Message}", MessageType.Error);
                 BeatMapInfo tempBeatmap = mapInfo.BeatmapDifficultyFiles[beatmapIndex];
                 tempBeatmap.MD5 = "Exception";
                 mapInfo.BeatmapDifficultyFiles[beatmapIndex] = tempBeatmap;
@@ -329,30 +417,39 @@ namespace RhythmPulse.GameplayData.Editor
                     if (string.IsNullOrEmpty(mapInfo.LastModifiedTime))
                     {
                         mapInfo.LastModifiedTime = "N/A (loaded)";
+                    } else {
+                        // Validate loaded LastModifiedTime format (optional, but good for consistency)
+                        if (!System.DateTime.TryParse(mapInfo.LastModifiedTime, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out _))
+                        {
+                            Debug.LogWarning($"[MapInfoEditorWindow] Loaded LastModifiedTime '{mapInfo.LastModifiedTime}' is not in a valid ISO 8601 format. It will be updated on save.");
+                            mapInfo.LastModifiedTime = "Invalid format"; // Indicate invalid format in UI
+                        }
                     }
 
                     newBackgroundPicturePath = "";
+                    validationMessages.Clear(); // Clear all messages on successful load
+                    validationMessageTypes.Clear();
 
                     Debug.Log($"[MapInfoEditorWindow] MapInfo loaded from: {path}");
                     EditorUtility.DisplayDialog("Load Successful", $"MapInfo data loaded from:\n{path}", "OK");
                     GUI.FocusControl(null);
                     Repaint();
                 }
-                catch (VYaml.Parser.YamlParserException ype) 
+                catch (VYaml.Parser.YamlParserException ype)
                 {
                     string detailedMessage = $"Error: {ype.Message}\n\nThis typically indicates a problem with the YAML file's formatting. Please check the file structure around the location indicated in the error message.";
                     Debug.LogError($"[MapInfoEditorWindow] Error parsing YAML syntax in file: {path}\n{ype.Message}\nDetails: {ype.ToString()}");
                     EditorUtility.DisplayDialog("YAML Syntax Error",
                         $"Failed to parse YAML file: {Path.GetFileName(path)}\n\n{detailedMessage}\n\nCheck the console for the full file path and more details.", "OK");
                 }
-                catch (VYaml.Serialization.YamlSerializerException yse) 
+                catch (VYaml.Serialization.YamlSerializerException yse)
                 {
                     string detailedMessage = $"Error: {yse.Message}\n\nThis error often occurs if the YAML data doesn't match the expected structure or types.";
                     Debug.LogError($"[MapInfoEditorWindow] Error deserializing YAML data from file: {path}\n{yse.Message}\nDetails: {yse.ToString()}");
                     EditorUtility.DisplayDialog("YAML Data/Structure Error",
                         $"Failed to map YAML data in file: {Path.GetFileName(path)}\n\n{detailedMessage}\n\nCheck the console for the full file path and more details.", "OK");
                 }
-                catch (System.Exception ex) 
+                catch (System.Exception ex)
                 {
                     Debug.LogError($"[MapInfoEditorWindow] Error loading YAML file: {path}\nGeneral Error: {ex.ToString()}");
                     EditorUtility.DisplayDialog("Error Loading File",
@@ -373,11 +470,14 @@ namespace RhythmPulse.GameplayData.Editor
                 try
                 {
                     // Ensure LastModifiedTime is set before serialization
-                    mapInfo.LastModifiedTime = System.DateTime.UtcNow.ToString("o"); 
-                    
+                    mapInfo.LastModifiedTime = System.DateTime.UtcNow.ToString("o");
+
                     string yamlStr = VYaml.Serialization.YamlSerializer.SerializeToString(mapInfo);
                     File.WriteAllText(path, yamlStr, System.Text.Encoding.UTF8);
                     currentlyLoadedMapInfoPath = path; // Update loaded path on successful save
+
+                    validationMessages.Clear(); // Clear all messages on successful save
+                    validationMessageTypes.Clear();
 
                     Debug.Log($"[MapInfoEditorWindow] MapInfo YAML saved to: {path}");
                     EditorUtility.DisplayDialog("Save Successful", $"MapInfo YAML saved to:\n{path}", "OK");
@@ -391,11 +491,269 @@ namespace RhythmPulse.GameplayData.Editor
             }
         }
 
+        /// <summary>
+        /// Sanitizes a string to be a valid filename, removing invalid characters and handling reserved names.
+        /// </summary>
+        /// <param name="name">The input string.</param>
+        /// <returns>A sanitized filename.</returns>
         private string SanitizeFileName(string name)
         {
-            string invalidChars = System.Text.RegularExpressions.Regex.Escape(new string(Path.GetInvalidFileNameChars()));
-            string invalidRegStr = string.Format(@"([{0}]*\.+$)|([{0}]+)", invalidChars);
-            return System.Text.RegularExpressions.Regex.Replace(name, invalidRegStr, "_");
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                return "untitled";
+            }
+
+            // Remove invalid characters
+            string sanitized = new string(name.Where(c => !InvalidFileNameChars.Contains(c)).ToArray());
+
+            // Handle reserved names for Windows (case-insensitive)
+            if (Application.platform == RuntimePlatform.WindowsEditor || Application.platform == RuntimePlatform.WindowsPlayer)
+            {
+                foreach (string reserved in ReservedWindowsNames)
+                {
+                    if (sanitized.Equals(reserved, StringComparison.OrdinalIgnoreCase))
+                    {
+                        sanitized += "_"; // Append underscore to avoid conflict
+                        break;
+                    }
+                }
+            }
+            return sanitized;
+        }
+
+        /// <summary>
+        /// Validates the UniqueID as a safe folder name across platforms.
+        /// Displays a warning if invalid.
+        /// </summary>
+        /// <param name="id">The UniqueID string to validate.</param>
+        /// <returns>True if valid, false otherwise.</returns>
+        private bool ValidateUniqueID(string id)
+        {
+            string message = "";
+            MessageType type = MessageType.None;
+
+            if (string.IsNullOrWhiteSpace(id))
+            {
+                message = "Unique ID cannot be empty or whitespace.";
+                type = MessageType.Error;
+            }
+            else if (PathContainsInvalidChars(id, true)) // Treat UniqueID as a directory name
+            {
+                message = $"Unique ID contains invalid characters for a folder name (e.g., {string.Join(", ", InvalidPathChars.Where(c => id.Contains(c)).Select(c => $"'{c}'"))}).";
+                type = MessageType.Error;
+            }
+            else if (PathIsReserved(id))
+            {
+                message = $"Unique ID '{id}' is a reserved name on Windows. This might cause issues.";
+                type = MessageType.Warning;
+            }
+            
+            SetValidationMessage("UniqueID", message, type);
+            return type != MessageType.Error; // Return false only if it's an error
+        }
+
+        /// <summary>
+        /// Validates a relative file path. Checks for invalid characters and if the file exists.
+        /// </summary>
+        /// <param name="fieldNameKey">A unique key for this field's validation message (e.g., "AudioFile", "BackgroundPicture_0").</param>
+        /// <param name="relativePath">The relative path to validate.</param>
+        /// <param name="basePath">The base path (e.g., directory of the MapInfo file) to resolve the full path.</param>
+        /// <param name="allowEmpty">If true, an empty path is considered valid.</param>
+        /// <returns>True if valid, false otherwise.</returns>
+        private bool ValidateRelativePath(string fieldNameKey, string relativePath, string basePath, bool allowEmpty = false)
+        {
+            string message = "";
+            MessageType type = MessageType.None;
+
+            if (allowEmpty && string.IsNullOrEmpty(relativePath))
+            {
+                SetValidationMessage(fieldNameKey, "", MessageType.None); // Clear any previous message
+                return true;
+            }
+
+            if (string.IsNullOrWhiteSpace(relativePath))
+            {
+                message = "Path cannot be empty or whitespace.";
+                type = MessageType.Error;
+            }
+            else if (PathContainsInvalidChars(relativePath))
+            {
+                message = "Path contains invalid characters.";
+                type = MessageType.Error;
+            }
+            else if (PathIsReserved(relativePath))
+            {
+                message = $"Uses a reserved filename '{Path.GetFileName(relativePath)}' on Windows.";
+                type = MessageType.Warning;
+            }
+            else
+            {
+                string fullPath = "";
+                bool pathExists = false;
+
+                if (!string.IsNullOrEmpty(basePath))
+                {
+                    fullPath = Path.Combine(Path.GetDirectoryName(basePath), relativePath);
+                    pathExists = File.Exists(fullPath);
+                }
+                else
+                {
+                    // If MapInfo not loaded, assume relative to project Assets.
+                    fullPath = Path.Combine(Application.dataPath, relativePath);
+                    pathExists = File.Exists(fullPath);
+                    if (!pathExists)
+                    {
+                        // Also try directly resolving from project root if it's an asset path
+                        string assetFullPath = Path.GetFullPath(Path.Combine(Application.dataPath, "..", relativePath));
+                        pathExists = File.Exists(assetFullPath);
+                        if (pathExists) fullPath = assetFullPath; // Update fullPath if found
+                    }
+                }
+
+                if (!pathExists)
+                {
+                    message = $"File not found at: {fullPath}.";
+                    type = MessageType.Warning; // Changed to warning for non-existence, error for invalid path
+                }
+            }
+
+            SetValidationMessage(fieldNameKey, message, type);
+            return type != MessageType.Error; // Only return false if it's a hard error
+        }
+
+        /// <summary>
+        /// Stores a validation message and its type for a given field.
+        /// </summary>
+        private void SetValidationMessage(string fieldKey, string message, MessageType type)
+        {
+            if (string.IsNullOrEmpty(message) || type == MessageType.None)
+            {
+                validationMessages.Remove(fieldKey);
+                validationMessageTypes.Remove(fieldKey);
+            }
+            else
+            {
+                validationMessages[fieldKey] = message;
+                validationMessageTypes[fieldKey] = type;
+            }
+        }
+
+        /// <summary>
+        /// Displays a HelpBox for a given field if a validation message exists.
+        /// </summary>
+        private void DisplayValidationMessage(string fieldKey)
+        {
+            if (validationMessages.TryGetValue(fieldKey, out string message))
+            {
+                if (!string.IsNullOrEmpty(message))
+                {
+                    validationMessageTypes.TryGetValue(fieldKey, out MessageType type);
+                    EditorGUILayout.HelpBox(message, type);
+                }
+            }
+        }
+
+
+        /// <summary>
+        /// Checks if a given path string contains any characters illegal for paths.
+        /// </summary>
+        /// <param name="path">The path string to check.</param>
+        /// <param name="checkDirectoryNameSpecific">If true, checks for directory name specific invalid characters like ':' for drives.</param>
+        /// <returns>True if invalid characters are found, false otherwise.</returns>
+        private bool PathContainsInvalidChars(string path, bool checkDirectoryNameSpecific = false)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+
+            // Check for general invalid path characters
+            if (path.Any(c => InvalidPathChars.Contains(c)))
+            {
+                return true;
+            }
+
+            // For directory names, also check characters specific to drive letters like ':' if it's not part of a valid drive specification.
+            // Simplified check: if it contains ':', but not as part of "C:\", it's likely invalid.
+            if (checkDirectoryNameSpecific && path.Contains(':'))
+            {
+                 // Simple regex to check for ':' not followed by '\' (typical drive letter)
+                 // Or ':' anywhere else in the string
+                 if (Regex.IsMatch(path, @"(?<![a-zA-Z]):(?!\\)") || Regex.IsMatch(path, @"^[^:]+:$"))
+                 {
+                    return true;
+                 }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Checks if the filename part of a path is a reserved name on Windows.
+        /// This method is less strict than PathContainsInvalidChars, it's specific to Windows reserved names.
+        /// </summary>
+        /// <param name="path">The path to check.</param>
+        /// <returns>True if the filename is a reserved Windows name, false otherwise.</returns>
+        private bool PathIsReserved(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+
+            if (Application.platform == RuntimePlatform.WindowsEditor || Application.platform == RuntimePlatform.WindowsPlayer)
+            {
+                string fileName = Path.GetFileNameWithoutExtension(path);
+                foreach (string reserved in ReservedWindowsNames)
+                {
+                    if (fileName.Equals(reserved, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Performs a full validation of all critical fields before saving.
+        /// </summary>
+        /// <returns>True if all validations pass, false otherwise.</returns>
+        private bool PerformFullValidation()
+        {
+            bool allValid = true;
+
+            // Validate UniqueID
+            if (!ValidateUniqueID(mapInfo.UniqueID)) allValid = false;
+
+            // Validate Media Files
+            if (!ValidateRelativePath("AudioFile", mapInfo.AudioFile, currentlyLoadedMapInfoPath, false)) allValid = false;
+            if (!ValidateRelativePath("PreviewAudioFile", mapInfo.PreviewAudioFile, currentlyLoadedMapInfoPath, true)) allValid = false;
+            if (!ValidateRelativePath("VideoFile", mapInfo.VideoFile, currentlyLoadedMapInfoPath, true)) allValid = false;
+            if (!ValidateRelativePath("PreviewVideoFile", mapInfo.PreviewVideoFile, currentlyLoadedMapInfoPath, true)) allValid = false;
+
+            // Validate Background Pictures
+            for (int i = 0; i < currentBackgroundPictures.Count; i++)
+            {
+                if (!ValidateRelativePath($"BackgroundPicture_{i}", currentBackgroundPictures[i], currentlyLoadedMapInfoPath, false))
+                {
+                    allValid = false;
+                }
+            }
+
+            // Validate Beatmap Difficulty Files
+            if (mapInfo.BeatmapDifficultyFiles.Count == 0)
+            {
+                // This is a warning, not an error that prevents saving.
+                // We'll show a dialog to the user about it, but it doesn't set allValid to false.
+                EditorUtility.DisplayDialog("Validation Warning", "No Beatmap Difficulty Files are defined. A map usually requires at least one difficulty.", "OK");
+            }
+            else
+            {
+                for (int i = 0; i < mapInfo.BeatmapDifficultyFiles.Count; i++)
+                {
+                    if (!ValidateRelativePath($"DifficultyFile_{i}", mapInfo.BeatmapDifficultyFiles[i].DifficultyFile, currentlyLoadedMapInfoPath, false))
+                    {
+                        allValid = false;
+                    }
+                }
+            }
+
+            return allValid;
         }
 
         private int ConvertStringArrayToMask(string[] selectedTypes, string[] allOptions)
