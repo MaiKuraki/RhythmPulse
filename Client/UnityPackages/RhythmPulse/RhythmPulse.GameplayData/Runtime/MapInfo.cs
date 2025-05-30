@@ -54,15 +54,16 @@ namespace RhythmPulse.GameplayData.Runtime
     public partial struct BeatMapInfo
     {
         [YamlMember(Order = 0)]
-        public string DifficultyFile { get; set; }
-        [YamlMember(Order = 1)]
         public string MD5 { get; set; }
 
-        [YamlMember(Order = 2)]
+        [YamlMember(Order = 1)]
         public string[] BeatMapType { get; set; }
 
-        [YamlMember(Order = 3)]
+        [YamlMember(Order = 2)]
         public int Difficulty { get; set; }
+
+        [YamlMember(Order = 3)]
+        public string Version { get; set; }
     }
 
     public static class BeatMapTypeConstant
@@ -72,5 +73,6 @@ namespace RhythmPulse.GameplayData.Runtime
         public const string JustDance = "JustDance";
         public const string BeatSaber = "BeatSaber";
         public const string Taiko = "Taiko";
+        public const string Combined = "Combined";
     }
 }

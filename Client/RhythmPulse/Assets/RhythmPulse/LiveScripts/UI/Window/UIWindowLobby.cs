@@ -1,48 +1,63 @@
-using CycloneGames.Logger;
+using System.Threading;
 using CycloneGames.UIFramework;
-using R3;
+using Cysharp.Threading.Tasks;
 using RhythmPulse.APIGateway;
 using RhythmPulse.Scene;
 using UnityEngine;
-using UnityEngine.UI;
 using VContainer;
 
 namespace RhythmPulse.UI
 {
     public class UIWindowLobby : UIWindow
     {
-        [Inject] private readonly ISceneManagementAPIGateway sceneManagementAPIGateway;
-        private enum EGameMode // should not be public
-        {
-            Beats,
-            Dance
-        }
+        private IObjectResolver objectResolver;
+        private ISceneManagementAPIGateway sceneManagementAPIGateway;
 
         [SerializeField] Transform GameModeSelectionTF;
-        [SerializeField] Transform MusicSelectionTF;
-        [SerializeField] Button buttonBeatsGame;
-        [SerializeField] Button buttonDanceGame;
+        [SerializeField] Transform GameplayMapSelectionTF;
+
+        private UIPageGameModeSelection uiPageGameModeSelection;
+        private UIPageGameplayMapSelection uiPageGameplayMapSelection;
+        private bool IsDIInitialized = false;
 
         protected override void Awake()
         {
             base.Awake();
 
-            buttonBeatsGame.OnClickAsObservable().Subscribe(_ => EnterMusicSelection(EGameMode.Beats));
-            buttonDanceGame.OnClickAsObservable().Subscribe(_ => EnterMusicSelection(EGameMode.Dance));
+            uiPageGameModeSelection = GameModeSelectionTF.GetComponent<UIPageGameModeSelection>();
+            uiPageGameplayMapSelection = GameplayMapSelectionTF.GetComponent<UIPageGameplayMapSelection>();
+            RegisterElementsAfterDIInitialized(destroyCancellationToken).Forget();
         }
 
-        void EnterMusicSelection(EGameMode gameMode)
+        protected override void OnDestroy()
         {
-            switch (gameMode)
-            {
-                case EGameMode.Beats:
-                    CLogger.LogInfo("[UIWindowLobby] Enter Beats Game");
-                    break;
-                case EGameMode.Dance:
-                    CLogger.LogInfo("[UIWindowLobby] Enter Dance Game");
-                    break;
-            }
-            
+            base.OnDestroy();
+
+            IsDIInitialized = false;
+        }
+
+        [Inject]
+        void Construct(IObjectResolver objectResolver, ISceneManagementAPIGateway sceneManagementAPIGateway)
+        {
+            this.objectResolver = objectResolver;
+            this.sceneManagementAPIGateway = sceneManagementAPIGateway;
+
+            IsDIInitialized = true;
+        }
+
+        protected override void OnFinishedOpen()
+        {
+            base.OnFinishedOpen();
+
+            EnterGameModeSelection();
+        }
+
+        private async UniTask RegisterElementsAfterDIInitialized(CancellationToken cancellationToken)
+        {
+            await UniTask.WaitUntil(() => IsDIInitialized, PlayerLoopTiming.Update, cancellationToken);
+
+            objectResolver.Inject(uiPageGameModeSelection);
+            objectResolver.Inject(uiPageGameplayMapSelection);
         }
 
         void EnterGameplay()
@@ -52,14 +67,22 @@ namespace RhythmPulse.UI
 
         public void EnterGameModeSelection()
         {
-            MusicSelectionTF.gameObject.SetActive(false);
+            GameplayMapSelectionTF.gameObject.SetActive(false);
             GameModeSelectionTF.gameObject.SetActive(true);
+
+            uiPageGameModeSelection.EnterTraditionalBeatsGame -= EnterMusicSelection;
+            uiPageGameModeSelection.EnterTraditionalBeatsGame += EnterMusicSelection;
         }
 
         public void EnterMusicSelection()
         {
             GameModeSelectionTF.gameObject.SetActive(false);
-            MusicSelectionTF.gameObject.SetActive(true);
+            GameplayMapSelectionTF.gameObject.SetActive(true);
+
+            uiPageGameplayMapSelection.ClickBackEvent -= EnterGameModeSelection;
+            uiPageGameplayMapSelection.ClickBackEvent += EnterGameModeSelection;
+            uiPageGameplayMapSelection.EnterGameplayEvent -= EnterGameplay;
+            uiPageGameplayMapSelection.EnterGameplayEvent += EnterGameplay;
         }
     }
 }

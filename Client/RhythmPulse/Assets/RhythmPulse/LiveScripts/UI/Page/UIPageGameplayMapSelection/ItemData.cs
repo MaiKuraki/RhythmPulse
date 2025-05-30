@@ -4,15 +4,19 @@
  * Licensed under MIT (https://github.com/setchi/FancyScrollView/blob/master/LICENSE)
  */
 
+using System;
+
 namespace RhythmPulse.UI
 {
-    class ItemData
+    struct ItemData
     {
         public string Message { get; }
+        public Action OnSelectedEvent { get; private set; }
 
-        public ItemData(string message)
+        public ItemData(string message, in Action OnSelectedEvent = null)
         {
             Message = message;
+            this.OnSelectedEvent = OnSelectedEvent;
         }
     }
 }
