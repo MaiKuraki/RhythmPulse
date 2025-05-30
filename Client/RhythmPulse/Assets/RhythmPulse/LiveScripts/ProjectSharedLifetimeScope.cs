@@ -5,6 +5,7 @@ using CycloneGames.Service;
 using RhythmPulse.APIGateway;
 using RhythmPulse.Audio;
 using RhythmPulse.Gameplay;
+using CycloneGames.Utility.Runtime;
 
 namespace RhythmPulse
 {
@@ -19,17 +20,49 @@ namespace RhythmPulse
             builder.Register<ISceneManagementAPIGateway, SceneManagementAPIGateway>(Lifetime.Singleton);
             builder.Register<IAudioLoadService, AudioLoadService>(Lifetime.Singleton);
 
-            // TODO:
-            // This class might be better instantiated only in the Lobby scene rather than as a global singleton,
-            // because initializing the gameplay map list requires significant disk read/write operations,
-            // especially when there are many files. Keeping it in memory globally could help reduce repeated
-            // disk I/O and improve performance during gameplay.
+            // Current registration: IGameplayMapListManager and IGameplayMapStorage are registered as Singleton in the root scope.
             //
-            // NOTE:
-            // Consider the tradeoff between memory usage and I/O cost:
-            // - Creating a new instance each time (e.g., only in Lobby) leads to higher disk I/O on each initialization.
-            // - Maintaining a global singleton instance keeps the map list cached in memory, reducing disk access overhead.
+            // TODO: Consider if IGameplayMapListManager should instead be instantiated only within the Lobby scene's scope.
+            //
+            // Rationale:
+            // Initializing the gameplay map list involves potentially significant disk I/O (reading map info files),
+            // especially if there are many maps or if their storage paths change.
+            //
+            // Trade-offs:
+            // 1. Scene-Scoped Instance (e.g., Lobby Scene only):
+            //    - Pros: Reduces memory footprint if the map list is not needed outside the lobby or if cleared on scene exit.
+            //    - Cons: Leads to repeated disk I/O and loading times every time the Lobby scene is entered.
+            //
+            // 2. Global Singleton Instance (Current Approach):
+            //    - Pros: Loads maps once at application startup, keeping the list cached in memory. This significantly reduces
+            //            repeated disk access during gameplay and improves responsiveness when navigating to the lobby.
+            //    - Cons: Higher continuous memory usage throughout the application's lifetime to hold all MapInfo objects.
+            //
+            // Decision: For now, maintaining a global singleton is preferred to optimize for minimal disk I/O and smoother
+            // in-game performance, accepting the constant memory overhead. Re-evaluate if memory becomes a critical constraint.
             builder.Register<IGameplayMapStorage, GameplayMapStorage>(Lifetime.Singleton);
+            builder.Register<IGameplayMapListManager, GameplayMapListManager>(Lifetime.Singleton);
+
+            builder.RegisterEntryPoint<MapListGlobalInitializer>();
+        }
+
+        public class MapListGlobalInitializer : IStartable
+        {
+            private readonly IGameplayMapListManager _mapListManager;
+            private readonly IGameplayMapStorage _mapStorage;
+
+            public MapListGlobalInitializer(IGameplayMapListManager mapListManager, IGameplayMapStorage mapStorage)
+            {
+                _mapListManager = mapListManager;
+                _mapStorage = mapStorage;
+            }
+
+            public void Start()
+            {
+                _mapStorage.AddBasePath("DownloadedMap", UnityPathSource.PersistentData);
+                _mapListManager.LoadAllMapsAsync(UnityEngine.Application.exitCancellationToken);
+                CLogger.LogInfo("[MapListGlobalInitializer] Initiated global map list");
+            }
         }
     }
 }

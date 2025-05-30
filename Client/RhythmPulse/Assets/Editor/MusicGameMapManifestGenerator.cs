@@ -30,7 +30,7 @@ namespace RhythmPulse.Editor
         /// Generates the map manifest for the default StreamingAssets map subfolder.
         /// This should be called before building the game.
         /// </summary>
-        [MenuItem("Tools/RhythmPulse/Generate Map Manifest", priority = 2000)]
+        [MenuItem("Tools/RhythmPulse/Generate Built-In Map Manifest", priority = 2000)]
         public static void GenerateManifest()
         {
             // These constants are expected to be public in GameplayMapStorage
