@@ -1,10 +1,13 @@
-﻿/*
+/*
  * FancyScrollView (https://github.com/setchi/FancyScrollView)
  * Copyright (c) 2020 setchi
  * Licensed under MIT (https://github.com/setchi/FancyScrollView/blob/master/LICENSE)
  */
 
+using CycloneGames.Logger;
 using FancyScrollView;
+using R3;
+using R3.Triggers;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -12,34 +15,61 @@ namespace RhythmPulse.UI
 {
     class Cell : FancyCell<ItemData, Context>
     {
+        [SerializeField] Transform focusFlagTF = default;
         [SerializeField] Animator animator = default;
         [SerializeField] Text message = default;
-        [SerializeField] Text messageLarge = default;
         [SerializeField] Image image = default;
-        [SerializeField] Image imageLarge = default;
         [SerializeField] Button button = default;
+
+        private ItemData cachedItemData;
+        private bool isIndexSelected;
+        private bool isFocused;         //  To avoid multiple element in screen, the indexSelected may be not only one, this flag can filter it
 
         static class AnimatorHash
         {
             public static readonly int Scroll = Animator.StringToHash("scroll");
         }
 
+        void Awake()
+        {
+            focusFlagTF.OnEnableAsObservable().Subscribe(_ => { OnFocusChanged(true); }).AddTo(this);
+            focusFlagTF.OnDisableAsObservable().Subscribe(_ => { OnFocusChanged(false); }).AddTo(this);
+        }
+
+        void OnDestroy()
+        {
+            cachedItemData = null;
+        }
+
         void Start()
         {
-            button.onClick.AddListener(() => Context.OnCellClicked?.Invoke(Index));
+            button.onClick.AddListener(OnSelected);
+        }
+
+        private void OnFocusChanged(bool isFocused)
+        {
+            this.isFocused = isFocused;
+
+
         }
 
         public override void UpdateContent(ItemData itemData)
         {
+            cachedItemData = itemData;
             message.text = itemData.Message;
-            messageLarge.text = Index.ToString();
+            isIndexSelected = Context.SelectedIndex == Index;
 
-            var selected = Context.SelectedIndex == Index;
-            imageLarge.color = image.color = selected
-                ? new Color32(0, 255, 255, 100)
-                : new Color32(255, 255, 255, 77);
-                
-            if (selected) itemData.OnSelectedEvent?.Invoke();
+            if (isIndexSelected && isFocused)
+            {
+                OnSelected();
+            }
+        }
+
+        private void OnSelected()
+        {
+            Context.OnCellClicked?.Invoke(Index);
+            cachedItemData.OnSelectedEvent?.Invoke();
+            CLogger.LogInfo($"[UIPageGameplayMapSelection] Selected {cachedItemData.Message}, index: {Index}");
         }
 
         public override void UpdatePosition(float position)

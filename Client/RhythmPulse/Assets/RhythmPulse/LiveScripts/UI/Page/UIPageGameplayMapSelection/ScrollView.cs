@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using EasingCore;
 using FancyScrollView;
+using System;
 
 namespace RhythmPulse.UI
 {

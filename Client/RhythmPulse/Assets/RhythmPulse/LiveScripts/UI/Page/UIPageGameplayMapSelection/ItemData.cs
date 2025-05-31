@@ -8,7 +8,8 @@ using System;
 
 namespace RhythmPulse.UI
 {
-    struct ItemData
+    //  CAUTION: should not be struct
+    class ItemData
     {
         public string Message { get; }
         public Action OnSelectedEvent { get; private set; }

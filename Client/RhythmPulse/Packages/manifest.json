@@ -47,7 +47,7 @@
     "jp.hadashikick.vcontainer": "https://github.com/hadashiA/VContainer.git?path=VContainer/Assets/VContainer",
     "jp.hadashikick.vitalrouter": "https://github.com/hadashiA/VitalRouter.git?path=/src/VitalRouter.Unity/Assets/VitalRouter",
     "jp.hadashikick.vyaml": "https://github.com/hadashiA/VYaml.git?path=VYaml.Unity/Assets/VYaml",
-    "jp.setchi.fancyscrollview": "https://github.com/setchi/FancyScrollView.git#upm",
+    "jp.setchi.fancyscrollview": "file:../../UnityPackages/CycloneGames/jp.setchi.fancyscrollview",
     "com.unity.modules.androidjni": "1.0.0",
     "com.unity.modules.animation": "1.0.0",
     "com.unity.modules.assetbundle": "1.0.0",
