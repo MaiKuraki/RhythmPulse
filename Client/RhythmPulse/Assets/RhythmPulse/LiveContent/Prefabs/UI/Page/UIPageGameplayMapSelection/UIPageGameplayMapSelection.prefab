@@ -1293,6 +1293,7 @@ MonoBehaviour:
   enterMusicGameplayButton: {fileID: 4451509419766545039}
   backButton: {fileID: 8751954954929092355}
   Text_MapDisplayName: {fileID: 6496143421136183566}
+  rawImg_PreviewVideoScreen: {fileID: 4934752286686670113}
 --- !u!1 &4358946002625482101
 GameObject:
   m_ObjectHideFlags: 0

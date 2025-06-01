@@ -1,26 +1,19 @@
-﻿/*
- * FancyScrollView (https://github.com/setchi/FancyScrollView)
- * Copyright (c) 2020 setchi
- * Licensed under MIT (https://github.com/setchi/FancyScrollView/blob/master/LICENSE)
- */
-
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 using EasingCore;
 using FancyScrollView;
 using Cysharp.Threading.Tasks;
 using System.Threading;
-using TMPro;
 using System;
 
 namespace RhythmPulse.UI
 {
     class MapListScrollView : FancyScrollView<ItemData, MapListContext>
     {
-        private const string DEBUG_FLAG = "[ScrollView]";
+        private const string DEBUG_FLAG = "[MapListScrollView]";
         [SerializeField] Scroller scroller = default;
         [SerializeField] GameObject cellPrefab = default;
-        public Action<string> OnUpdateMapDisplayName;
+        public Action<ItemData> OnSelectedEvent;
         protected override GameObject CellPrefab => cellPrefab;
         private CancellationTokenSource cancelOnSelection;
 
@@ -87,7 +80,8 @@ namespace RhythmPulse.UI
             await UniTask.WaitUntil(() => index >= 0 && ItemsSource.Count > index && ItemsSource[index] != null, PlayerLoopTiming.Update, cancellationToken: cancellationTokenSource.Token);
             if (cancellationTokenSource != null && cancellationTokenSource.IsCancellationRequested) return;
             ItemData data = ItemsSource[index];
-            OnUpdateMapDisplayName?.Invoke(data.MapInfo.DisplayName);
+            // OnUpdateMapDisplayName?.Invoke(data.MapInfo.DisplayName);
+            OnSelectedEvent?.Invoke(data);
         }
     }
 }

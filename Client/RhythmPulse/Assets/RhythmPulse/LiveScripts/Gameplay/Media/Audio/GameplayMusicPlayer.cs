@@ -13,6 +13,7 @@ namespace RhythmPulse.Gameplay.Media
         long GetPlaybackTimeMSec();
         long GetCurrentMusicLengthMSec();
         void SeekTime(long milliSeconds);
+        bool IsAnyAudioInitialized { get; }
     }
     public class GameplayMusicPlayer : IGameplayMusicPlayer
     {
@@ -22,6 +23,7 @@ namespace RhythmPulse.Gameplay.Media
         private MonoObjectPool<GameAudioData, GameAudioSource> GameplayMusicPlayerSpawner;
 
         private GameAudioSource MusicPlayer;
+        public bool IsAnyAudioInitialized { get; private set; } = false;
 
         public GameplayMusicPlayer(IUnityObjectSpawner spawner, IAudioLoadService audioLoadService)
         {
@@ -33,30 +35,37 @@ namespace RhythmPulse.Gameplay.Media
                 audioLoadService.AudioSourcePrefab,
                 initialSize: 5,
                 autoExpand: true);
+            IsAnyAudioInitialized = false;
         }
 
         public void InitializeMusicPlayer(in string InAudioKey)
         {
             MusicPlayer = GameplayMusicPlayerSpawner.Spawn(new GameAudioData() { Key = InAudioKey });
+            IsAnyAudioInitialized = true;
         }
 
         public void Play()
         {
+            if (!IsAnyAudioInitialized) return;
             MusicPlayer.Play();
         }
 
         public void Stop()
         {
+            if (!IsAnyAudioInitialized) return;
             MusicPlayer.Stop();
+            MusicPlayer.Dispose();
         }
 
         public void Pause()
         {
+            if (!IsAnyAudioInitialized) return;
             MusicPlayer.Pause();
         }
 
         public void Resume()
         {
+            if (!IsAnyAudioInitialized) return;
             MusicPlayer.Resume();
         }
 
@@ -72,6 +81,7 @@ namespace RhythmPulse.Gameplay.Media
 
         public void SeekTime(long milliSeconds)
         {
+            if (!IsAnyAudioInitialized) return;
             MusicPlayer.SeekTime(milliSeconds);
         }
     }
