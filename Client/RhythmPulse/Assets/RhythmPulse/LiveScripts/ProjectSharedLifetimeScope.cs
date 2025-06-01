@@ -19,6 +19,7 @@ namespace RhythmPulse
             builder.Register<IMainCameraService, MainCameraService>(Lifetime.Singleton);
             builder.Register<ISceneManagementAPIGateway, SceneManagementAPIGateway>(Lifetime.Singleton);
             builder.Register<IAudioLoadService, AudioLoadService>(Lifetime.Singleton);
+            builder.Register<IGraphicsSettingService, GraphicsSettingService>(Lifetime.Singleton);
 
             // Current registration: IGameplayMapListManager and IGameplayMapStorage are registered as Singleton in the root scope.
             //

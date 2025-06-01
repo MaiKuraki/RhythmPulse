@@ -8,7 +8,7 @@ using System;
 
 namespace RhythmPulse.UI
 {
-    class Context
+    class MapListContext
     {
         public int SelectedIndex = -1;
         public Action<int> OnCellClicked;

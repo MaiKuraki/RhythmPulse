@@ -640,7 +640,7 @@ MonoBehaviour:
   m_ScaleFactor: 1
   m_ReferenceResolution: {x: 1920, y: 1080}
   m_ScreenMatchMode: 0
-  m_MatchWidthOrHeight: 0
+  m_MatchWidthOrHeight: 1
   m_PhysicalUnit: 3
   m_FallbackScreenDPI: 96
   m_DefaultSpriteDPI: 96
@@ -676,6 +676,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   uiCamera: {fileID: 3958452647132265685}
+  rootCanvas: {fileID: 1829424644366056119}
   layerList:
   - {fileID: 8768717838796671695}
   - {fileID: 8226342061321188178}
@@ -952,6 +953,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1591f15ee7beebd4ea9b8ed8b4f7f8a0, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  _singleton: 1
 --- !u!1 &7570054887685489008
 GameObject:
   m_ObjectHideFlags: 0

@@ -13,8 +13,9 @@ using UnityEngine.UI;
 
 namespace RhythmPulse.UI
 {
-    class Cell : FancyCell<ItemData, Context>
+    class MapListCell : FancyCell<ItemData, MapListContext>
     {
+        private const string DEBUG_FLAG = "[Cell]";
         [SerializeField] Transform focusFlagTF = default;
         [SerializeField] Animator animator = default;
         [SerializeField] Text message = default;
@@ -49,14 +50,12 @@ namespace RhythmPulse.UI
         private void OnFocusChanged(bool isFocused)
         {
             this.isFocused = isFocused;
-
-
         }
 
         public override void UpdateContent(ItemData itemData)
         {
             cachedItemData = itemData;
-            message.text = itemData.Message;
+            message.text = itemData.MapInfo.DisplayName;
             isIndexSelected = Context.SelectedIndex == Index;
 
             if (isIndexSelected && isFocused)
@@ -69,7 +68,7 @@ namespace RhythmPulse.UI
         {
             Context.OnCellClicked?.Invoke(Index);
             cachedItemData.OnSelectedEvent?.Invoke();
-            CLogger.LogInfo($"[UIPageGameplayMapSelection] Selected {cachedItemData.Message}, index: {Index}");
+            CLogger.LogInfo($"{DEBUG_FLAG} Selected {cachedItemData.MapInfo}, index: {Index}");
         }
 
         public override void UpdatePosition(float position)

@@ -5,18 +5,19 @@
  */
 
 using System;
+using RhythmPulse.GameplayData.Runtime;
 
 namespace RhythmPulse.UI
 {
     //  CAUTION: should not be struct
     class ItemData
     {
-        public string Message { get; }
+        public MapInfo MapInfo { get; }
         public Action OnSelectedEvent { get; private set; }
 
-        public ItemData(string message, in Action OnSelectedEvent = null)
+        public ItemData(MapInfo mapInfo, in Action OnSelectedEvent = null)
         {
-            Message = message;
+            MapInfo = mapInfo;
             this.OnSelectedEvent = OnSelectedEvent;
         }
     }
