@@ -102,11 +102,19 @@ namespace RhythmPulse.Gameplay
             await audioLoadService.LoadAudioAsync(FilePathUtility.GetUnityWebRequestUri(mapStorage.GetAudioPath(gameplayData.MapInfo), UnityPathSource.AbsoluteOrFullUri));
             if (cancel.IsCancellationRequested)
             {
-                CLogger.LogWarning($"{DEBUG_FLAG} Gameplay media loading cancelled.");
                 return;
             }
             gameplayMusicPlayer.InitializeMusicPlayer(FilePathUtility.GetUnityWebRequestUri(mapStorage.GetAudioPath(gameplayData.MapInfo), UnityPathSource.AbsoluteOrFullUri));
-            gameplayVideoPlayer.InitializeVideoPlayer(FilePathUtility.GetUnityWebRequestUri(mapStorage.GetVideoPath(gameplayData.MapInfo), UnityPathSource.AbsoluteOrFullUri));
+            bool isVideoPrepared = false;
+            gameplayVideoPlayer.InitializeVideoPlayer(
+                                    videoUrl: FilePathUtility.GetUnityWebRequestUri(mapStorage.GetVideoPath(gameplayData.MapInfo), UnityPathSource.AbsoluteOrFullUri),
+                                    bLoop: false,
+                                    OnPrepared: () => { isVideoPrepared = true; });
+            await UniTask.WaitUntil(() => isVideoPrepared, PlayerLoopTiming.Update, cancel.Token);
+            if (cancel.IsCancellationRequested)
+            {
+                return;
+            }
 
             gameplayVideoRender.SetTargetTexture(((GameplayVideoPlayer)gameplayVideoPlayer).VideoTexture);
 

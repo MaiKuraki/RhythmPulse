@@ -53,6 +53,11 @@ namespace RhythmPulse.Audio
 
         public async UniTask<AudioClip> LoadAudioAsync(string path)
         {
+            if (!isInitialized || audioManagerInstance == null)
+            {
+                // CycloneGames.Logger.CLogger.LogError($"{DEBUG_FLAG} Service not initialized or AudioManager not available.");
+                return null;
+            }
             return await audioManagerInstance.LoadAudioAsync(path);
         }
 

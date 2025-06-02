@@ -20,7 +20,7 @@ namespace RhythmPulse.Audio
         private IAudioLoadService audioLoadService;
         private AudioSource audioSource;
         private AudioClip audioClip = null;
-        private static long currentAudioClipLength = 0;
+        private long instanceAudioClipLength = 0;
 
         [Inject]
         public void Construct(IAudioLoadService audioLoadService)
@@ -50,23 +50,38 @@ namespace RhythmPulse.Audio
 
         public void Play()
         {
-            if (_data.Equals(default)) return;
+            if (_data.Equals(default(GameAudioData))) return;
 
             if (!audioLoadService.GetLoadedClips().TryGetValue(_data.Key, out audioClip))
             {
                 CLogger.LogWarning($"{DEBUG_FLAG} Audio clip not found for key: {_data.Key}");
                 return;
             }
+            if (audioLoadService == null || !audioLoadService.GetLoadedClips().TryGetValue(_data.Key, out audioClip))
+            {
+                // CycloneGames.Logger.CLogger.LogError($"{DEBUG_FLAG} Audio clip not found for key: {_data.Key} or audioLoadService is null.");
+                return;
+            }
+            if (audioClip == null)
+            {
+                // CycloneGames.Logger.CLogger.LogError($"{DEBUG_FLAG} Loaded audio clip is null for key: {_data.Key}.");
+                return;
+            }
+            if (audioSource == null)
+            {
+                // CycloneGames.Logger.CLogger.LogError($"{DEBUG_FLAG} AudioSource component is null.");
+                return;
+            }
 
             audioSource.clip = audioClip;
-            currentAudioClipLength = (long)(audioClip.length * 1000f);
+            instanceAudioClipLength = (long)(audioClip.length * 1000f);
             audioSource.Play();
         }
 
         public void Stop()
         {
-            audioSource.Stop();
-            currentAudioClipLength = 0;
+            audioSource?.Stop();
+            instanceAudioClipLength = 0;
         }
 
         public void Pause()
@@ -86,7 +101,7 @@ namespace RhythmPulse.Audio
 
         public long GetAudioClipLengthMSec()
         {
-            return currentAudioClipLength;
+            return instanceAudioClipLength;
         }
 
         public void SeekTime(long milliSeconds)
@@ -108,9 +123,14 @@ namespace RhythmPulse.Audio
 
         public void Dispose()
         {
-            audioSource?.Stop();
+            if (audioSource != null)
+            {
+                audioSource.Stop();
+                audioSource.clip = null;
+            }
             audioClip = null;
-
+            instanceAudioClipLength = 0;
+            
             _pool?.Despawn(this);
         }
 

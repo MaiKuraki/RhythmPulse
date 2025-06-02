@@ -1,4 +1,3 @@
-using System;
 using CycloneGames.Factory;
 using RhythmPulse.Audio;
 
@@ -41,6 +40,10 @@ namespace RhythmPulse.Gameplay.Media
 
         public void InitializeMusicPlayer(in string InAudioKey, bool bLoop = false)
         {
+            if (MusicPlayer != null)
+            {
+                MusicPlayer.Dispose();
+            }
             MusicPlayer = GameplayMusicPlayerSpawner.Spawn(new GameAudioData() { Key = InAudioKey });
             MusicPlayer.SetLoop(bLoop);
             IsAnyAudioInitialized = true;
@@ -56,7 +59,9 @@ namespace RhythmPulse.Gameplay.Media
         {
             if (!IsAnyAudioInitialized) return;
             MusicPlayer.Stop();
-            MusicPlayer.Dispose();
+            GameplayMusicPlayerSpawner.Despawn(MusicPlayer);
+            MusicPlayer = null;
+            IsAnyAudioInitialized = false;
         }
 
         public void Pause()

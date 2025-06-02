@@ -160,11 +160,22 @@ namespace RhythmPulse.UI
         private async UniTask UpdateMediaDataAsync(ItemData itemData, CancellationTokenSource cancellationTokenSource)
         {
             await audioLoadService.LoadAudioAsync(FilePathUtility.GetUnityWebRequestUri(mapStorage.GetPreviewAudioPath(itemData.MapInfo), UnityPathSource.AbsoluteOrFullUri));
-
+            if (cancellationTokenSource.IsCancellationRequested)
+            {
+                return;
+            }
             timeline.Stop();
             musicPlayer.InitializeMusicPlayer(FilePathUtility.GetUnityWebRequestUri(mapStorage.GetPreviewAudioPath(itemData.MapInfo), UnityPathSource.AbsoluteOrFullUri), true);
-            videoPlayer.InitializeVideoPlayer(FilePathUtility.GetUnityWebRequestUri(mapStorage.GetPreviewVideoPath(itemData.MapInfo), UnityPathSource.AbsoluteOrFullUri), true);
-
+            bool isVideoPrepared = false;
+            videoPlayer.InitializeVideoPlayer(
+                videoUrl: FilePathUtility.GetUnityWebRequestUri(mapStorage.GetPreviewVideoPath(itemData.MapInfo), UnityPathSource.AbsoluteOrFullUri),
+                bLoop: true,
+                OnPrepared: () => { isVideoPrepared = true; });
+            await UniTask.WaitUntil(() => isVideoPrepared, PlayerLoopTiming.Update, cancellationTokenSource.Token);
+            if (cancellationTokenSource.IsCancellationRequested)
+            {
+                return;
+            }
             rawImg_PreviewVideoScreen.texture = ((GameplayVideoPlayer)videoPlayer).VideoTexture;
 
             timeline.Play();
