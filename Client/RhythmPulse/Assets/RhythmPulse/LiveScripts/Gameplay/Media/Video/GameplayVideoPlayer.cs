@@ -166,10 +166,8 @@ namespace RhythmPulse.Gameplay.Media
                 return;
             }
 
-            if (videoPlayer.isPlaying || videoPlayer.isPaused || videoPlayer.isPrepared || videoPlayer.isLooping)
-            {
-                videoPlayer.Stop();
-            }
+            videoPlayer.Stop();
+            videoPlayer.url = string.Empty;
 
             // Always unsubscribe before subscribing to prevent multiple event registrations.
             videoPlayer.prepareCompleted -= OnVideoPreparedInternal;
@@ -186,7 +184,7 @@ namespace RhythmPulse.Gameplay.Media
             videoPlayer.errorReceived += OnVideoError;
             videoPlayer.loopPointReached += OnVideoLoopPointReached;
 
-            CLogger.LogInfo($"{DEBUG_FLAG} Preparing video: {videoUrl}");
+            // CLogger.LogInfo($"{DEBUG_FLAG} Preparing video: {videoUrl}");
             videoPlayer.Prepare();
         }
 
