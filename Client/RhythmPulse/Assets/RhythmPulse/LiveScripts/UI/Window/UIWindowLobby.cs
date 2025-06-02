@@ -60,9 +60,9 @@ namespace RhythmPulse.UI
             objectResolver.Inject(uiPageGameplayMapSelection);
         }
 
-        void EnterGameplay()
+        void EnterGameplay(Gameplay.GameplayData gameplayData)
         {
-            sceneManagementAPIGateway.Push(SceneDefinitions.Gameplay);
+            sceneManagementAPIGateway.Push(SceneDefinitions.Gameplay, null, gameplayData, null);
         }
 
         public void EnterGameModeSelection()

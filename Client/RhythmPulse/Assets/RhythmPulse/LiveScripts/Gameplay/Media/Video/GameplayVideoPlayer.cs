@@ -129,6 +129,7 @@ namespace RhythmPulse.Gameplay.Media
         {
             videoPlayer.url = videoUrl;
             videoPlayer.isLooping = bLoop;
+            videoPlayer.Prepare();
         }
     }
 }

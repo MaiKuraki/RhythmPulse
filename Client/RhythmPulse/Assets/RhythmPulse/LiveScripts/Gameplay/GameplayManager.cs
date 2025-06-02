@@ -17,9 +17,11 @@ namespace RhythmPulse.Gameplay
 {
     public class GameplayManager : MonoBehaviour
     {
+        private const string DEBUG_FLAG = "[GameplayManager]";
         private bool IsDIInitialized = false;
         private IMainCameraService mainCameraService;
         private IAudioLoadService audioLoadService;
+        private IGameplayMapStorage mapStorage;
         private IGameplayMusicPlayer gameplayMusicPlayer;
         private IGameplayVideoPlayer gameplayVideoPlayer;
         private ITimeline gameplayTimeline;
@@ -30,10 +32,12 @@ namespace RhythmPulse.Gameplay
 
         public Timeline GameplayTimeline => (Timeline)gameplayTimeline;
         public Action<float> OnUpdatePlaybackProgress { get; set; }
+        private bool IsGameplayMediaReady = false;
 
         [Inject]
         public void Construct(IMainCameraService mainCameraService,
                         IAudioLoadService audioLoadService,
+                        IGameplayMapStorage mapStorage,
                         IGameplayMusicPlayer gameplayMusicPlayer,
                         IGameplayVideoPlayer gameplayVideoPlayer,
                         ITimeline gameplayTimeline,
@@ -42,6 +46,7 @@ namespace RhythmPulse.Gameplay
         {
             this.mainCameraService = mainCameraService;
             this.audioLoadService = audioLoadService;
+            this.mapStorage = mapStorage;
             this.gameplayMusicPlayer = gameplayMusicPlayer;
             this.gameplayVideoPlayer = gameplayVideoPlayer;
             this.gameplayTimeline = gameplayTimeline;
@@ -58,20 +63,22 @@ namespace RhythmPulse.Gameplay
             if (cancellationToken.IsCancellationRequested) return;
             mainCameraService.AddCameraToStack(gameplayCamera, 0);
 
-            //  Test code
-            await InitializeMedias();
-            gameplayTimeline.Play();
+            await UniTask.WaitUntil(() => IsGameplayMediaReady, PlayerLoopTiming.Update, cancellationToken);
+            if (cancellationToken.IsCancellationRequested) return;
+
+            gameplayTimeline.Play();    //  TODO: may be move to sceneLifecycle?
         }
 
         void Awake()
         {
+            IsGameplayMediaReady = false;
             RunAfterDIInitialized(destroyCancellationToken).Forget();
         }
 
         private void Update()
         {
             if (!IsDIInitialized) return;
-            
+
             if (GameplayTimeline != null)
             {
                 GameplayTimeline?.Tick();
@@ -90,16 +97,20 @@ namespace RhythmPulse.Gameplay
             }
         }
 
-        private async UniTask InitializeMedias()
+        public async UniTask InitializeMedias(Gameplay.GameplayData gameplayData, CancellationTokenSource cancel)
         {
-            await audioLoadService.LoadAudioAsync(FilePathUtility.GetUnityWebRequestUri(System.IO.Path.GetFullPath("./MusicGameMedias/AyaHirano-GodKnows/AyaHirano-GodKnows_audio.ogg"), UnityPathSource.StreamingAssets));
-            await audioLoadService.LoadAudioAsync(FilePathUtility.GetUnityWebRequestUri(System.IO.Path.GetFullPath("./MusicGameMedias/Doa-Hero/Doa-Hero_audio.ogg"), UnityPathSource.StreamingAssets));
-            await audioLoadService.LoadAudioAsync(FilePathUtility.GetUnityWebRequestUri(System.IO.Path.GetFullPath("./MusicGameMedias/MikaNakashima-GLAMOROUS_SKY/MikaNakashima-GLAMOROUS_SKY_audio.ogg"), UnityPathSource.StreamingAssets));
-
-            gameplayMusicPlayer.InitializeMusicPlayer(FilePathUtility.GetUnityWebRequestUri(System.IO.Path.GetFullPath("./MusicGameMedias/MikaNakashima-GLAMOROUS_SKY/MikaNakashima-GLAMOROUS_SKY_audio.ogg"), UnityPathSource.AbsoluteOrFullUri));
-            gameplayVideoPlayer.InitializeVideoPlayer(FilePathUtility.GetUnityWebRequestUri(System.IO.Path.GetFullPath("./MusicGameMedias/MikaNakashima-GLAMOROUS_SKY/MikaNakashima-GLAMOROUS_SKY_video.mp4"), UnityPathSource.AbsoluteOrFullUri));
+            await audioLoadService.LoadAudioAsync(FilePathUtility.GetUnityWebRequestUri(mapStorage.GetAudioPath(gameplayData.MapInfo), UnityPathSource.AbsoluteOrFullUri));
+            if (cancel.IsCancellationRequested)
+            {
+                CLogger.LogWarning($"{DEBUG_FLAG} Gameplay media loading cancelled.");
+                return;
+            }
+            gameplayMusicPlayer.InitializeMusicPlayer(FilePathUtility.GetUnityWebRequestUri(mapStorage.GetAudioPath(gameplayData.MapInfo), UnityPathSource.AbsoluteOrFullUri));
+            gameplayVideoPlayer.InitializeVideoPlayer(FilePathUtility.GetUnityWebRequestUri(mapStorage.GetVideoPath(gameplayData.MapInfo), UnityPathSource.AbsoluteOrFullUri));
 
             gameplayVideoRender.SetTargetTexture(((GameplayVideoPlayer)gameplayVideoPlayer).VideoTexture);
+
+            IsGameplayMediaReady = true;
         }
 
         public float GetCurrentMusicPlaybackProgress()

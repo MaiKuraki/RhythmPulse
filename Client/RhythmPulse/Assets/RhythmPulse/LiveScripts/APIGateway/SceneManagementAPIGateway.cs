@@ -1,14 +1,21 @@
+using System.Threading;
+using Cysharp.Threading.Tasks;
+using MackySoft.Navigathena;
 using MackySoft.Navigathena.SceneManagement;
+using MackySoft.Navigathena.Transitions;
 
 namespace RhythmPulse.APIGateway
 {
     public interface ISceneManagementAPIGateway
     {
-        void Push(ISceneIdentifier sceneIdentifier);
+        UniTask Push(ISceneIdentifier scene, ITransitionDirector transitionDirector = null, ISceneData data = null, IAsyncOperation interruptOperation = null, CancellationToken cancellationToken = default(CancellationToken));
     }
     public class SceneManagementAPIGateway : ISceneManagementAPIGateway
     {
-        public void Push(ISceneIdentifier sceneIdentifier) => GlobalSceneNavigator.Instance.Push(sceneIdentifier);
+        public UniTask Push(ISceneIdentifier scene, ITransitionDirector transitionDirector = null, ISceneData data = null, IAsyncOperation interruptOperation = null, CancellationToken cancellationToken = default(CancellationToken))
+        {
+            return GlobalSceneNavigator.Instance.Push(scene, transitionDirector, data, interruptOperation, cancellationToken);
+        }
     }
 }
 

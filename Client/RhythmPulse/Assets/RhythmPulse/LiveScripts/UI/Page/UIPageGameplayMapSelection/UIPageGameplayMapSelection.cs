@@ -1,9 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Text;
 using System.Threading;
 using CycloneGames.Logger;
-using CycloneGames.Service;
 using CycloneGames.UIFramework;
 using CycloneGames.Utility.Runtime;
 using Cysharp.Threading.Tasks;
@@ -11,7 +9,6 @@ using R3;
 using RhythmPulse.Audio;
 using RhythmPulse.Gameplay;
 using RhythmPulse.Gameplay.Media;
-using RhythmPulse.GameplayData.Runtime;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -28,7 +25,7 @@ namespace RhythmPulse.UI
         [SerializeField] TMP_Text Text_MapDisplayName;
         [SerializeField] RawImage rawImg_PreviewVideoScreen;
 
-        public Action EnterGameplayEvent;
+        public Action<Gameplay.GameplayData> EnterGameplayEvent;
         public Action ClickBackEvent;
         private IGameplayMapListManager gameplayMapListManager;
         private IUIService uiService;
@@ -42,9 +39,10 @@ namespace RhythmPulse.UI
         private CancellationTokenSource cancelForSelection;
         private CancellationTokenSource cancelForMediaInfoUpdate;
         public Timeline PreviewVideoTimeline => (Timeline)timeline;
+        private Gameplay.GameplayData gameplayData = default(Gameplay.GameplayData);
         void Awake()
         {
-            enterMusicGameplayButton.OnClickAsObservable().Subscribe(_ => EnterGameplay());
+            enterMusicGameplayButton.OnClickAsObservable().Subscribe(_ => EnterGameplay(gameplayData));
             backButton.OnClickAsObservable().Subscribe(_ => ClickBack());
             scrollView.OnSelectedEvent -= OnSelectItem;
             scrollView.OnSelectedEvent += OnSelectItem;
@@ -130,9 +128,9 @@ namespace RhythmPulse.UI
             scrollView.ForceUpdateSelectionAsync(0, cancelForSelection).Forget();
         }
 
-        void EnterGameplay()
+        void EnterGameplay(Gameplay.GameplayData gameplayData)
         {
-            EnterGameplayEvent?.Invoke();
+            EnterGameplayEvent?.Invoke(gameplayData);
         }
 
         void ClickBack()
@@ -145,12 +143,17 @@ namespace RhythmPulse.UI
         {
             Text_MapDisplayName.SetText(itemData.MapInfo.DisplayName);
 
-            if (cancelForMediaInfoUpdate != null && cancelForMediaInfoUpdate.IsCancellationRequested)
+            if (cancelForMediaInfoUpdate != null)
             {
                 cancelForMediaInfoUpdate.Cancel();
                 cancelForMediaInfoUpdate.Dispose();
             }
             cancelForMediaInfoUpdate = new CancellationTokenSource();
+            gameplayData = new Gameplay.GameplayData()
+            {
+                MapInfo = itemData.MapInfo,
+                BeatMapFileName = "ToBeImplemented.yaml"
+            };
             UpdateMediaDataAsync(itemData, cancelForMediaInfoUpdate).Forget();
         }
 
