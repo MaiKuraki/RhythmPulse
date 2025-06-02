@@ -43,6 +43,11 @@ namespace RhythmPulse.Audio
             this.audioLoadService = audioLoadService;
         }
 
+        public void SetLoop(bool loop)
+        {
+            audioSource.loop = loop;
+        }
+
         public void Play()
         {
             if (_data.Equals(default)) return;

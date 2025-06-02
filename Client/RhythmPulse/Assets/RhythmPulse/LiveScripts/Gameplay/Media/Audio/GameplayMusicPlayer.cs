@@ -5,7 +5,7 @@ namespace RhythmPulse.Gameplay.Media
 {
     public interface IGameplayMusicPlayer
     {
-        void InitializeMusicPlayer(in string InAudioKey);
+        void InitializeMusicPlayer(in string InAudioKey, bool bLoop = false);
         void Play();
         void Stop();
         void Pause();
@@ -38,9 +38,10 @@ namespace RhythmPulse.Gameplay.Media
             IsAnyAudioInitialized = false;
         }
 
-        public void InitializeMusicPlayer(in string InAudioKey)
+        public void InitializeMusicPlayer(in string InAudioKey, bool bLoop = false)
         {
             MusicPlayer = GameplayMusicPlayerSpawner.Spawn(new GameAudioData() { Key = InAudioKey });
+            MusicPlayer.SetLoop(bLoop);
             IsAnyAudioInitialized = true;
         }
 

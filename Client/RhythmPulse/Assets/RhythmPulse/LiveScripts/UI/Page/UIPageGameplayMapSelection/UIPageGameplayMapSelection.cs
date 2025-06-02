@@ -41,6 +41,7 @@ namespace RhythmPulse.UI
         private List<ItemData> items = new List<ItemData>();
         private CancellationTokenSource cancelForSelection;
         private CancellationTokenSource cancelForMediaInfoUpdate;
+        public Timeline PreviewVideoTimeline => (Timeline)timeline;
         void Awake()
         {
             enterMusicGameplayButton.OnClickAsObservable().Subscribe(_ => EnterGameplay());
@@ -98,6 +99,16 @@ namespace RhythmPulse.UI
             }
         }
 
+        void Update()
+        {
+            if (!IsDIInitialized) return;
+
+            if (PreviewVideoTimeline != null)
+            {
+                PreviewVideoTimeline?.Tick();   //  For AV-Sync
+            }
+        }
+
         async UniTask InitializeMapListAfterDIInitialized(CancellationToken cancellationToken)
         {
             await UniTask.WaitUntil(() => IsDIInitialized /* && gameplayMapListManager.Initialized */, PlayerLoopTiming.Update, cancellationToken);
@@ -126,6 +137,7 @@ namespace RhythmPulse.UI
 
         void ClickBack()
         {
+            timeline.Stop();
             ClickBackEvent?.Invoke();
         }
 
@@ -147,8 +159,8 @@ namespace RhythmPulse.UI
             await audioLoadService.LoadAudioAsync(FilePathUtility.GetUnityWebRequestUri(mapStorage.GetPreviewAudioPath(itemData.MapInfo), UnityPathSource.AbsoluteOrFullUri));
 
             timeline.Stop();
-            musicPlayer.InitializeMusicPlayer(FilePathUtility.GetUnityWebRequestUri(mapStorage.GetPreviewAudioPath(itemData.MapInfo), UnityPathSource.AbsoluteOrFullUri));
-            videoPlayer.InitializeVideoPlayer(FilePathUtility.GetUnityWebRequestUri(mapStorage.GetPreviewVideoPath(itemData.MapInfo), UnityPathSource.AbsoluteOrFullUri));
+            musicPlayer.InitializeMusicPlayer(FilePathUtility.GetUnityWebRequestUri(mapStorage.GetPreviewAudioPath(itemData.MapInfo), UnityPathSource.AbsoluteOrFullUri), true);
+            videoPlayer.InitializeVideoPlayer(FilePathUtility.GetUnityWebRequestUri(mapStorage.GetPreviewVideoPath(itemData.MapInfo), UnityPathSource.AbsoluteOrFullUri), true);
 
             rawImg_PreviewVideoScreen.texture = ((GameplayVideoPlayer)videoPlayer).VideoTexture;
 
