@@ -24,6 +24,7 @@ namespace RhythmPulse.UI
         [SerializeField] Button backButton = default;
         [SerializeField] TMP_Text Text_MapDisplayName;
         [SerializeField] RawImage rawImg_PreviewVideoScreen;
+        [SerializeField] int confirmDelayMs = 100;
 
         public Action<Gameplay.GameplayData> EnterGameplayEvent;
         public Action ClickBackEvent;
@@ -79,6 +80,14 @@ namespace RhythmPulse.UI
         void OnDestroy()
         {
             IsDIInitialized = false;
+
+            cancelForSelection?.Cancel();
+            cancelForSelection?.Dispose();
+            cancelForSelection = null;
+
+            cancelForMediaInfoUpdate?.Cancel();
+            cancelForMediaInfoUpdate?.Dispose();
+            cancelForMediaInfoUpdate = null;
         }
 
         void OnEnable()
@@ -87,14 +96,23 @@ namespace RhythmPulse.UI
             {
                 CLogger.LogInfo($"{DEBUG_FLAG} OnEnable");
 
-                if (cancelForSelection != null)
-                {
-                    cancelForSelection.Cancel();
-                    cancelForSelection.Dispose();
-                }
+                cancelForSelection?.Cancel();
+                cancelForSelection?.Dispose();
+                cancelForSelection = null;
                 cancelForSelection = new CancellationTokenSource();
                 scrollView.ForceUpdateSelectionAsync(0, cancelForSelection).Forget();
             }
+        }
+
+        void OnDisable()
+        {
+            cancelForSelection?.Cancel();
+            cancelForSelection?.Dispose();
+            cancelForSelection = null;
+
+            cancelForMediaInfoUpdate?.Cancel();
+            cancelForMediaInfoUpdate?.Dispose();
+            cancelForMediaInfoUpdate = null;
         }
 
         void Update()
@@ -119,11 +137,9 @@ namespace RhythmPulse.UI
             scrollView.UpdateData(items);
             scrollView.SelectCell(0);
 
-            if (cancelForSelection != null)
-            {
-                cancelForSelection.Cancel();
-                cancelForSelection.Dispose();
-            }
+            cancelForSelection?.Cancel();
+            cancelForSelection?.Dispose();
+            cancelForSelection = null;
             cancelForSelection = new CancellationTokenSource();
             scrollView.ForceUpdateSelectionAsync(0, cancelForSelection).Forget();
         }
@@ -135,19 +151,20 @@ namespace RhythmPulse.UI
 
         void ClickBack()
         {
+            cancelForSelection?.Cancel();
+            cancelForSelection?.Dispose();
+            cancelForSelection = null;
             timeline.Stop();
             ClickBackEvent?.Invoke();
         }
 
         private void OnSelectItem(ItemData itemData)
         {
-            Text_MapDisplayName.SetText(itemData.MapInfo.DisplayName);
+            Text_MapDisplayName?.SetText(itemData?.MapInfo.DisplayName);
 
-            if (cancelForMediaInfoUpdate != null)
-            {
-                cancelForMediaInfoUpdate.Cancel();
-                cancelForMediaInfoUpdate.Dispose();
-            }
+            cancelForMediaInfoUpdate?.Cancel();
+            cancelForMediaInfoUpdate?.Dispose();
+            cancelForMediaInfoUpdate = null;
             cancelForMediaInfoUpdate = new CancellationTokenSource();
             gameplayData = new Gameplay.GameplayData()
             {
@@ -160,25 +177,22 @@ namespace RhythmPulse.UI
         private async UniTask UpdateMediaDataAsync(ItemData itemData, CancellationTokenSource cancellationTokenSource)
         {
             await audioLoadService.LoadAudioAsync(FilePathUtility.GetUnityWebRequestUri(mapStorage.GetPreviewAudioPath(itemData.MapInfo), UnityPathSource.AbsoluteOrFullUri));
-            if (cancellationTokenSource.IsCancellationRequested)
-            {
-                return;
-            }
-            timeline.Stop();
-            musicPlayer.InitializeMusicPlayer(FilePathUtility.GetUnityWebRequestUri(mapStorage.GetPreviewAudioPath(itemData.MapInfo), UnityPathSource.AbsoluteOrFullUri), true);
+            if (cancellationTokenSource != null && cancellationTokenSource.IsCancellationRequested) return;
+            await UniTask.Delay(confirmDelayMs, false, PlayerLoopTiming.Update, cancellationTokenSource.Token);
+            if (cancellationTokenSource != null && cancellationTokenSource.IsCancellationRequested) return;
+            timeline?.Stop();
+            musicPlayer?.InitializeMusicPlayer(FilePathUtility.GetUnityWebRequestUri(mapStorage.GetPreviewAudioPath(itemData.MapInfo), UnityPathSource.AbsoluteOrFullUri), true);
             bool isVideoPrepared = false;
-            videoPlayer.InitializeVideoPlayer(
+            videoPlayer?.InitializeVideoPlayer(
                 videoUrl: FilePathUtility.GetUnityWebRequestUri(mapStorage.GetPreviewVideoPath(itemData.MapInfo), UnityPathSource.AbsoluteOrFullUri),
                 bLoop: true,
                 OnPrepared: () => { isVideoPrepared = true; });
             await UniTask.WaitUntil(() => isVideoPrepared, PlayerLoopTiming.Update, cancellationTokenSource.Token);
-            if (cancellationTokenSource.IsCancellationRequested)
-            {
-                return;
-            }
-            rawImg_PreviewVideoScreen.texture = ((GameplayVideoPlayer)videoPlayer).VideoTexture;
+            if (cancellationTokenSource != null && cancellationTokenSource.IsCancellationRequested) return;
 
-            timeline.Play();
+            if (rawImg_PreviewVideoScreen) rawImg_PreviewVideoScreen.texture = ((GameplayVideoPlayer)videoPlayer)?.VideoTexture;
+
+            timeline?.Play();
         }
     }
 }
