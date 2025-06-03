@@ -67,7 +67,7 @@ namespace RhythmPulse.UI
         private void OnSelected()
         {
             Context.OnCellClicked?.Invoke(Index);
-            cachedItemData.OnSelectedEvent?.Invoke();
+            // cachedItemData.OnSelectedEvent?.Invoke();
             CLogger.LogInfo($"{DEBUG_FLAG} Selected {cachedItemData.MapInfo}, index: {Index}");
         }
 
