@@ -116,7 +116,7 @@ namespace RhythmPulse.Gameplay
                 return;
             }
 
-            gameplayVideoRender.SetTargetTexture(((GameplayVideoPlayer)gameplayVideoPlayer).VideoTexture);
+            gameplayVideoRender.SetTargetTexture(((GameplayVideoPlayer)gameplayVideoPlayer).CurrentVideoTexture);
 
             IsGameplayMediaReady = true;
         }

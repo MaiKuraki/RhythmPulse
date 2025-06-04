@@ -224,7 +224,7 @@ GameObject:
   - component: {fileID: 2087373048}
   - component: {fileID: 2087373047}
   m_Layer: 0
-  m_Name: GameplayVideoPlayer
+  m_Name: MapSelectionVideoPlayer
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -246,6 +246,12 @@ MonoBehaviour:
   textureFormat: 0
   depthBuffer: 0
   filterMode: 1
+  preparePreDelayMs: 100
+  internalStopToPrepareDelayMs: 100
+  preparePostDelayMs: 50
+  prepareTimeoutMs: 5000
+  maxPrepareRetries: 1
+  prepareRetryDelayMs: 500
 --- !u!328 &2087373048
 VideoPlayer:
   m_ObjectHideFlags: 0

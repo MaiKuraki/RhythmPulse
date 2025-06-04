@@ -190,7 +190,7 @@ namespace RhythmPulse.UI
             await UniTask.WaitUntil(() => isVideoPrepared, PlayerLoopTiming.Update, cancellationTokenSource.Token);
             if (cancellationTokenSource != null && cancellationTokenSource.IsCancellationRequested) return;
 
-            if (rawImg_PreviewVideoScreen) rawImg_PreviewVideoScreen.texture = ((GameplayVideoPlayer)videoPlayer)?.VideoTexture;
+            if (rawImg_PreviewVideoScreen) rawImg_PreviewVideoScreen.texture = ((GameplayVideoPlayer)videoPlayer)?.CurrentVideoTexture;
 
             timeline?.Play();
         }
