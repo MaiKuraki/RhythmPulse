@@ -1359,7 +1359,7 @@ MonoBehaviour:
   backButton: {fileID: 8751954954929092355}
   Text_MapDisplayName: {fileID: 6496143421136183566}
   rawImg_PreviewVideoScreen: {fileID: 4934752286686670113}
-  confirmDelayMs: 100
+  confirmDelayMs: 200
 --- !u!1 &4358946002625482101
 GameObject:
   m_ObjectHideFlags: 0
@@ -1482,7 +1482,6 @@ MonoBehaviour:
   cellContainer: {fileID: 2684785846574427572}
   scroller: {fileID: 1768927798947776772}
   cellPrefab: {fileID: 1901728338085442, guid: 34e1fd87ab6fa4ea9948dd561298519f, type: 3}
-  confirmDelayMs: 80
 --- !u!1 &5433130050307192518
 GameObject:
   m_ObjectHideFlags: 0

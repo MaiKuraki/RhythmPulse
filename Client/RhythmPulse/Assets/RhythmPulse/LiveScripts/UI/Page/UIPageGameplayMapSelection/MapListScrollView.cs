@@ -13,7 +13,6 @@ namespace RhythmPulse.UI
         private const string DEBUG_FLAG = "[MapListScrollView]";
         [SerializeField] Scroller scroller = default;
         [SerializeField] GameObject cellPrefab = default;
-        [SerializeField] int confirmDelayMs = 80;
         public Action<ItemData> OnSelectedEvent;
         protected override GameObject CellPrefab => cellPrefab;
         private CancellationTokenSource cancelOnSelection;
@@ -43,11 +42,9 @@ namespace RhythmPulse.UI
             Context.SelectedIndex = index;
             Refresh();
 
-            if (cancelOnSelection != null)
-            {
-                cancelOnSelection.Cancel();
-                cancelOnSelection.Dispose();
-            }
+            cancelOnSelection?.Cancel();
+            cancelOnSelection?.Dispose();
+            cancelOnSelection = null;
             cancelOnSelection = new CancellationTokenSource();
             OnSelectionChangedAsync(index, cancelOnSelection).Forget();
         }
@@ -80,10 +77,7 @@ namespace RhythmPulse.UI
         {
             await UniTask.WaitUntil(() => index >= 0 && ItemsSource.Count > index && ItemsSource[index] != null, PlayerLoopTiming.Update, cancellationToken: cancellationTokenSource.Token);
             if (cancellationTokenSource != null && cancellationTokenSource.IsCancellationRequested) return;
-            await UniTask.Delay(confirmDelayMs, false, PlayerLoopTiming.Update, cancellationToken: cancellationTokenSource.Token);
-            if (cancellationTokenSource != null && cancellationTokenSource.IsCancellationRequested) return;
             ItemData data = ItemsSource[index];
-            // OnUpdateMapDisplayName?.Invoke(data.MapInfo.DisplayName);
             OnSelectedEvent?.Invoke(data);
         }
     }

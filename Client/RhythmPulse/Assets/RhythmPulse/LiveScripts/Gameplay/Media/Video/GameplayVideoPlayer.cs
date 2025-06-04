@@ -117,7 +117,7 @@ namespace RhythmPulse.Gameplay.Media
             _videoPlayers = GetComponents<VideoPlayer>();
             if (_videoPlayers.Length < 2)
             {
-                CLogger.LogWarning($"{DEBUG_FLAG} Requires 2 VideoPlayer components. Found {_videoPlayers.Length}. Attempting to add missing ones.");
+                // CLogger.LogWarning($"{DEBUG_FLAG} Requires 2 VideoPlayer components. Found {_videoPlayers.Length}. Attempting to add missing ones.");
                 var existingPlayers = _videoPlayers.ToList();
                 while (existingPlayers.Count < 2)
                 {
@@ -125,7 +125,7 @@ namespace RhythmPulse.Gameplay.Media
                     existingPlayers.Add(newPlayer);
                 }
                 _videoPlayers = existingPlayers.ToArray();
-                CLogger.LogInfo($"{DEBUG_FLAG} Ensured 2 VideoPlayer components are present. Count: {_videoPlayers.Length}");
+                // CLogger.LogInfo($"{DEBUG_FLAG} Ensured 2 VideoPlayer components are present. Count: {_videoPlayers.Length}");
             }
 
             //  Initialize Default Values, should be overridden in InitializeVideoPlayer

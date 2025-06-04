@@ -24,7 +24,7 @@ namespace RhythmPulse.UI
         [SerializeField] Button backButton = default;
         [SerializeField] TMP_Text Text_MapDisplayName;
         [SerializeField] RawImage rawImg_PreviewVideoScreen;
-        [SerializeField] int confirmDelayMs = 100;
+        [SerializeField] int confirmDelayMs = 200;
 
         public Action<Gameplay.GameplayData> EnterGameplayEvent;
         public Action ClickBackEvent;
@@ -47,6 +47,7 @@ namespace RhythmPulse.UI
             backButton.OnClickAsObservable().Subscribe(_ => ClickBack());
             scrollView.OnSelectedEvent -= OnSelectItem;
             scrollView.OnSelectedEvent += OnSelectItem;
+            AdjustConfirmDelayForHighPerformanceDevices();
         }
 
         void Start()
@@ -125,6 +126,13 @@ namespace RhythmPulse.UI
             }
         }
 
+        private void AdjustConfirmDelayForHighPerformanceDevices()
+        {
+#if UNITY_STANDALONE
+            confirmDelayMs = 0;
+#endif
+        }
+
         async UniTask InitializeMapListAfterDIInitialized(CancellationToken cancellationToken)
         {
             await UniTask.WaitUntil(() => IsDIInitialized /* && gameplayMapListManager.Initialized */, PlayerLoopTiming.Update, cancellationToken);
@@ -154,7 +162,7 @@ namespace RhythmPulse.UI
             cancelForSelection?.Cancel();
             cancelForSelection?.Dispose();
             cancelForSelection = null;
-            timeline.Stop();
+            timeline?.Stop();
             ClickBackEvent?.Invoke();
         }
 
@@ -176,9 +184,10 @@ namespace RhythmPulse.UI
 
         private async UniTask UpdateMediaDataAsync(ItemData itemData, CancellationTokenSource cancellationTokenSource)
         {
-            await audioLoadService.LoadAudioAsync(FilePathUtility.GetUnityWebRequestUri(mapStorage.GetPreviewAudioPath(itemData.MapInfo), UnityPathSource.AbsoluteOrFullUri));
-            if (cancellationTokenSource != null && cancellationTokenSource.IsCancellationRequested) return;
             await UniTask.Delay(confirmDelayMs, false, PlayerLoopTiming.Update, cancellationTokenSource.Token);
+            if (cancellationTokenSource != null && cancellationTokenSource.IsCancellationRequested) return;
+            await audioLoadService.LoadAudioAsync(FilePathUtility.GetUnityWebRequestUri(mapStorage.GetPreviewAudioPath(itemData.MapInfo), UnityPathSource.AbsoluteOrFullUri));
+            CLogger.LogInfo($"{DEBUG_FLAG} UpdateMediaDataAsync {itemData.MapInfo.DisplayName}, Time: {Time.time}");
             if (cancellationTokenSource != null && cancellationTokenSource.IsCancellationRequested) return;
             timeline?.Stop();
             musicPlayer?.InitializeMusicPlayer(FilePathUtility.GetUnityWebRequestUri(mapStorage.GetPreviewAudioPath(itemData.MapInfo), UnityPathSource.AbsoluteOrFullUri), true);
