@@ -2,17 +2,18 @@ using UnityEngine.Networking;
 using System.Collections.Generic;
 using System.IO;
 using CycloneGames.Logger;
-using CycloneGames.Utility.Runtime; // For FilePathUtility, UnityPathSource
+using CycloneGames.Utility.Runtime;     // For FilePathUtility, UnityPathSource
 using RhythmPulse.GameplayData.Runtime; // For MapInfo struct
 using Cysharp.Threading.Tasks;
-using UnityEngine; // JsonUtility and Application cancellation token
+using UnityEngine;
+using System.Threading;
 
 namespace RhythmPulse.Gameplay
 {
     public interface IGameplayMapStorage
     {
         void AddBasePath(string logicalPath, UnityPathSource source);
-        UniTask UpdatePathDictionaryAsync(bool clearExisting = true); // Added option to not clear
+        UniTask UpdatePathDictionaryAsync(bool clearExisting = true, CancellationToken cancellationToken = default); // Added option to not clear
 
         string GetAudioPath(in MapInfo mapInfo);
         string GetVideoPath(in MapInfo mapInfo);
@@ -122,7 +123,8 @@ namespace RhythmPulse.Gameplay
         /// Scans all registered base paths.
         /// </summary>
         /// <param name="clearExisting">If true, clears previously found maps before scanning. Set to false to incrementally add maps.</param>
-        public async UniTask UpdatePathDictionaryAsync(bool clearExisting = true)
+        /// <param name="cancellationToken">Cancellation token for the operation.</param>
+        public async UniTask UpdatePathDictionaryAsync(bool clearExisting = true, CancellationToken cancellationToken = default)
         {
             if (clearExisting)
             {
@@ -133,12 +135,13 @@ namespace RhythmPulse.Gameplay
 
             foreach (var basePathEntry in _basePathEntries)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 string logicalBasePath = basePathEntry.LogicalPath;
                 UnityPathSource currentSource = basePathEntry.Source;
 
                 if (currentSource == UnityPathSource.StreamingAssets)
                 {
-                    await ProcessStreamingAssetsPathAsync(logicalBasePath, currentSource);
+                    await ProcessStreamingAssetsPathAsync(logicalBasePath, currentSource, cancellationToken);
                 }
                 else // PersistentData or AbsoluteOrFullUri
                 {
@@ -162,7 +165,7 @@ namespace RhythmPulse.Gameplay
             }
         }
 
-        private async UniTask ProcessStreamingAssetsPathAsync(string logicalBasePath, UnityPathSource source)
+        private async UniTask ProcessStreamingAssetsPathAsync(string logicalBasePath, UnityPathSource source, CancellationToken cancellationToken)
         {
             // Normalize path separators for URI construction
             string manifestRelativePath = Path.Combine(logicalBasePath, STREAMING_ASSETS_MANIFEST_FILENAME).Replace(Path.DirectorySeparatorChar, '/');
@@ -174,7 +177,7 @@ namespace RhythmPulse.Gameplay
             {
                 try
                 {
-                    await www.SendWebRequest().ToUniTask(null, PlayerLoopTiming.Update, Application.exitCancellationToken); // Use cancellation token
+                    await www.SendWebRequest().ToUniTask(null, PlayerLoopTiming.Update, cancellationToken);
                 }
                 catch (System.OperationCanceledException)
                 {

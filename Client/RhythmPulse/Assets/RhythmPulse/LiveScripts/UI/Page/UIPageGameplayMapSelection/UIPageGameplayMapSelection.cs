@@ -9,6 +9,7 @@ using R3;
 using RhythmPulse.Audio;
 using RhythmPulse.Gameplay;
 using RhythmPulse.Gameplay.Media;
+using RhythmPulse.GameplayData.Runtime;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -137,9 +138,16 @@ namespace RhythmPulse.UI
         {
             await UniTask.WaitUntil(() => IsDIInitialized /* && gameplayMapListManager.Initialized */, PlayerLoopTiming.Update, cancellationToken);
 
-            for (int i = 0; i < gameplayMapListManager.AvailableMaps.Count; i++)
+            // var maniaMaps = gameplayMapListManager.GetAvailableMapsByBeatMapType(BeatMapTypeConstant.Mania);
+            // foreach (var mapInfo in maniaMaps)
+            // {
+            //     items.Add(new ItemData(mapInfo));
+            // }
+
+            var allMaps = gameplayMapListManager.AvailableMaps;
+            foreach (var mapInfo in allMaps)
             {
-                items.Add(new ItemData(gameplayMapListManager.AvailableMaps[i]));
+                items.Add(new ItemData(mapInfo));
             }
 
             scrollView.UpdateData(items);
