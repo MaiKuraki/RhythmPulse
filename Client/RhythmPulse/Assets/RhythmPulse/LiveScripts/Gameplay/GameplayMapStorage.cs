@@ -7,6 +7,7 @@ using RhythmPulse.GameplayData.Runtime; // For MapInfo struct
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 using System.Threading;
+using System;
 
 namespace RhythmPulse.Gameplay
 {
@@ -19,9 +20,13 @@ namespace RhythmPulse.Gameplay
         string GetVideoPath(in MapInfo mapInfo);
         string GetPreviewAudioPath(in MapInfo mapInfo);
         string GetPreviewVideoPath(in MapInfo mapInfo);
+        string GetAudioPath(in MapInfo mapInfo, in string beatMapType);
+        string GetVideoPath(in MapInfo mapInfo, in string beatMapType);
+        string GetPreviewAudioPath(in MapInfo mapInfo, in string beatMapType);
+        string GetPreviewVideoPath(in MapInfo mapInfo, in string beatMapType);
         string[] GetBackgroundPictures(in MapInfo mapInfo);
 
-        IReadOnlyList<string> GetAllMapUniqueIDs(); // Changed to IReadOnlyList for less GC
+        IReadOnlyList<string> GetAllMapUniqueIDs();
         bool TryGetMapPathInfo(string uniqueID, out string path, out UnityPathSource source);
     }
 
@@ -406,6 +411,31 @@ namespace RhythmPulse.Gameplay
             return finalUri;
         }
 
+        private string GetAssetPathWithOverride(in MapInfo mapInfo, string beatMapType,
+                Func<BeatMapTypeMediaOverride, string> overrideSelector, string defaultPath)
+        {
+            string finalPath = defaultPath; // Start with the default
+
+            // Check for an override for the specific beatMapType
+            if (mapInfo.MediaOverrides != null)
+            {
+                foreach (var anOverride in mapInfo.MediaOverrides)
+                {
+                    if (anOverride.BeatMapType == beatMapType)
+                    {
+                        string overridePath = overrideSelector(anOverride);
+                        if (!string.IsNullOrEmpty(overridePath))
+                        {
+                            finalPath = overridePath; // Found a valid override, use it!
+                        }
+                        break; // Stop searching once the correct mode is found
+                    }
+                }
+            }
+
+            // Use your existing internal method to resolve the final URI
+            return GetSpecificAssetPathInternal(mapInfo, finalPath, ".ogg"); // Note: Default extension might need to be smarter
+        }
 
         private string GetSpecificAssetPathInternal(in MapInfo mapInfo, string assetFilenameFromYaml, string defaultExtensionIfNotPresent)
         {
@@ -433,6 +463,26 @@ namespace RhythmPulse.Gameplay
         public string GetVideoPath(in MapInfo mapInfo) => GetSpecificAssetPathInternal(mapInfo, mapInfo.VideoFile, ".mp4");
         public string GetPreviewAudioPath(in MapInfo mapInfo) => GetSpecificAssetPathInternal(mapInfo, mapInfo.PreviewAudioFile, ".ogg");
         public string GetPreviewVideoPath(in MapInfo mapInfo) => GetSpecificAssetPathInternal(mapInfo, mapInfo.PreviewVideoFile, ".mp4");
+
+        public string GetAudioPath(in MapInfo mapInfo, in string beatMapType)
+        {
+            return GetAssetPathWithOverride(mapInfo, beatMapType, o => o.AudioFile, mapInfo.AudioFile);
+        }
+
+        public string GetVideoPath(in MapInfo mapInfo, in string beatMapType)
+        {
+            return GetAssetPathWithOverride(mapInfo, beatMapType, o => o.VideoFile, mapInfo.VideoFile);
+        }
+
+        public string GetPreviewAudioPath(in MapInfo mapInfo, in string beatMapType)
+        {
+            return GetAssetPathWithOverride(mapInfo, beatMapType, o => o.PreviewAudioFile, mapInfo.PreviewAudioFile);
+        }
+
+        public string GetPreviewVideoPath(in MapInfo mapInfo, in string beatMapType)
+        {
+            return GetAssetPathWithOverride(mapInfo, beatMapType, o => o.PreviewVideoFile, mapInfo.PreviewVideoFile);
+        }
 
         public string[] GetBackgroundPictures(in MapInfo mapInfo)
         {

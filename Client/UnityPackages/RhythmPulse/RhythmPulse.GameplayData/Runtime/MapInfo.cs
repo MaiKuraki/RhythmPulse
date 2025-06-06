@@ -47,6 +47,9 @@ namespace RhythmPulse.GameplayData.Runtime
 
         [YamlMember(Order = 13)]
         public List<BeatMapInfo> BeatmapDifficultyFiles { get; set; }
+        
+        [YamlMember(Order = 14)]
+        public List<BeatMapTypeMediaOverride> MediaOverrides { get; set; }
     }
 
     [System.Serializable]
@@ -64,6 +67,27 @@ namespace RhythmPulse.GameplayData.Runtime
 
         [YamlMember(Order = 3)]
         public string Version { get; set; }
+    }
+
+    [System.Serializable]
+    [YamlObject]
+    public partial struct BeatMapTypeMediaOverride
+    {
+        [YamlMember(Order = 0)]
+        public string BeatMapType { get; set; } // The mode to override, e.g., "JustDance"
+
+        // These are optional. If a value is empty, the system will use the default from MapInfo.
+        [YamlMember(Order = 1)]
+        public string AudioFile { get; set; }
+
+        [YamlMember(Order = 2)]
+        public string VideoFile { get; set; }
+
+        [YamlMember(Order = 3)]
+        public string PreviewAudioFile { get; set; }
+
+        [YamlMember(Order = 4)]
+        public string PreviewVideoFile { get; set; }
     }
 
     public static class BeatMapTypeConstant

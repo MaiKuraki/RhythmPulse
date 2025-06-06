@@ -84,7 +84,8 @@ namespace RhythmPulse.GameplayData.Editor
                 Arranger = "Anonymous",
                 Lyricist = "Anonymous",
                 BeatmapAuthor = "YourName",
-                BeatmapDifficultyFiles = new List<BeatMapInfo>()
+                BeatmapDifficultyFiles = new List<BeatMapInfo>(),
+                MediaOverrides = new List<BeatMapTypeMediaOverride>()
             };
             currentBackgroundPictures = new List<string>(mapInfo.InGameBackgroundPictures);
             newBackgroundPicturePath = "";
@@ -166,198 +167,13 @@ namespace RhythmPulse.GameplayData.Editor
             EditorGUILayout.Space();
 
             // --- In-Game Background Pictures ---
-            EditorGUILayout.LabelField("In-Game Background Pictures", EditorStyles.boldLabel);
-            for (int i = 0; i < currentBackgroundPictures.Count; i++)
-            {
-                EditorGUILayout.BeginHorizontal();
-                string newPicPath = EditorGUILayout.TextField($"Picture {i + 1}", currentBackgroundPictures[i]);
-                if (newPicPath != currentBackgroundPictures[i])
-                {
-                    currentBackgroundPictures[i] = newPicPath;
-                    ValidateRelativePath($"BackgroundPicture_{i}", currentBackgroundPictures[i], false);
-                }
-                if (GUILayout.Button("X", GUILayout.Width(25)))
-                {
-                    currentBackgroundPictures.RemoveAt(i);
-                    // Clear validation message for this specific entry after removal
-                    validationMessages.Remove($"BackgroundPicture_{i}");
-                    validationMessageTypes.Remove($"BackgroundPicture_{i}");
-                    GUI.FocusControl(null);
-                    break;
-                }
-                EditorGUILayout.EndHorizontal();
-                DisplayValidationMessage($"BackgroundPicture_{i}");
-            }
-            EditorGUILayout.BeginHorizontal();
-            newBackgroundPicturePath = EditorGUILayout.TextField("New Picture Path", newBackgroundPicturePath);
-            if (GUILayout.Button("Add Picture", GUILayout.Width(100)) && !string.IsNullOrWhiteSpace(newBackgroundPicturePath))
-            {
-                // Basic validation before adding
-                if (!PathContainsInvalidChars(newBackgroundPicturePath) && !PathIsReserved(newBackgroundPicturePath))
-                {
-                    currentBackgroundPictures.Add(newBackgroundPicturePath);
-                    newBackgroundPicturePath = "";
-                    GUI.FocusControl(null);
-                }
-                else
-                {
-                    EditorUtility.DisplayDialog("Invalid Path", "The new background picture path contains invalid characters or is a reserved filename. Please correct it.", "OK");
-                }
-            }
-            EditorGUILayout.EndHorizontal();
+            DrawBackgroundsGUI();
 
-            EditorGUILayout.Space();
+            // --- Media Overrides ---
+            DrawMediaOverridesGUI();
 
             // --- Beatmap Difficulty Files ---
-            EditorGUILayout.LabelField("Beatmap Difficulty Files", EditorStyles.boldLabel);
-            if (mapInfo.BeatmapDifficultyFiles == null)
-            {
-                mapInfo.BeatmapDifficultyFiles = new List<BeatMapInfo>();
-            }
-
-            // Track existing difficulty entries for uniqueness validation
-            HashSet<(string type, int difficulty, string version)> existingDifficultyEntries = new HashSet<(string, int, string)>();
-
-            for (int i = 0; i < mapInfo.BeatmapDifficultyFiles.Count; i++)
-            {
-                BeatMapInfo currentBeatmap = mapInfo.BeatmapDifficultyFiles[i]; // This is a struct, so it's a copy.
-
-                EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-                EditorGUILayout.LabelField($"Difficulty Entry #{i + 1}", EditorStyles.miniBoldLabel);
-
-                // Version string input
-                string newVersion = EditorGUILayout.TextField(new GUIContent("Version String", "A descriptive version (alphanumeric, hyphens, max 24 chars)."), currentBeatmap.Version);
-                if (newVersion != currentBeatmap.Version)
-                {
-                    currentBeatmap.Version = newVersion;
-                    mapInfo.BeatmapDifficultyFiles[i] = currentBeatmap; // Write back immediately
-                    ValidateVersionString($"Version_{i}", currentBeatmap.Version);
-                }
-                DisplayValidationMessage($"Version_{i}");
-
-
-                // Beatmap Type selection - Changed from MaskField to Popup for single selection
-                if (beatMapTypeOptions != null && beatMapTypeOptions.Length > 0)
-                {
-                    // Find the index of the current BeatMapType in the options
-                    int currentSelectionIndex = -1;
-                    if (currentBeatmap.BeatMapType != null && currentBeatmap.BeatMapType.Length > 0)
-                    {
-                        currentSelectionIndex = Array.IndexOf(beatMapTypeOptions, currentBeatmap.BeatMapType[0]);
-                    }
-                    
-                    int newSelectionIndex = EditorGUILayout.Popup(
-                        new GUIContent("BeatMap Type", "Select the single game mode this difficulty applies to."),
-                        currentSelectionIndex, beatMapTypeOptions);
-
-                    if (newSelectionIndex != currentSelectionIndex)
-                    {
-                        currentBeatmap.BeatMapType = new string[] { beatMapTypeOptions[newSelectionIndex] };
-                        mapInfo.BeatmapDifficultyFiles[i] = currentBeatmap; // Write back immediately
-                        ValidateBeatMapTypeSelection($"BeatMapType_{i}", currentBeatmap.BeatMapType);
-                    }
-                    DisplayValidationMessage($"BeatMapType_{i}");
-                }
-                else
-                {
-                    EditorGUILayout.HelpBox("No BeatMapType options available. Check BeatMapTypeConstant.", MessageType.Warning);
-                }
-                
-                // Difficulty Level input
-                int newDifficulty = EditorGUILayout.IntField("Difficulty Level", currentBeatmap.Difficulty);
-                if (newDifficulty != currentBeatmap.Difficulty)
-                {
-                    currentBeatmap.Difficulty = newDifficulty;
-                    mapInfo.BeatmapDifficultyFiles[i] = currentBeatmap; // Write back immediately
-                    ValidateDifficultyLevel($"DifficultyLevel_{i}", currentBeatmap.Difficulty);
-                }
-                DisplayValidationMessage($"DifficultyLevel_{i}");
-
-                // Add to hash set for uniqueness check
-                if (currentBeatmap.BeatMapType != null && currentBeatmap.BeatMapType.Length > 0)
-                {
-                    var entry = (currentBeatmap.BeatMapType[0], currentBeatmap.Difficulty, currentBeatmap.Version);
-                    if (!existingDifficultyEntries.Add(entry))
-                    {
-                        SetValidationMessage($"DuplicateEntry_{i}", "This difficulty entry (Type, Level, Version) is a duplicate of another entry.", MessageType.Error);
-                    }
-                    else
-                    {
-                        // Clear message if it was a duplicate and now it's unique (e.g., after changing a field)
-                        SetValidationMessage($"DuplicateEntry_{i}", "", MessageType.None);
-                    }
-                }
-                DisplayValidationMessage($"DuplicateEntry_{i}");
-
-
-                // Display the generated Difficulty File name (read-only)
-                string displayBeatMapType = currentBeatmap.BeatMapType != null && currentBeatmap.BeatMapType.Length > 0
-                                            ? currentBeatmap.BeatMapType[0]
-                                            : "N/A"; // Fallback for display if no type selected
-                
-                string generatedFileName = BeatMapUtility.GetBeatMapFile(
-                    displayBeatMapType,
-                    currentBeatmap.Difficulty,
-                    currentBeatmap.Version
-                );
-                GUI.enabled = false; // Make the text field read-only
-                EditorGUILayout.TextField(new GUIContent("Generated File", "The full filename for this beatmap difficulty (read-only)."), generatedFileName);
-                GUI.enabled = true; // Re-enable GUI
-
-                // Validate the generated path (existence check)
-                ValidateGeneratedBeatmapFilePath($"GeneratedDifficultyFile_{i}", generatedFileName);
-                DisplayValidationMessage($"GeneratedDifficultyFile_{i}");
-
-                EditorGUILayout.BeginHorizontal();
-                currentBeatmap.MD5 = EditorGUILayout.TextField(new GUIContent("MD5 Hash", "MD5 hash of the difficulty file. Click 'Generate' to calculate."), currentBeatmap.MD5);
-                if (GUILayout.Button("Generate MD5", GUILayout.Width(100)))
-                {
-                    int local_i = i;
-                    // Pass the actual type for MD5 generation
-                    string actualBeatMapTypeForMD5 = mapInfo.BeatmapDifficultyFiles[local_i].BeatMapType != null && mapInfo.BeatmapDifficultyFiles[local_i].BeatMapType.Length > 0
-                                                     ? mapInfo.BeatmapDifficultyFiles[local_i].BeatMapType[0]
-                                                     : "N/A"; 
-                    string fileNameForMD5 = BeatMapUtility.GetBeatMapFile(
-                        actualBeatMapTypeForMD5,
-                        mapInfo.BeatmapDifficultyFiles[local_i].Difficulty,
-                        mapInfo.BeatmapDifficultyFiles[local_i].Version
-                    );
-                    _ = GenerateMD5ForBeatmapAsync(fileNameForMD5, local_i);
-                }
-                EditorGUILayout.EndHorizontal();
-                DisplayValidationMessage($"DifficultyFile_{i}_MD5"); // Display MD5 validation message
-
-                // New: Auto-create file button
-                EditorGUILayout.BeginHorizontal();
-                if (GUILayout.Button("Auto-Create File", GUILayout.Width(120), GUILayout.Height(20)))
-                {
-                    CreateBeatmapFile(currentBeatmap, i);
-                }
-                if (GUILayout.Button("Remove This Difficulty Entry", GUILayout.Height(20)))
-                {
-                    mapInfo.BeatmapDifficultyFiles.RemoveAt(i);
-                    // Clear validation messages for this specific entry after removal
-                    ClearBeatmapValidationMessages(i);
-                    GUI.FocusControl(null);
-                    break;
-                }
-                EditorGUILayout.EndHorizontal();
-                EditorGUILayout.EndVertical();
-                EditorGUILayout.Space(5);
-                // No need to write back currentBeatmap explicitly here, as it's already assigned on changes.
-            }
-
-            if (GUILayout.Button("Add New BeatMap Difficulty Entry"))
-            {
-                mapInfo.BeatmapDifficultyFiles.Add(new BeatMapInfo
-                {
-                    MD5 = "", // Initialize MD5 as empty
-                    BeatMapType = new string[0], // Start with no type selected
-                    Difficulty = 1,
-                    Version = "Default" // Initialize with a default version
-                });
-                GUI.FocusControl(null);
-            }
+            DrawBeatmapDifficultyFilesGUI();
 
             EditorGUILayout.Space(20);
             if (GUILayout.Button("Save MapInfo to YAML File", GUILayout.Height(30)))
@@ -368,6 +184,7 @@ namespace RhythmPulse.GameplayData.Editor
 
                 // Perform uniqueness check across all entries before full validation
                 PerformBeatmapUniquenessValidation();
+                PerformMediaOverrideUniquenessValidation();
 
                 // Pre-save validation
                 if (PerformFullValidation())
@@ -411,7 +228,7 @@ namespace RhythmPulse.GameplayData.Editor
             {
                 BeatMapInfo beatmap = mapInfo.BeatmapDifficultyFiles[i];
                 string beatMapType = beatmap.BeatMapType != null && beatmap.BeatMapType.Length > 0 ? beatmap.BeatMapType[0] : "";
-                
+
                 var currentKey = (beatMapType, beatmap.Difficulty, beatmap.Version);
 
                 if (seenEntries.ContainsKey(currentKey))
@@ -428,6 +245,285 @@ namespace RhythmPulse.GameplayData.Editor
                     seenEntries.Add(currentKey, i);
                     SetValidationMessage($"DuplicateEntry_{i}", "", MessageType.None);
                 }
+            }
+        }
+
+        /// <summary>
+        /// Draws the GUI for managing Media Overrides.
+        /// </summary>
+        private void DrawMediaOverridesGUI()
+        {
+            EditorGUILayout.LabelField("Mode-Specific Media Overrides", EditorStyles.boldLabel);
+            if (mapInfo.MediaOverrides == null)
+            {
+                mapInfo.MediaOverrides = new List<BeatMapTypeMediaOverride>();
+            }
+
+            int overrideToRemove = -1; // Defer removal to after the loop
+
+            for (int i = 0; i < mapInfo.MediaOverrides.Count; i++)
+            {
+                var currentOverride = mapInfo.MediaOverrides[i];
+                EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+                EditorGUILayout.LabelField($"Override Entry #{i + 1}", EditorStyles.miniBoldLabel);
+
+                // BeatMapType selection and other fields... (no changes needed here)
+                int currentSelectionIndex = string.IsNullOrEmpty(currentOverride.BeatMapType) ? -1 : Array.IndexOf(beatMapTypeOptions, currentOverride.BeatMapType);
+                int newSelectionIndex = EditorGUILayout.Popup(new GUIContent("Game Mode", "Select game mode to override."), currentSelectionIndex, beatMapTypeOptions);
+                if (newSelectionIndex != currentSelectionIndex)
+                {
+                    currentOverride.BeatMapType = beatMapTypeOptions[newSelectionIndex];
+                }
+                DisplayValidationMessage($"OverrideBeatMapType_{i}");
+                DisplayValidationMessage($"DuplicateOverride_{i}");
+
+                currentOverride.AudioFile = EditorGUILayout.TextField(new GUIContent("Override Audio File", "Leave empty to use default."), currentOverride.AudioFile);
+                ValidateRelativePath($"OverrideAudio_{i}", currentOverride.AudioFile, true);
+                DisplayValidationMessage($"OverrideAudio_{i}");
+
+                currentOverride.VideoFile = EditorGUILayout.TextField(new GUIContent("Override Video File", "Leave empty to use default."), currentOverride.VideoFile);
+                ValidateRelativePath($"OverrideVideo_{i}", currentOverride.VideoFile, true);
+                DisplayValidationMessage($"OverrideVideo_{i}");
+
+                currentOverride.PreviewAudioFile = EditorGUILayout.TextField(new GUIContent("Override Preview Audio", "Leave empty to use default."), currentOverride.PreviewAudioFile);
+                ValidateRelativePath($"OverridePreviewAudio_{i}", currentOverride.PreviewAudioFile, true);
+                DisplayValidationMessage($"OverridePreviewAudio_{i}");
+
+                currentOverride.PreviewVideoFile = EditorGUILayout.TextField(new GUIContent("Override Preview Video", "Leave empty to use default."), currentOverride.PreviewVideoFile);
+                ValidateRelativePath($"OverridePreviewVideo_{i}", currentOverride.PreviewVideoFile, true);
+                DisplayValidationMessage($"OverridePreviewVideo_{i}");
+
+                mapInfo.MediaOverrides[i] = currentOverride;
+
+                if (GUILayout.Button("Remove This Override", GUILayout.Height(20)))
+                {
+                    // Instead of removing here, mark the index for removal
+                    overrideToRemove = i;
+                }
+
+                EditorGUILayout.EndVertical();
+                EditorGUILayout.Space(5);
+            }
+
+            // Perform the removal safely outside the drawing loop
+            if (overrideToRemove > -1)
+            {
+                ClearMediaOverrideValidationMessages(overrideToRemove);
+                mapInfo.MediaOverrides.RemoveAt(overrideToRemove);
+            }
+
+            if (GUILayout.Button("Add New Media Override"))
+            {
+                mapInfo.MediaOverrides.Add(new BeatMapTypeMediaOverride());
+                GUI.FocusControl(null);
+            }
+            EditorGUILayout.Space();
+        }
+
+        /// <summary>
+        /// Draws the GUI for managing In-Game Background Pictures.
+        /// </summary>
+        private void DrawBackgroundsGUI()
+        {
+            EditorGUILayout.LabelField("In-Game Background Pictures", EditorStyles.boldLabel);
+            int backgroundToRemove = -1; // Defer removal to after the loop
+
+            for (int i = 0; i < currentBackgroundPictures.Count; i++)
+            {
+                EditorGUILayout.BeginHorizontal();
+                string newPicPath = EditorGUILayout.TextField($"Picture {i + 1}", currentBackgroundPictures[i]);
+                if (newPicPath != currentBackgroundPictures[i])
+                {
+                    currentBackgroundPictures[i] = newPicPath;
+                    ValidateRelativePath($"BackgroundPicture_{i}", newPicPath, false);
+                }
+                if (GUILayout.Button("X", GUILayout.Width(25)))
+                {
+                    // Instead of removing here, mark the index for removal
+                    backgroundToRemove = i;
+                }
+                EditorGUILayout.EndHorizontal();
+                DisplayValidationMessage($"BackgroundPicture_{i}");
+            }
+
+            // Perform the removal safely outside the drawing loop
+            if (backgroundToRemove > -1)
+            {
+                ClearValidationMessage($"BackgroundPicture_{backgroundToRemove}");
+                currentBackgroundPictures.RemoveAt(backgroundToRemove);
+            }
+
+            EditorGUILayout.BeginHorizontal();
+            newBackgroundPicturePath = EditorGUILayout.TextField("New Picture Path", newBackgroundPicturePath);
+            if (GUILayout.Button("Add Picture", GUILayout.Width(100)) && !string.IsNullOrWhiteSpace(newBackgroundPicturePath))
+            {
+                if (!PathContainsInvalidChars(newBackgroundPicturePath) && !PathIsReserved(newBackgroundPicturePath))
+                {
+                    currentBackgroundPictures.Add(newBackgroundPicturePath);
+                    newBackgroundPicturePath = "";
+                    GUI.FocusControl(null);
+                }
+                else
+                {
+                    EditorUtility.DisplayDialog("Invalid Path", "The path contains invalid characters or is a reserved filename.", "OK");
+                }
+            }
+            EditorGUILayout.EndHorizontal();
+            EditorGUILayout.Space();
+        }
+
+        /// <summary>
+        /// Draws the GUI for managing Beatmap Difficulty Files.
+        /// </summary>
+        private void DrawBeatmapDifficultyFilesGUI()
+        {
+            EditorGUILayout.LabelField("Beatmap Difficulty Files", EditorStyles.boldLabel);
+            if (mapInfo.BeatmapDifficultyFiles == null)
+            {
+                mapInfo.BeatmapDifficultyFiles = new List<BeatMapInfo>();
+            }
+
+            // Track existing difficulty entries for uniqueness validation
+            HashSet<(string type, int difficulty, string version)> existingDifficultyEntries = new HashSet<(string, int, string)>();
+
+            for (int i = 0; i < mapInfo.BeatmapDifficultyFiles.Count; i++)
+            {
+                BeatMapInfo currentBeatmap = mapInfo.BeatmapDifficultyFiles[i]; // This is a struct, so it's a copy.
+
+                EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+                EditorGUILayout.LabelField($"Difficulty Entry #{i + 1}", EditorStyles.miniBoldLabel);
+
+                // Version string input
+                string newVersion = EditorGUILayout.TextField(new GUIContent("Version String", "A descriptive version (alphanumeric, hyphens, max 24 chars)."), currentBeatmap.Version);
+                if (newVersion != currentBeatmap.Version)
+                {
+                    currentBeatmap.Version = newVersion;
+                    mapInfo.BeatmapDifficultyFiles[i] = currentBeatmap; // Write back immediately
+                    ValidateVersionString($"Version_{i}", currentBeatmap.Version);
+                }
+                DisplayValidationMessage($"Version_{i}");
+
+                // Beatmap Type selection - Changed from MaskField to Popup for single selection
+                if (beatMapTypeOptions != null && beatMapTypeOptions.Length > 0)
+                {
+                    // Find the index of the current BeatMapType in the options
+                    int currentSelectionIndex = -1;
+                    if (currentBeatmap.BeatMapType != null && currentBeatmap.BeatMapType.Length > 0)
+                    {
+                        currentSelectionIndex = Array.IndexOf(beatMapTypeOptions, currentBeatmap.BeatMapType[0]);
+                    }
+
+                    int newSelectionIndex = EditorGUILayout.Popup(
+                        new GUIContent("BeatMap Type", "Select the single game mode this difficulty applies to."),
+                        currentSelectionIndex, beatMapTypeOptions);
+
+                    if (newSelectionIndex != currentSelectionIndex)
+                    {
+                        currentBeatmap.BeatMapType = new string[] { beatMapTypeOptions[newSelectionIndex] };
+                        mapInfo.BeatmapDifficultyFiles[i] = currentBeatmap; // Write back immediately
+                        ValidateBeatMapTypeSelection($"BeatMapType_{i}", currentBeatmap.BeatMapType);
+                    }
+                    DisplayValidationMessage($"BeatMapType_{i}");
+                }
+                else
+                {
+                    EditorGUILayout.HelpBox("No BeatMapType options available. Check BeatMapTypeConstant.", MessageType.Warning);
+                }
+
+                // Difficulty Level input
+                int newDifficulty = EditorGUILayout.IntField("Difficulty Level", currentBeatmap.Difficulty);
+                if (newDifficulty != currentBeatmap.Difficulty)
+                {
+                    currentBeatmap.Difficulty = newDifficulty;
+                    mapInfo.BeatmapDifficultyFiles[i] = currentBeatmap; // Write back immediately
+                    ValidateDifficultyLevel($"DifficultyLevel_{i}", currentBeatmap.Difficulty);
+                }
+                DisplayValidationMessage($"DifficultyLevel_{i}");
+
+                // Add to hash set for uniqueness check
+                if (currentBeatmap.BeatMapType != null && currentBeatmap.BeatMapType.Length > 0)
+                {
+                    var entry = (currentBeatmap.BeatMapType[0], currentBeatmap.Difficulty, currentBeatmap.Version);
+                    if (!existingDifficultyEntries.Add(entry))
+                    {
+                        SetValidationMessage($"DuplicateEntry_{i}", "This difficulty entry (Type, Level, Version) is a duplicate of another entry.", MessageType.Error);
+                    }
+                    else
+                    {
+                        // Clear message if it was a duplicate and now it's unique (e.g., after changing a field)
+                        SetValidationMessage($"DuplicateEntry_{i}", "", MessageType.None);
+                    }
+                }
+                DisplayValidationMessage($"DuplicateEntry_{i}");
+
+
+                // Display the generated Difficulty File name (read-only)
+                string displayBeatMapType = currentBeatmap.BeatMapType != null && currentBeatmap.BeatMapType.Length > 0
+                                            ? currentBeatmap.BeatMapType[0]
+                                            : "N/A"; // Fallback for display if no type selected
+
+                string generatedFileName = BeatMapUtility.GetBeatMapFile(
+                    displayBeatMapType,
+                    currentBeatmap.Difficulty,
+                    currentBeatmap.Version
+                );
+                GUI.enabled = false; // Make the text field read-only
+                EditorGUILayout.TextField(new GUIContent("Generated File", "The full filename for this beatmap difficulty (read-only)."), generatedFileName);
+                GUI.enabled = true; // Re-enable GUI
+
+                // Validate the generated path (existence check)
+                ValidateGeneratedBeatmapFilePath($"GeneratedDifficultyFile_{i}", generatedFileName);
+                DisplayValidationMessage($"GeneratedDifficultyFile_{i}");
+
+                EditorGUILayout.BeginHorizontal();
+                currentBeatmap.MD5 = EditorGUILayout.TextField(new GUIContent("MD5 Hash", "MD5 hash of the difficulty file. Click 'Generate' to calculate."), currentBeatmap.MD5);
+                if (GUILayout.Button("Generate MD5", GUILayout.Width(100)))
+                {
+                    int local_i = i;
+                    // Pass the actual type for MD5 generation
+                    string actualBeatMapTypeForMD5 = mapInfo.BeatmapDifficultyFiles[local_i].BeatMapType != null && mapInfo.BeatmapDifficultyFiles[local_i].BeatMapType.Length > 0
+                                                     ? mapInfo.BeatmapDifficultyFiles[local_i].BeatMapType[0]
+                                                     : "N/A";
+                    string fileNameForMD5 = BeatMapUtility.GetBeatMapFile(
+                        actualBeatMapTypeForMD5,
+                        mapInfo.BeatmapDifficultyFiles[local_i].Difficulty,
+                        mapInfo.BeatmapDifficultyFiles[local_i].Version
+                    );
+                    _ = GenerateMD5ForBeatmapAsync(fileNameForMD5, local_i);
+                }
+                EditorGUILayout.EndHorizontal();
+                DisplayValidationMessage($"DifficultyFile_{i}_MD5"); // Display MD5 validation message
+
+                // New: Auto-create file button
+                EditorGUILayout.BeginHorizontal();
+                if (GUILayout.Button("Auto-Create File", GUILayout.Width(120), GUILayout.Height(20)))
+                {
+                    CreateBeatmapFile(currentBeatmap, i);
+                }
+                if (GUILayout.Button("Remove This Difficulty Entry", GUILayout.Height(20)))
+                {
+                    mapInfo.BeatmapDifficultyFiles.RemoveAt(i);
+                    // Clear validation messages for this specific entry after removal
+                    ClearBeatmapValidationMessages(i);
+                    GUI.FocusControl(null);
+                    break;
+                }
+                EditorGUILayout.EndHorizontal();
+                EditorGUILayout.EndVertical();
+                EditorGUILayout.Space(5);
+                // No need to write back currentBeatmap explicitly here, as it's already assigned on changes.
+            }
+
+            if (GUILayout.Button("Add New BeatMap Difficulty Entry"))
+            {
+                mapInfo.BeatmapDifficultyFiles.Add(new BeatMapInfo
+                {
+                    MD5 = "", // Initialize MD5 as empty
+                    BeatMapType = new string[0], // Start with no type selected
+                    Difficulty = 1,
+                    Version = "Default" // Initialize with a default version
+                });
+                GUI.FocusControl(null);
             }
         }
 
@@ -489,11 +585,11 @@ namespace RhythmPulse.GameplayData.Editor
                 AssetDatabase.Refresh(); // Refresh Project window to show the new file
                 CLogger.LogInfo($"[MapInfoEditorWindow] Created beatmap file: {fullPath}");
                 EditorUtility.DisplayDialog("File Created", $"Beatmap file created successfully:\n{fullPath}", "OK");
-                
+
                 // Clear any previous "file not found" messages for this entry
                 SetValidationMessage($"GeneratedDifficultyFile_{index}", "", MessageType.None);
                 SetValidationMessage($"DifficultyFile_{index}_MD5", "", MessageType.None);
-                
+
                 // Optionally generate MD5 after creation
                 _ = GenerateMD5ForBeatmapAsync(generatedFileName, index);
             }
@@ -571,6 +667,53 @@ namespace RhythmPulse.GameplayData.Editor
             }
         }
 
+        private void ClearValidationMessage(string fieldKey)
+        {
+            validationMessages.Remove(fieldKey);
+            validationMessageTypes.Remove(fieldKey);
+        }
+
+        private void ClearMediaOverrideValidationMessages(int index)
+        {
+            ClearValidationMessage($"OverrideBeatMapType_{index}");
+            ClearValidationMessage($"DuplicateOverride_{index}");
+            ClearValidationMessage($"OverrideAudio_{index}");
+            ClearValidationMessage($"OverrideVideo_{index}");
+            ClearValidationMessage($"OverridePreviewAudio_{index}");
+            ClearValidationMessage($"OverridePreviewVideo_{index}");
+        }
+
+        /// <summary>
+        /// Performs uniqueness validation for Media Overrides.
+        /// </summary>
+        private void PerformMediaOverrideUniquenessValidation()
+        {
+            if (mapInfo.MediaOverrides == null) return;
+
+            Dictionary<string, int> seenOverrideTypes = new Dictionary<string, int>();
+            for (int i = 0; i < mapInfo.MediaOverrides.Count; i++)
+            {
+                string beatMapType = mapInfo.MediaOverrides[i].BeatMapType;
+                if (string.IsNullOrEmpty(beatMapType))
+                {
+                    SetValidationMessage($"OverrideBeatMapType_{i}", "A game mode must be selected.", MessageType.Error);
+                    continue;
+                }
+
+                if (seenOverrideTypes.ContainsKey(beatMapType))
+                {
+                    int originalIndex = seenOverrideTypes[beatMapType];
+                    string errorMsg = $"Duplicate override for game mode '{beatMapType}'. Each mode can only have one override.";
+                    SetValidationMessage($"DuplicateOverride_{i}", errorMsg, MessageType.Error);
+                    SetValidationMessage($"DuplicateOverride_{originalIndex}", errorMsg, MessageType.Error);
+                }
+                else
+                {
+                    seenOverrideTypes.Add(beatMapType, i);
+                    SetValidationMessage($"DuplicateOverride_{i}", "", MessageType.None);
+                }
+            }
+        }
 
         private void LoadYamlFromFile()
         {
@@ -597,11 +740,18 @@ namespace RhythmPulse.GameplayData.Editor
                     {
                         mapInfo.BeatmapDifficultyFiles = new List<BeatMapInfo>();
                     }
+                    if (mapInfo.MediaOverrides == null)
+                    {
+                        mapInfo.MediaOverrides = new List<BeatMapTypeMediaOverride>();
+                    }
+
                     // Ensure LastModifiedTime has a value to display if it was missing in older files
                     if (string.IsNullOrEmpty(mapInfo.LastModifiedTime))
                     {
                         mapInfo.LastModifiedTime = "N/A (loaded)";
-                    } else {
+                    }
+                    else
+                    {
                         // Validate loaded LastModifiedTime format (optional, but good for consistency)
                         if (!System.DateTime.TryParse(mapInfo.LastModifiedTime, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out _))
                         {
@@ -726,12 +876,12 @@ namespace RhythmPulse.GameplayData.Editor
                 // Suggest a default directory based on the UniqueID if it's a new map
                 defaultDirectory = Path.Combine(Application.dataPath, "MapInfos", mapInfo.UniqueID);
             }
-            
+
             // Allow the user to choose the save location and filename
             string savePath = EditorUtility.SaveFilePanel(
-                "Save MapInfo YAML", 
-                defaultDirectory, 
-                defaultFileName, 
+                "Save MapInfo YAML",
+                defaultDirectory,
+                defaultFileName,
                 "yaml"
             );
 
@@ -757,7 +907,7 @@ namespace RhythmPulse.GameplayData.Editor
                     return; // Abort save if directory cannot be created
                 }
             }
-            
+
             try
             {
                 // Ensure LastModifiedTime is set before serialization
@@ -765,7 +915,7 @@ namespace RhythmPulse.GameplayData.Editor
 
                 string yamlStr = VYaml.Serialization.YamlSerializer.SerializeToString(mapInfo);
                 File.WriteAllText(savePath, yamlStr, System.Text.Encoding.UTF8); // Use File.WriteAllText which overwrites by default
-                
+
                 currentlyLoadedMapInfoPath = savePath; // Update loaded path to the new save location
 
                 validationMessages.Clear(); // Clear all messages on successful save
@@ -840,7 +990,7 @@ namespace RhythmPulse.GameplayData.Editor
                 message = $"Unique ID '{id}' is a reserved name on Windows. This might cause issues.";
                 type = MessageType.Warning;
             }
-            
+
             SetValidationMessage("UniqueID", message, type);
             return type != MessageType.Error; // Return false only if it's an error
         }
@@ -900,7 +1050,7 @@ namespace RhythmPulse.GameplayData.Editor
             else
             {
                 string fullPath = Path.Combine(GetMapInfoBaseDirectory(), relativePath);
-                
+
                 if (!File.Exists(fullPath))
                 {
                     message = $"File not found at: {fullPath}.";
@@ -1128,6 +1278,19 @@ namespace RhythmPulse.GameplayData.Editor
                 }
             }
 
+            // Validate Media Overrides
+            if (mapInfo.MediaOverrides != null)
+            {
+                for (int i = 0; i < mapInfo.MediaOverrides.Count; i++)
+                {
+                    var o = mapInfo.MediaOverrides[i];
+                    if (!ValidateRelativePath($"OverrideAudio_{i}", o.AudioFile, true)) allValid = false;
+                    if (!ValidateRelativePath($"OverrideVideo_{i}", o.VideoFile, true)) allValid = false;
+                    if (!ValidateRelativePath($"OverridePreviewAudio_{i}", o.PreviewAudioFile, true)) allValid = false;
+                    if (!ValidateRelativePath($"OverridePreviewVideo_{i}", o.PreviewVideoFile, true)) allValid = false;
+                }
+            }
+
             // Validate Beatmap Difficulty Files
             if (mapInfo.BeatmapDifficultyFiles.Count == 0)
             {
@@ -1159,12 +1322,12 @@ namespace RhythmPulse.GameplayData.Editor
 
                     // Only generate and validate filename if basic components are valid for generation
                     string generatedFileName = string.Empty;
-                    
+
                     // Only attempt to generate if BeatMapType is valid (length check is part of ValidateBeatMapTypeSelection)
-                    if (beatmap.BeatMapType != null && beatmap.BeatMapType.Length == 1) 
+                    if (beatmap.BeatMapType != null && beatmap.BeatMapType.Length == 1)
                     {
                         generatedFileName = BeatMapUtility.GetBeatMapFile(
-                            beatmap.BeatMapType[0], 
+                            beatmap.BeatMapType[0],
                             beatmap.Difficulty,
                             beatmap.Version
                         );
@@ -1187,7 +1350,9 @@ namespace RhythmPulse.GameplayData.Editor
                                 allValid = false;
                             }
                         }
-                    } else {
+                    }
+                    else
+                    {
                         // If BeatMapType is not exactly one, SetValidationMessage is already called by ValidateBeatMapTypeSelection,
                         // and it will likely be an Error, setting allValid to false.
                         // No additional specific message needed here.
