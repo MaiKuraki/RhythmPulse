@@ -6,7 +6,7 @@ namespace RhythmPulse.Gameplay
     public struct GameplayData : ISceneData
     {
         public MapInfo MapInfo;
+        public string BeatMapType;
         public string BeatMapFileName;
     }
 }
-

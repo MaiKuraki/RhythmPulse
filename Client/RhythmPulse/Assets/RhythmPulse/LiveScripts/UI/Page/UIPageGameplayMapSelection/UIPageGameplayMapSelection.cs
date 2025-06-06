@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Text;
 using System.Threading;
 using CycloneGames.Logger;
 using CycloneGames.UIFramework;
@@ -41,7 +42,10 @@ namespace RhythmPulse.UI
         private CancellationTokenSource cancelForSelection;
         private CancellationTokenSource cancelForMediaInfoUpdate;
         public Timeline PreviewVideoTimeline => (Timeline)timeline;
-        private Gameplay.GameplayData gameplayData = default(Gameplay.GameplayData);
+        private Gameplay.GameplayData gameplayData;
+        private string GameModeType = string.Empty;
+        private StringBuilder previewAudioName = new StringBuilder();
+        private StringBuilder previewVideoName = new StringBuilder();
         void Awake()
         {
             enterMusicGameplayButton.OnClickAsObservable().Subscribe(_ => EnterGameplay(gameplayData));
@@ -49,11 +53,6 @@ namespace RhythmPulse.UI
             scrollView.OnSelectedEvent -= OnSelectItem;
             scrollView.OnSelectedEvent += OnSelectItem;
             AdjustConfirmDelayForHighPerformanceDevices();
-        }
-
-        void Start()
-        {
-            InitializeMapListAfterDIInitialized(destroyCancellationToken).Forget();
         }
 
         [Inject]
@@ -92,20 +91,6 @@ namespace RhythmPulse.UI
             cancelForMediaInfoUpdate = null;
         }
 
-        void OnEnable()
-        {
-            if (IsDIInitialized)
-            {
-                CLogger.LogInfo($"{DEBUG_FLAG} OnEnable");
-
-                cancelForSelection?.Cancel();
-                cancelForSelection?.Dispose();
-                cancelForSelection = null;
-                cancelForSelection = new CancellationTokenSource();
-                scrollView.ForceUpdateSelectionAsync(0, cancelForSelection).Forget();
-            }
-        }
-
         void OnDisable()
         {
             cancelForSelection?.Cancel();
@@ -134,20 +119,29 @@ namespace RhythmPulse.UI
 #endif
         }
 
-        async UniTask InitializeMapListAfterDIInitialized(CancellationToken cancellationToken)
+        public async UniTask RebuildMapListAfterDIInitialized(string gameModeType, CancellationToken cancellationToken)
         {
             await UniTask.WaitUntil(() => IsDIInitialized /* && gameplayMapListManager.Initialized */, PlayerLoopTiming.Update, cancellationToken);
 
-            // var maniaMaps = gameplayMapListManager.GetAvailableMapsByBeatMapType(BeatMapTypeConstant.Mania);
-            // foreach (var mapInfo in maniaMaps)
-            // {
-            //     items.Add(new ItemData(mapInfo));
-            // }
+            this.GameModeType = gameModeType;
 
-            var allMaps = gameplayMapListManager.AvailableMaps;
-            foreach (var mapInfo in allMaps)
+            items.Clear();
+            if (string.IsNullOrEmpty(gameModeType))
             {
-                items.Add(new ItemData(mapInfo));
+                var allMaps = gameplayMapListManager.AvailableMaps;
+                foreach (var mapInfo in allMaps)
+                {
+                    items.Add(new ItemData(mapInfo));
+                }
+            }
+            else
+            {
+                //  TODO: now only JustDance mode
+                var justDanceMaps = gameplayMapListManager.GetAvailableMapsByBeatMapType(BeatMapTypeConstant.JustDance);
+                foreach (var mapInfo in justDanceMaps)
+                {
+                    items.Add(new ItemData(mapInfo));
+                }
             }
 
             scrollView.UpdateData(items);
@@ -185,6 +179,7 @@ namespace RhythmPulse.UI
             gameplayData = new Gameplay.GameplayData()
             {
                 MapInfo = itemData.MapInfo,
+                BeatMapType = GameModeType,
                 BeatMapFileName = "ToBeImplemented.yaml"
             };
             UpdateMediaDataAsync(itemData, cancelForMediaInfoUpdate).Forget();
@@ -194,14 +189,20 @@ namespace RhythmPulse.UI
         {
             await UniTask.Delay(confirmDelayMs, false, PlayerLoopTiming.Update, cancellationTokenSource.Token);
             if (cancellationTokenSource != null && cancellationTokenSource.IsCancellationRequested) return;
-            await audioLoadService.LoadAudioAsync(FilePathUtility.GetUnityWebRequestUri(mapStorage.GetPreviewAudioPath(itemData.MapInfo), UnityPathSource.AbsoluteOrFullUri));
+            previewAudioName.Clear();
+            if (!string.IsNullOrEmpty(GameModeType)) previewAudioName.Append(FilePathUtility.GetUnityWebRequestUri(mapStorage.GetPreviewAudioPath(itemData.MapInfo, GameModeType), UnityPathSource.AbsoluteOrFullUri));
+            else previewAudioName.Append(FilePathUtility.GetUnityWebRequestUri(mapStorage.GetPreviewAudioPath(itemData.MapInfo), UnityPathSource.AbsoluteOrFullUri));
+            await audioLoadService.LoadAudioAsync(previewAudioName.ToString());
             CLogger.LogInfo($"{DEBUG_FLAG} UpdateMediaDataAsync {itemData.MapInfo.DisplayName}, Time: {Time.time}");
             if (cancellationTokenSource != null && cancellationTokenSource.IsCancellationRequested) return;
             timeline?.Stop();
-            musicPlayer?.InitializeMusicPlayer(FilePathUtility.GetUnityWebRequestUri(mapStorage.GetPreviewAudioPath(itemData.MapInfo), UnityPathSource.AbsoluteOrFullUri), true);
+            musicPlayer?.InitializeMusicPlayer(previewAudioName.ToString(), true);
             bool isVideoPrepared = false;
+            previewVideoName.Clear();
+            if (!string.IsNullOrEmpty(GameModeType)) previewVideoName.Append(FilePathUtility.GetUnityWebRequestUri(mapStorage.GetPreviewVideoPath(itemData.MapInfo, GameModeType), UnityPathSource.AbsoluteOrFullUri));
+            else previewVideoName.Append(FilePathUtility.GetUnityWebRequestUri(mapStorage.GetPreviewVideoPath(itemData.MapInfo), UnityPathSource.AbsoluteOrFullUri));
             videoPlayer?.InitializeVideoPlayer(
-                videoUrl: FilePathUtility.GetUnityWebRequestUri(mapStorage.GetPreviewVideoPath(itemData.MapInfo), UnityPathSource.AbsoluteOrFullUri),
+                videoUrl: previewVideoName.ToString(),
                 bLoop: true,
                 OnPrepared: () => { isVideoPrepared = true; });
             await UniTask.WaitUntil(() => isVideoPrepared, PlayerLoopTiming.Update, cancellationTokenSource.Token);

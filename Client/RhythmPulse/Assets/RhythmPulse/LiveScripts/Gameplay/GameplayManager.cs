@@ -1,4 +1,5 @@
 using System;
+using System.Text;
 using System.Threading;
 using CycloneGames.Logger;
 using CycloneGames.Service;
@@ -33,6 +34,8 @@ namespace RhythmPulse.Gameplay
         public Timeline GameplayTimeline => (Timeline)gameplayTimeline;
         public Action<float> OnUpdatePlaybackProgress { get; set; }
         private bool IsGameplayMediaReady = false;
+        StringBuilder audioFileName = new StringBuilder();
+        StringBuilder videoFileName = new StringBuilder();
 
         [Inject]
         public void Construct(IMainCameraService mainCameraService,
@@ -99,15 +102,21 @@ namespace RhythmPulse.Gameplay
 
         public async UniTask InitializeMedias(Gameplay.GameplayData gameplayData, CancellationTokenSource cancel)
         {
-            await audioLoadService.LoadAudioAsync(FilePathUtility.GetUnityWebRequestUri(mapStorage.GetAudioPath(gameplayData.MapInfo), UnityPathSource.AbsoluteOrFullUri));
+            audioFileName.Clear();
+            if (!string.IsNullOrEmpty(gameplayData.BeatMapType)) audioFileName.Append(FilePathUtility.GetUnityWebRequestUri(mapStorage.GetAudioPath(gameplayData.MapInfo, gameplayData.BeatMapType), UnityPathSource.AbsoluteOrFullUri));
+            else audioFileName.Append(FilePathUtility.GetUnityWebRequestUri(mapStorage.GetAudioPath(gameplayData.MapInfo), UnityPathSource.AbsoluteOrFullUri));
+            await audioLoadService.LoadAudioAsync(audioFileName.ToString());
             if (cancel.IsCancellationRequested)
             {
                 return;
             }
-            gameplayMusicPlayer.InitializeMusicPlayer(FilePathUtility.GetUnityWebRequestUri(mapStorage.GetAudioPath(gameplayData.MapInfo), UnityPathSource.AbsoluteOrFullUri));
+            gameplayMusicPlayer.InitializeMusicPlayer(audioFileName.ToString());
             bool isVideoPrepared = false;
+            videoFileName.Clear();
+            if (!string.IsNullOrEmpty(gameplayData.BeatMapType)) videoFileName.Append(FilePathUtility.GetUnityWebRequestUri(mapStorage.GetVideoPath(gameplayData.MapInfo, gameplayData.BeatMapType), UnityPathSource.AbsoluteOrFullUri));
+            else videoFileName.Append(FilePathUtility.GetUnityWebRequestUri(mapStorage.GetVideoPath(gameplayData.MapInfo), UnityPathSource.AbsoluteOrFullUri));
             gameplayVideoPlayer.InitializeVideoPlayer(
-                                    videoUrl: FilePathUtility.GetUnityWebRequestUri(mapStorage.GetVideoPath(gameplayData.MapInfo), UnityPathSource.AbsoluteOrFullUri),
+                                    videoUrl: videoFileName.ToString(),
                                     bLoop: false,
                                     OnPrepared: () => { isVideoPrepared = true; });
             await UniTask.WaitUntil(() => isVideoPrepared, PlayerLoopTiming.Update, cancel.Token);

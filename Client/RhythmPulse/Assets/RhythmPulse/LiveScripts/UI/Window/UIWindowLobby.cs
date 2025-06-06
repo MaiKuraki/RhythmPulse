@@ -18,6 +18,7 @@ namespace RhythmPulse.UI
 
         private UIPageGameModeSelection uiPageGameModeSelection;
         private UIPageGameplayMapSelection uiPageGameplayMapSelection;
+        private CancellationTokenSource cancelRebuildMapList;
         private bool IsDIInitialized = false;
 
         protected override void Awake()
@@ -70,11 +71,14 @@ namespace RhythmPulse.UI
             GameplayMapSelectionTF.gameObject.SetActive(false);
             GameModeSelectionTF.gameObject.SetActive(true);
 
-            uiPageGameModeSelection.EnterTraditionalBeatsGame -= EnterMusicSelection;
-            uiPageGameModeSelection.EnterTraditionalBeatsGame += EnterMusicSelection;
+            uiPageGameModeSelection.EnterTraditionalBeatsGame -= EnterTraditionalBeatsGame;
+            uiPageGameModeSelection.EnterTraditionalBeatsGame += EnterTraditionalBeatsGame;
+
+            uiPageGameModeSelection.EnterDanceGame -= EnterJustDanceGame;
+            uiPageGameModeSelection.EnterDanceGame += EnterJustDanceGame;
         }
 
-        public void EnterMusicSelection()
+        private void EnterMusicSelection(string gameModeType)
         {
             GameModeSelectionTF.gameObject.SetActive(false);
             GameplayMapSelectionTF.gameObject.SetActive(true);
@@ -83,6 +87,22 @@ namespace RhythmPulse.UI
             uiPageGameplayMapSelection.ClickBackEvent += EnterGameModeSelection;
             uiPageGameplayMapSelection.EnterGameplayEvent -= EnterGameplay;
             uiPageGameplayMapSelection.EnterGameplayEvent += EnterGameplay;
+
+            cancelRebuildMapList?.Cancel();
+            cancelRebuildMapList?.Dispose();
+            cancelRebuildMapList = null;
+            cancelRebuildMapList = new CancellationTokenSource();
+            uiPageGameplayMapSelection.RebuildMapListAfterDIInitialized(gameModeType, cancelRebuildMapList.Token).Forget();
+        }
+
+        private void EnterTraditionalBeatsGame()
+        {
+            EnterMusicSelection(string.Empty);
+        }
+
+        private void EnterJustDanceGame()
+        {
+            EnterMusicSelection(RhythmPulse.GameplayData.Runtime.BeatMapTypeConstant.JustDance);
         }
     }
 }
