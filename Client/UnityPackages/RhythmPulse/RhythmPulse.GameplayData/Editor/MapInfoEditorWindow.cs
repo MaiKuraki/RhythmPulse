@@ -137,17 +137,17 @@ namespace RhythmPulse.GameplayData.Editor
 
             // --- Media Files ---
             EditorGUILayout.LabelField("Media Files", EditorStyles.boldLabel);
-            mapInfo.AudioFile = EditorGUILayout.TextField(new GUIContent("Audio File", "Path to the main audio file (e.g., 'audio.ogg'). Should be relative to the MapInfo's unique ID folder."), mapInfo.AudioFile);
+            mapInfo.AudioFile = EditorGUILayout.TextField(new GUIContent("Full Audio File", "Path to the main audio file (e.g., 'audio.ogg'). Should be relative to the MapInfo's unique ID folder."), mapInfo.AudioFile);
             ValidateRelativePath("AudioFile", mapInfo.AudioFile, false); // AudioFile is mandatory
             DisplayValidationMessage("AudioFile");
+
+            mapInfo.VideoFile = EditorGUILayout.TextField(new GUIContent("Full Video File", "Optional path to a background video file."), mapInfo.VideoFile);
+            ValidateRelativePath("VideoFile", mapInfo.VideoFile, true);
+            DisplayValidationMessage("VideoFile");
 
             mapInfo.PreviewAudioFile = EditorGUILayout.TextField(new GUIContent("Preview Audio File", "Optional path to a short audio preview clip."), mapInfo.PreviewAudioFile);
             ValidateRelativePath("PreviewAudioFile", mapInfo.PreviewAudioFile, true);
             DisplayValidationMessage("PreviewAudioFile");
-
-            mapInfo.VideoFile = EditorGUILayout.TextField(new GUIContent("Video File", "Optional path to a background video file."), mapInfo.VideoFile);
-            ValidateRelativePath("VideoFile", mapInfo.VideoFile, true);
-            DisplayValidationMessage("VideoFile");
 
             mapInfo.PreviewVideoFile = EditorGUILayout.TextField(new GUIContent("Preview Video File", "Optional path to a short video preview clip."), mapInfo.PreviewVideoFile);
             ValidateRelativePath("PreviewVideoFile", mapInfo.PreviewVideoFile, true);
@@ -277,11 +277,11 @@ namespace RhythmPulse.GameplayData.Editor
                 DisplayValidationMessage($"OverrideBeatMapType_{i}");
                 DisplayValidationMessage($"DuplicateOverride_{i}");
 
-                currentOverride.AudioFile = EditorGUILayout.TextField(new GUIContent("Override Audio File", "Leave empty to use default."), currentOverride.AudioFile);
+                currentOverride.AudioFile = EditorGUILayout.TextField(new GUIContent("Override Full Audio File", "Leave empty to use default."), currentOverride.AudioFile);
                 ValidateRelativePath($"OverrideAudio_{i}", currentOverride.AudioFile, true);
                 DisplayValidationMessage($"OverrideAudio_{i}");
 
-                currentOverride.VideoFile = EditorGUILayout.TextField(new GUIContent("Override Video File", "Leave empty to use default."), currentOverride.VideoFile);
+                currentOverride.VideoFile = EditorGUILayout.TextField(new GUIContent("Override Full Video File", "Leave empty to use default."), currentOverride.VideoFile);
                 ValidateRelativePath($"OverrideVideo_{i}", currentOverride.VideoFile, true);
                 DisplayValidationMessage($"OverrideVideo_{i}");
 
