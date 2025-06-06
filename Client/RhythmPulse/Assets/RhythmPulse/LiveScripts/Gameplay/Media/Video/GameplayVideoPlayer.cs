@@ -136,7 +136,7 @@ namespace RhythmPulse.Gameplay.Media
             }
 
             // Assign initial roles to the video players
-                _currentVideoPlayer = _videoPlayers[0];
+            _currentVideoPlayer = _videoPlayers[0];
             _standbyVideoPlayer = _videoPlayers[1];
 
             // Create and assign RenderTextures to their respective VideoPlayers
@@ -779,6 +779,9 @@ namespace RhythmPulse.Gameplay.Media
                 // await UniTask.Yield(PlayerLoopTiming.Update, cancellationToken); // Optional: wait a frame for pause to register
                 // cancellationToken.ThrowIfCancellationRequested();
             }
+            
+            await UniTask.WaitUntil(() => player.canSetTime, PlayerLoopTiming.Update, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
 
             // Unity's VideoPlayer.time can be unreliable if set too rapidly or if the player is not in a stable state.
             // Some platforms prefer seeking while paused.
