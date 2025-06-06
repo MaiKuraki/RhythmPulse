@@ -77,18 +77,18 @@ packages:
     dependency: transitive
     description:
       name: ffmpeg_kit_flutter_android
-      sha256: "1b033a586431e0a7aace9fe16b509bfa313ba13963134777b473ecb4c7b66c5e"
+      sha256: "1bcd2e18169862d9782f019e3e83f92a41a12692deb25e0e767ecd44518c0f7e"
       url: "https://pub.dev"
     source: hosted
-    version: "1.2.0"
+    version: "1.4.0"
   ffmpeg_kit_flutter_new:
     dependency: "direct main"
     description:
       name: ffmpeg_kit_flutter_new
-      sha256: "893e45869334ee28ae8ba7407f210a53cdfe3cb0c3b9aff1792078521ddc9ed6"
+      sha256: dbaf0f4963b08a034a4f787276c1e12efc36a56670693f1721e46f95554f0979
       url: "https://pub.dev"
     source: hosted
-    version: "1.4.1"
+    version: "1.6.1"
   ffmpeg_kit_flutter_platform_interface:
     dependency: transitive
     description:

@@ -438,7 +438,7 @@ class FFmpegHelper {
 
       if (!hasFfprobe || !hasFfmpeg) {
         final err = 'Required FFmpeg binaries not found or not accessible';
-        buffer.writeln('[$timestamp]    ❌ $err');
+        buffer.writeln('[$timestamp]      ❌ $err');
         onLog?.call(buffer.toString());
         return buffer.toString();
       }
@@ -447,54 +447,36 @@ class FFmpegHelper {
       final mediaType = await detectMediaType(inputPath);
       final isHDR = await _hasHdr(inputPath); // Check for HDR
 
-      // Enhanced video quality presets with HDR support
+      // ✨ MODIFIED: Video quality presets are now always for SDR output.
+      // HDR-specific logic is removed from here and handled by the tonemap filter.
       Map<int, Map<String, dynamic>> videoQualityRecommendations = {
         2160: {
           // 4K UHD
-          'crf': 18,
-          'bitrate': 28000,
-          'profile': isHDR ? 'high10' : 'high',
-          'pixelFormat': isHDR ? 'yuv420p10le' : 'yuv420p',
-          'hdrParams':
-              isHDR
-                  ? 'colorprim=bt2020:transfer=smpte2084:colormatrix=bt2020nc'
-                  : 'colorprim=bt709:transfer=bt709:colormatrix=bt709',
+          'crf': 18, 'bitrate': 28000, 'profile': 'high',
+          'pixelFormat': 'yuv420p',
+          'hdrParams': 'colorprim=bt709:transfer=bt709:colormatrix=bt709',
         },
         1440: {
           // QHD
-          'crf': 20,
-          'bitrate': 22000,
-          'profile': isHDR ? 'high10' : 'high',
-          'pixelFormat': isHDR ? 'yuv420p10le' : 'yuv420p',
-          'hdrParams':
-              isHDR
-                  ? 'colorprim=bt2020:transfer=smpte2084:colormatrix=bt2020nc'
-                  : 'colorprim=bt709:transfer=bt709:colormatrix=bt709',
+          'crf': 20, 'bitrate': 22000, 'profile': 'high',
+          'pixelFormat': 'yuv420p',
+          'hdrParams': 'colorprim=bt709:transfer=bt709:colormatrix=bt709',
         },
         1080: {
           // Full HD
-          'crf': 22,
-          'bitrate': 18000,
-          'profile': isHDR ? 'high10' : 'high',
-          'pixelFormat': isHDR ? 'yuv420p10le' : 'yuv420p',
-          'hdrParams':
-              isHDR
-                  ? 'colorprim=bt2020:transfer=smpte2084:colormatrix=bt2020nc'
-                  : 'colorprim=bt709:transfer=bt709:colormatrix=bt709',
+          'crf': 22, 'bitrate': 18000, 'profile': 'high',
+          'pixelFormat': 'yuv420p',
+          'hdrParams': 'colorprim=bt709:transfer=bt709:colormatrix=bt709',
         },
         720: {
           // HD
-          'crf': 23,
-          'bitrate': 10000,
-          'profile': 'high',
+          'crf': 23, 'bitrate': 10000, 'profile': 'high',
           'pixelFormat': 'yuv420p',
           'hdrParams': 'colorprim=bt709:transfer=bt709:colormatrix=bt709',
         },
         480: {
           // SD
-          'crf': 24,
-          'bitrate': 6000,
-          'profile': 'main',
+          'crf': 24, 'bitrate': 6000, 'profile': 'main',
           'pixelFormat': 'yuv420p',
           'hdrParams': 'colorprim=bt709:transfer=bt709:colormatrix=bt709',
         },
@@ -519,18 +501,11 @@ class FFmpegHelper {
           throw ArgumentError('outputVideoPath is required for video input');
         }
 
-        // Get input video properties with HDR detection
         final inputWidth = mediaInfo?.width ?? 1920;
         final inputHeight = mediaInfo?.height ?? 1080;
         final inputVideoBitrate = mediaInfo?.videoBitrate ?? 0;
         final inputAudioBitrate = mediaInfo?.audioBitrate ?? 0;
 
-        // Enhanced HDR detection
-        final isHDR =
-            await _hasHdr(inputPath) ||
-            inputHeight >= 1080 && inputVideoBitrate > 25000 * 1000;
-
-        // Calculate target resolution - preserve original if possible
         int targetHeight = inputHeight;
         int targetWidth = inputWidth;
 
@@ -540,7 +515,6 @@ class FFmpegHelper {
           targetWidth = (1080 * aspectRatio).round();
         }
 
-        // Find the closest recommended resolution
         final resolutions = videoQualityRecommendations.keys.toList();
         resolutions.sort((a, b) => b.compareTo(a));
         int? recommendedHeight;
@@ -552,58 +526,48 @@ class FFmpegHelper {
         }
         recommendedHeight ??= resolutions.last;
 
-        // Get recommended settings with HDR consideration
         final recommendedSettings =
             videoQualityRecommendations[recommendedHeight]!;
         final recommendedCrf = recommendedSettings['crf'] as int;
-        final recommendedBitrate = recommendedSettings['bitrate'] as int;
         final recommendedProfile = recommendedSettings['profile'] as String;
-        var pixelFormat = recommendedSettings['pixelFormat'] as String;
+        final pixelFormat = recommendedSettings['pixelFormat'] as String;
         final hdrParams = recommendedSettings['hdrParams'] as String?;
 
-        // Force 10-bit for HDR content regardless of resolution
-        if (isHDR && !pixelFormat.endsWith('10le')) {
-          pixelFormat = 'yuv420p10le';
-        }
-
-        // Determine encoding strategy - always use CRF for better quality
-        // Only use bitrate mode if explicitly requested
-        const bool useCrf = true;
-
-        // Log the quality decisions
         buffer.writeln(
-          '[$timestamp]    Input video resolution: ${inputWidth}x$inputHeight',
+          '[$timestamp]      Input video resolution: ${inputWidth}x$inputHeight',
         );
         buffer.writeln(
-          '[$timestamp]    Input video bitrate: ${inputVideoBitrate ~/ 1000} kbps',
+          '[$timestamp]      Input video bitrate: ${inputVideoBitrate ~/ 1000} kbps',
         );
-        buffer.writeln('[$timestamp]    HDR detected: $isHDR');
+        buffer.writeln('[$timestamp]      HDR detected: $isHDR');
         buffer.writeln(
-          '[$timestamp]    Output video resolution: ${targetWidth}x$targetHeight',
-        );
-        buffer.writeln(
-          '[$timestamp]    Encoding strategy: CRF $recommendedCrf',
+          '[$timestamp]      Output video resolution: ${targetWidth}x$targetHeight',
         );
         buffer.writeln(
-          '[$timestamp]    Color format: $pixelFormat, Profile: $recommendedProfile',
+          '[$timestamp]      Encoding strategy: CRF $recommendedCrf',
         );
-        if (isHDR) {
-          buffer.writeln('[$timestamp]    HDR parameters: $hdrParams');
-        }
+        buffer.writeln(
+          '[$timestamp]      Color format: $pixelFormat, Profile: $recommendedProfile',
+        );
         onLog?.call(buffer.toString());
 
-        // At the start of your video command generation
         final hwAccelMethod = await _getBestHardwareAccelerationMethod();
         final useHwAccel = hwAccelMethod != null;
 
+        // ✨ NEW: Dynamically build the video filter chain
+        final List<String> vfFilters = [];
+        if (targetWidth != inputWidth || targetHeight != inputHeight) {
+          vfFilters.add('scale=$targetWidth:$targetHeight');
+        }
+        if (isHDR) {
+          // Add tonemapping to convert HDR to SDR. 'hable' is a good general-purpose algorithm.
+          // 'format=yuv420p' ensures the output is in the standard SDR pixel format.
+          vfFilters.add('tonemap=tonemap=hable,format=yuv420p');
+        }
+
         // Build FFmpeg command with quality optimizations
         final videoCmd = [
-          if (useHwAccel) ...[
-            '-hwaccel',
-            hwAccelMethod!,
-            '-hwaccel_output_format',
-            'auto',
-          ],
+          if (useHwAccel) ...['-hwaccel', hwAccelMethod],
           '-i', inputPath,
           '-c:v', 'libx264',
           '-crf', recommendedCrf.toString(),
@@ -614,16 +578,12 @@ class FFmpegHelper {
           '-profile:v', recommendedProfile,
           '-pix_fmt', pixelFormat,
           '-movflags', '+faststart',
-          if (targetWidth != inputWidth || targetHeight != inputHeight) ...[
-            '-vf',
-            'scale=$targetWidth:$targetHeight',
-          ],
+          // ✨ MODIFIED: Add the combined video filters
+          if (vfFilters.isNotEmpty) ...['-vf', vfFilters.join(',')],
           '-x264-params',
           hdrParams ??
               'colorprim=bt709:transfer=bt709:colormatrix=bt709:aq-mode=3',
-          '-an', // Disable audio
-          '-y', // Overwrite
-          outputVideoPath!,
+          '-an', '-y', outputVideoPath,
         ];
 
         final targetAudioBitrate =
@@ -632,40 +592,34 @@ class FFmpegHelper {
                     ? 320 * 1000
                     : inputAudioBitrate)
                 : audioBitrateRecommendations['vorbis']! * 1000;
-        final audioInfo = await _analyzeAudio(inputPath);
-        final isAlreadyNormalized =
-            audioInfo['format_tags']?['encoder']?.toString().contains(
-              'loudnorm',
-            ) ??
-            false;
-        //  filter is nolonger used
-        final audioFilters =
-            isAlreadyNormalized
-                ? 'acompressor=threshold=-6dB:ratio=2:attack=30:release=200,alimiter=level=1'
-                : 'loudnorm=I=-14:TP=-1.5:LRA=11:linear=true:print_format=summary,' +
-                    'acompressor=threshold=-6dB:ratio=2:attack=30:release=200,' +
-                    'alimiter=level=1';
-        // Audio extraction with higher quality
+
         final audioCmd = [
-          '-i', inputPath,
-          '-map', '0:a:0',
+          '-i',
+          inputPath,
+          '-map',
+          '0:a:0',
           '-vn',
-          '-ar', '48000', // Force 48KHz for Unity
-          // '-filter:a', audioFilters,  // TODO：to be implemented
-          '-c:a', 'libvorbis', // vorbis codec (Unity recommended)
-          '-b:a', targetAudioBitrate.toString(),
-          '-vbr', 'on', // Enable variable bitrate
-          '-compression_level', '10', // Highest compression quality
-          '-frame_duration', '20', // Optimal for game audio
-          '-application', 'lowdelay', // Optimize
+          '-ar',
+          '48000',
+          '-c:a',
+          'libvorbis',
+          '-b:a',
+          targetAudioBitrate.toString(),
+          '-vbr',
+          'on',
+          '-compression_level',
+          '10',
+          '-frame_duration',
+          '20',
+          '-application',
+          'lowdelay',
           '-y',
           outputAudioPath,
         ];
 
-        // Execute both commands
         final videoCmdString = videoCmd.join('  ');
         buffer.writeln(
-          '[$timestamp]    ${localizedStrings["videoSplitCmd"]?.replaceFirst("%s", videoCmdString)}',
+          '[$timestamp]      ${localizedStrings["videoSplitCmd"]?.replaceFirst("%s", videoCmdString)}',
         );
         final videoResult = await _executeFfmpegCommand(
           videoCmd,
@@ -676,7 +630,7 @@ class FFmpegHelper {
 
         if (!videoResult.success) {
           buffer.writeln(
-            '[$timestamp]    ❌ ${localizedStrings["videoSplitFailed"]?.replaceFirst("%s", inputPath)}',
+            '[$timestamp]      ❌ ${localizedStrings["videoSplitFailed"]?.replaceFirst("%s", inputPath)}',
           );
           onLog?.call(buffer.toString());
           return buffer.toString();
@@ -684,7 +638,7 @@ class FFmpegHelper {
 
         final audioCmdString = audioCmd.join(' ');
         buffer.writeln(
-          '[$timestamp]    ${localizedStrings["audioSplitCmd"]?.replaceFirst("%s", audioCmdString)}',
+          '[$timestamp]      ${localizedStrings["audioSplitCmd"]?.replaceFirst("%s", audioCmdString)}',
         );
         final audioResult = await _executeFfmpegCommand(
           audioCmd,
@@ -696,23 +650,29 @@ class FFmpegHelper {
 
         if (!audioResult.success) {
           buffer.writeln(
-            '[$timestamp]    ❌ ${localizedStrings["audioSplitFailed"]?.replaceFirst("%s", inputPath)}',
+            '[$timestamp]      ❌ ${localizedStrings["audioSplitFailed"]?.replaceFirst("%s", inputPath)}',
           );
           onLog?.call(buffer.toString());
         }
 
         if (videoResult.success) {
           buffer.writeln(
-            '[$timestamp]    ✅ ${localizedStrings["videoSplitSuccess"]?.replaceFirst("%s", outputVideoPath)}',
+            '[$timestamp]      ✅ ${localizedStrings["videoSplitSuccess"]?.replaceFirst("%s", outputVideoPath)}',
           );
+          // ✨ NEW: Add a warning if HDR to SDR conversion was performed.
+          if (isHDR) {
+            buffer.writeln(
+              '[$timestamp]      ⚠️ ${localizedStrings["hdrToSdrWarning"] ?? "Warning: The original HDR video was converted to SDR for compatibility. The visual result may differ from the source."}',
+            );
+          }
         }
         if (audioResult.success) {
           buffer.writeln(
-            '[$timestamp]    ✅ ${localizedStrings["audioSplitSuccess"]?.replaceFirst("%s", outputAudioPath)}',
+            '[$timestamp]      ✅ ${localizedStrings["audioSplitSuccess"]?.replaceFirst("%s", outputAudioPath)}',
           );
         }
       } else {
-        // Audio-only processing with higher quality
+        // Audio-only processing (unchanged)
         final inputAudioBitrate = mediaInfo?.audioBitrate ?? 0;
         final targetAudioBitrate =
             inputAudioBitrate > 0
@@ -722,38 +682,33 @@ class FFmpegHelper {
                 : audioBitrateRecommendations['vorbis']! * 1000;
 
         buffer.writeln(
-          '[$timestamp]    Input audio bitrate: ${inputAudioBitrate ~/ 1000} kbps',
+          '[$timestamp]      Input audio bitrate: ${inputAudioBitrate ~/ 1000} kbps',
         );
         buffer.writeln(
-          '[$timestamp]    Selected audio bitrate: ${targetAudioBitrate ~/ 1000} kbps',
+          '[$timestamp]      Selected audio bitrate: ${targetAudioBitrate ~/ 1000} kbps',
         );
         onLog?.call(buffer.toString());
 
-        final audioInfo = await _analyzeAudio(inputPath);
-        final isAlreadyNormalized =
-            audioInfo['format_tags']?['encoder']?.toString().contains(
-              'loudnorm',
-            ) ??
-            false;
-        final audioFilters =
-            isAlreadyNormalized
-                ? 'acompressor=threshold=-6dB:ratio=2:attack=30:release=200,alimiter=level=1'
-                : 'loudnorm=I=-14:TP=-1.5:LRA=11:linear=true:print_format=summary,' +
-                    'acompressor=threshold=-6dB:ratio=2:attack=30:release=200,' +
-                    'alimiter=level=1';
-        // Try to preserve original codec first
         final audioCmd = [
-          '-i', inputPath,
-          '-map', '0:a:0',
+          '-i',
+          inputPath,
+          '-map',
+          '0:a:0',
           '-vn',
-          '-ar', '48000', // Force 48KHz for Unity
-          // '-filter:a', audioFilters,  // TODO：to be implemented
-          '-c:a', 'libvorbis', // vorbis codec (Unity recommended)
-          '-b:a', targetAudioBitrate.toString(),
-          '-vbr', 'on', // Enable variable bitrate
-          '-compression_level', '10', // Highest compression quality
-          '-frame_duration', '20', // Optimal for game audio
-          '-application', 'lowdelay', // Optimize
+          '-ar',
+          '48000',
+          '-c:a',
+          'libvorbis',
+          '-b:a',
+          targetAudioBitrate.toString(),
+          '-vbr',
+          'on',
+          '-compression_level',
+          '10',
+          '-frame_duration',
+          '20',
+          '-application',
+          'lowdelay',
           '-y',
           outputAudioPath,
         ];
@@ -763,43 +718,14 @@ class FFmpegHelper {
           cancelToken: cancelToken,
         );
 
-        // If copy failed, use Opus with high quality settings
         if (!result.success) {
           buffer.writeln(
-            '[$timestamp]    ⚠️ Original codec not supported, converting to Opus',
+            '[$timestamp]      ⚠️ Original codec not supported, converting to Vorbis',
           );
           onLog?.call(buffer.toString());
-
-          final audioInfo = await _analyzeAudio(inputPath);
-          final isAlreadyNormalized =
-              audioInfo['format_tags']?['encoder']?.toString().contains(
-                'loudnorm',
-              ) ??
-              false;
-          final audioFilters =
-              isAlreadyNormalized
-                  ? 'acompressor=threshold=-6dB:ratio=2:attack=30:release=200,alimiter=level=1'
-                  : 'loudnorm=I=-14:TP=-1.5:LRA=11:linear=true:print_format=summary,' +
-                      'acompressor=threshold=-6dB:ratio=2:attack=30:release=200,' +
-                      'alimiter=level=1';
-          final fallbackCmd = [
-            '-i', inputPath,
-            '-map', '0:a:0',
-            '-vn',
-            '-ar', '48000', // Force 48KHz for Unity
-            // '-filter:a', audioFilters,  // TODO：to be implemented
-            '-c:a', 'libvorbis', // vorbis codec (Unity recommended)
-            '-b:a', targetAudioBitrate.toString(),
-            '-vbr', 'on', // Enable variable bitrate
-            '-compression_level', '10', // Highest compression quality
-            '-frame_duration', '20', // Optimal for game audio
-            '-application', 'lowdelay', // Optimize
-            '-y',
-            outputAudioPath,
-          ];
-
+          // Fallback command is the same as the initial command for Vorbis
           result = await _executeFfmpegCommand(
-            fallbackCmd,
+            audioCmd,
             cancelToken: cancelToken,
           );
         }
@@ -809,16 +735,16 @@ class FFmpegHelper {
 
         if (result.success) {
           buffer.writeln(
-            '[$timestamp]    ✅ ${localizedStrings["audioSplitSuccess"]?.replaceFirst("%s", outputAudioPath)}',
+            '[$timestamp]      ✅ ${localizedStrings["audioSplitSuccess"]?.replaceFirst("%s", outputAudioPath)}',
           );
         } else {
           buffer.writeln(
-            '[$timestamp]    ❌ ${localizedStrings["audioSplitFailed"]?.replaceFirst("%s", inputPath)}',
+            '[$timestamp]      ❌ ${localizedStrings["audioSplitFailed"]?.replaceFirst("%s", inputPath)}',
           );
         }
       }
     } catch (e) {
-      buffer.writeln('[$timestamp]    ❌ Error: $e');
+      buffer.writeln('[$timestamp]      ❌ Error: $e');
       onLog?.call(buffer.toString());
     }
 
@@ -940,14 +866,6 @@ class FFmpegHelper {
   }
 
   /// Generates a media preview based on input file type
-  /// [inputPath] - Source media file path
-  /// [outputPath] - Destination path for preview output
-  /// [startMs] - Start time in milliseconds
-  /// [endMs] - End time in milliseconds
-  /// [localizedStrings] - Localization strings for logging
-  /// [onLog] - Optional callback for real-time logging
-  /// [cancelToken] - Optional cancellation token
-  /// Returns a formatted log of the operation
   static Future<String> generatePreview({
     required String inputPath,
     String? outputVideoPath,
@@ -962,47 +880,39 @@ class FFmpegHelper {
     final timestamp = DateTime.now().toIso8601String();
 
     try {
-      // Verify ffmpeg is available
       final hasFfmpeg = await verifyBundledFfmpeg();
       if (!hasFfmpeg) {
         final err = 'Bundled ffmpeg not found or not accessible';
-        buffer.writeln('[$timestamp]    ❌ $err');
+        buffer.writeln('[$timestamp]      ❌ $err');
         onLog?.call(buffer.toString());
         return buffer.toString();
       }
 
-      // Calculate duration in seconds
       final durationSec = (endMs - startMs) / 1000;
       if (durationSec <= 0) {
         final err = 'Invalid duration (end time must be after start time)';
-        buffer.writeln('[$timestamp]    ❌ $err');
+        buffer.writeln('[$timestamp]      ❌ $err');
         onLog?.call(buffer.toString());
         return buffer.toString();
       }
 
-      // Detect media type
       final mediaType = await detectMediaType(inputPath);
       final isVideo = mediaType == MediaType.video;
+      // ✨ NEW: Detect HDR for previews as well
+      final isHDR = isVideo ? await _hasHdr(inputPath) : false;
 
-      // Get media info to determine input parameters
       final mediaInfo = await _getMediaInfo(inputPath);
 
-      // Set maximum limits optimized for Unity
-      const int maxVideoBitrate =
-          10 * 1000 * 1000; // 10 Mbps (good balance for previews)
-      const int maxAudioBitrate = 128 * 1000; // 128 kbps (Unity recommended)
-      const int maxHeight = 1080; // 1080p (Unity standard)
+      const int maxVideoBitrate = 10 * 1000 * 1000;
+      const int maxAudioBitrate = 128 * 1000;
+      const int maxHeight = 1080;
 
-      // Calculate target parameters
-      int targetVideoBitrate = maxVideoBitrate;
       int targetAudioBitrate = maxAudioBitrate;
       int targetWidth = 1920;
       int targetHeight = 1080;
 
       if (mediaInfo != null) {
-        // Video parameters - use CRF for better quality/size balance
         if (isVideo) {
-          // Calculate target resolution while maintaining aspect ratio
           if (mediaInfo.height > maxHeight) {
             final aspectRatio = mediaInfo.width / mediaInfo.height;
             targetHeight = maxHeight;
@@ -1011,17 +921,7 @@ class FFmpegHelper {
             targetHeight = mediaInfo.height;
             targetWidth = mediaInfo.width;
           }
-
-          // Adjust bitrate based on resolution and duration
-          // Higher resolution/longer duration gets higher bitrate
-          final durationFactor =
-              durationSec.clamp(1, 30) / 30; // Normalize to 30s max
-          final resolutionFactor = (targetWidth * targetHeight) / (1920 * 1080);
-          targetVideoBitrate =
-              (maxVideoBitrate * resolutionFactor * durationFactor).round();
         }
-
-        // Audio parameters - cap at 128kbps but preserve original if lower
         targetAudioBitrate =
             mediaInfo.audioBitrate < maxAudioBitrate
                 ? mediaInfo.audioBitrate
@@ -1029,76 +929,83 @@ class FFmpegHelper {
       }
 
       buffer.writeln(
-        '[$timestamp]    Input file type: ${isVideo ? 'Video' : 'Audio'}',
+        '[$timestamp]      Input file type: ${isVideo ? 'Video' : 'Audio'}',
       );
       if (isVideo) {
         buffer.writeln(
-          '[$timestamp]    Target resolution: ${targetWidth}x$targetHeight',
+          '[$timestamp]      Target resolution: ${targetWidth}x$targetHeight',
         );
-        buffer.writeln(
-          '[$timestamp]    Target video bitrate: ${targetVideoBitrate ~/ 1000} kbps',
-        );
+        // ✨ NEW: Log HDR detection for preview
+        buffer.writeln('[$timestamp]      HDR Detected: $isHDR');
       }
       buffer.writeln(
-        '[$timestamp]    Target audio bitrate: ${targetAudioBitrate ~/ 1000} kbps',
+        '[$timestamp]      Target audio bitrate: ${targetAudioBitrate ~/ 1000} kbps',
       );
       onLog?.call(buffer.toString());
 
-      // Execute commands based on media type
       if (isVideo && outputVideoPath != null) {
-        // Video preview command - optimized for Unity playback
+        // ✨ NEW: Dynamically build filter chain for preview
+        final List<String> vfFilters = [];
+        vfFilters.add(
+          'scale=$targetWidth:$targetHeight:force_original_aspect_ratio=decrease',
+        );
+        if (isHDR) {
+          vfFilters.add('tonemap=tonemap=hable,format=yuv420p');
+        }
+
         final videoCmd = [
-          '-ss', _formatTime(startMs), // Start position
-          '-i', inputPath, // Input file
-          '-t', durationSec.toString(), // Duration
-          '-c:v', 'libx264', // Video codec (Unity compatible)
-          '-preset', 'fast', // Faster encoding with good quality
-          '-crf', '23', // Balanced quality (18-28 range, lower=better quality)
-          '-maxrate', '${maxVideoBitrate ~/ 1000}k', // Maximum bitrate
-          '-bufsize', '${maxVideoBitrate ~/ 500}k', // Buffer size
-          '-pix_fmt', 'yuv420p', // Unity compatible pixel format
-          '-profile:v', 'main', // Broad compatibility profile
-          '-movflags', '+faststart', // Enable streaming
-          '-vf',
-          'scale=$targetWidth:$targetHeight:force_original_aspect_ratio=decrease', // Scaling
-          '-an', // No audio
-          '-y', // Overwrite
-          outputVideoPath,
+          '-ss',
+          _formatTime(startMs),
+          '-i',
+          inputPath,
+          '-t',
+          durationSec.toString(),
+          '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
+          '-maxrate',
+          '${maxVideoBitrate ~/ 1000}k',
+          '-bufsize',
+          '${maxVideoBitrate ~/ 500}k',
+          '-pix_fmt',
+          'yuv420p',
+          '-profile:v',
+          'main',
+          '-movflags',
+          '+faststart',
+          // ✨ MODIFIED: Add combined filter string
+          if (vfFilters.isNotEmpty) ...['-vf', vfFilters.join(',')],
+          '-an', '-y', outputVideoPath,
         ];
 
-        final audioInfo = await _analyzeAudio(inputPath);
-        final isAlreadyNormalized =
-            audioInfo['format_tags']?['encoder']?.toString().contains(
-              'loudnorm',
-            ) ??
-            false;
-        final audioFilters =
-            isAlreadyNormalized
-                ? 'acompressor=threshold=-6dB:ratio=2:attack=30:release=200,alimiter=level=1'
-                : 'loudnorm=I=-14:TP=-1.5:LRA=11:linear=true:print_format=summary,' +
-                    'acompressor=threshold=-6dB:ratio=2:attack=30:release=200,' +
-                    'alimiter=level=1';
-        // Audio preview command - optimized for Unity
         final audioCmd = [
-          '-ss', _formatTime(startMs), // Start position
-          '-i', inputPath, // Input file
-          '-t', durationSec.toString(), // Duration
-          '-map', '0:a:0',
-          '-vn', // No video
-          '-ar', '48000', // Force 48KHz for Unity
-          // '-filter:a', audioFilters,  // TODO：to be implemented
-          '-c:a', 'libvorbis', // vorbis codec (Unity recommended)
-          '-b:a', '${targetAudioBitrate ~/ 1000}k', // Audio bitrate
-          '-vbr', 'on', // Variable bitrate
-          '-frame_duration', '20', // Optimal for game audio
-          '-application', 'lowdelay', // Optimize
-          '-compression_level', '10', // Highest quality
-          '-ac', '2', // Stereo audio
-          '-y', // Overwrite
+          '-ss',
+          _formatTime(startMs),
+          '-i',
+          inputPath,
+          '-t',
+          durationSec.toString(),
+          '-map',
+          '0:a:0',
+          '-vn',
+          '-ar',
+          '48000',
+          '-c:a',
+          'libvorbis',
+          '-b:a',
+          '${targetAudioBitrate ~/ 1000}k',
+          '-vbr',
+          'on',
+          '-frame_duration',
+          '20',
+          '-application',
+          'lowdelay',
+          '-compression_level',
+          '10',
+          '-ac',
+          '2',
+          '-y',
           outputAudioPath,
         ];
 
-        // Execute video extraction
         final videoResult = await _executeFfmpegCommand(
           videoCmd,
           cancelToken: cancelToken,
@@ -1108,13 +1015,12 @@ class FFmpegHelper {
 
         if (!videoResult.success) {
           buffer.writeln(
-            '[$timestamp]    ❌ ${localizedStrings["previewVideoSplitFailed"]?.replaceFirst("%s", inputPath)}',
+            '[$timestamp]      ❌ ${localizedStrings["previewVideoSplitFailed"]?.replaceFirst("%s", inputPath)}',
           );
           onLog?.call(buffer.toString());
           return buffer.toString();
         }
 
-        // Execute audio extraction
         final audioResult = await _executeFfmpegCommand(
           audioCmd,
           cancelToken: cancelToken,
@@ -1124,51 +1030,56 @@ class FFmpegHelper {
 
         if (!audioResult.success) {
           buffer.writeln(
-            '[$timestamp]    ❌ ${localizedStrings["previewAudioSplitFailed"]?.replaceFirst("%s", inputPath)}',
+            '[$timestamp]      ❌ ${localizedStrings["previewAudioSplitFailed"]?.replaceFirst("%s", inputPath)}',
           );
           onLog?.call(buffer.toString());
         }
 
         if (videoResult.success) {
           buffer.writeln(
-            '[$timestamp]    ✅ ${localizedStrings["previewVideoSplitSuccess"]?.replaceFirst("%s", outputVideoPath)}',
+            '[$timestamp]      ✅ ${localizedStrings["previewVideoSplitSuccess"]?.replaceFirst("%s", outputVideoPath)}',
           );
+          // ✨ NEW: Add warning for preview if HDR was converted
+          if (isHDR) {
+            buffer.writeln(
+              '[$timestamp]      ⚠️ ${localizedStrings["hdrToSdrWarning"] ?? "Warning: The original HDR video was converted to SDR for the preview. The visual result may differ from the source."}',
+            );
+          }
         }
         if (audioResult.success) {
           buffer.writeln(
-            '[$timestamp]    ✅ ${localizedStrings["previewAudioSplitSuccess"]?.replaceFirst("%s", outputAudioPath)}',
+            '[$timestamp]      ✅ ${localizedStrings["previewAudioSplitSuccess"]?.replaceFirst("%s", outputAudioPath)}',
           );
         }
       } else {
-        // Audio-only preview command - optimized for Unity
-        final audioInfo = await _analyzeAudio(inputPath);
-        final isAlreadyNormalized =
-            audioInfo['format_tags']?['encoder']?.toString().contains(
-              'loudnorm',
-            ) ??
-            false;
-        final audioFilters =
-            isAlreadyNormalized
-                ? 'acompressor=threshold=-6dB:ratio=2:attack=30:release=200,alimiter=level=1'
-                : 'loudnorm=I=-14:TP=-1.5:LRA=11:linear=true:print_format=summary,' +
-                    'acompressor=threshold=-6dB:ratio=2:attack=30:release=200,' +
-                    'alimiter=level=1';
+        // Audio-only preview (unchanged)
         final audioCmd = [
-          '-ss', _formatTime(startMs), // Start position
-          '-i', inputPath, // Input file
-          '-t', durationSec.toString(), // Duration
-          '-map', '0:a:0',
-          '-vn', // No video
-          '-ar', '48000', // Standard sample rate
-          // '-filter:a', audioFilters,  // TODO：to be implemented
-          '-c:a', 'libvorbis', // vorbis codec (Unity recommended)
-          '-b:a', '${targetAudioBitrate ~/ 1000}k', // Audio bitrate
-          '-vbr', 'on', // Enable variable bitrate
-          '-compression_level', '10', // Highest compression quality
-          '-frame_duration', '20', // Optimal for game audio
-          '-application', 'lowdelay', // Optimize
-          '-ac', '2', // Stereo audio
-          '-y', // Overwrite
+          '-ss',
+          _formatTime(startMs),
+          '-i',
+          inputPath,
+          '-t',
+          durationSec.toString(),
+          '-map',
+          '0:a:0',
+          '-vn',
+          '-ar',
+          '48000',
+          '-c:a',
+          'libvorbis',
+          '-b:a',
+          '${targetAudioBitrate ~/ 1000}k',
+          '-vbr',
+          'on',
+          '-compression_level',
+          '10',
+          '-frame_duration',
+          '20',
+          '-application',
+          'lowdelay',
+          '-ac',
+          '2',
+          '-y',
           outputAudioPath,
         ];
 
@@ -1181,11 +1092,11 @@ class FFmpegHelper {
 
         if (result.success) {
           buffer.writeln(
-            '[$timestamp]    ✅ ${localizedStrings["previewAudioSplitSuccess"]?.replaceFirst("%s", inputPath)}',
+            '[$timestamp]      ✅ ${localizedStrings["previewAudioSplitSuccess"]?.replaceFirst("%s", inputPath)}',
           );
         } else {
           buffer.writeln(
-            '[$timestamp]    ❌ ${localizedStrings["previewAudioSplitFailed"]?.replaceFirst("%s", inputPath)}',
+            '[$timestamp]      ❌ ${localizedStrings["previewAudioSplitFailed"]?.replaceFirst("%s", inputPath)}',
           );
         }
       }
@@ -1194,7 +1105,7 @@ class FFmpegHelper {
       if (kDebugMode) {
         print(errLog);
       }
-      buffer.writeln('[$timestamp]    ❌ $errLog');
+      buffer.writeln('[$timestamp]      ❌ $errLog');
       onLog?.call(buffer.toString());
     }
 
