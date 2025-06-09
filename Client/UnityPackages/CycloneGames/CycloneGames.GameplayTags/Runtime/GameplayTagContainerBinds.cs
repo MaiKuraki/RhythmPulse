@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace CycloneGames.GameplayTags
+namespace CycloneGames.GameplayTags.Runtime
 {
    public struct GameplayTagContainerBinds
    {
