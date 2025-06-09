@@ -7,6 +7,11 @@ namespace RhythmPulse.GameplayData.Runtime
     [YamlObject]
     public partial struct MapInfo
     {
+        [YamlIgnore]
+        public readonly bool IsDefault => string.IsNullOrEmpty(UniqueID);
+        [YamlIgnore]
+        public readonly bool IsNotDefault => !string.IsNullOrEmpty(UniqueID);
+        
         [YamlMember(Order = 0)]
         public string UniqueID { get; set; }
         [YamlMember(Order = 1)]

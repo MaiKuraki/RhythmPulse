@@ -1,4 +1,5 @@
 using System.Threading;
+using CycloneGames.Logger;
 using CycloneGames.UIFramework;
 using Cysharp.Threading.Tasks;
 using RhythmPulse.APIGateway;
@@ -10,6 +11,7 @@ namespace RhythmPulse.UI
 {
     public class UIWindowLobby : UIWindow
     {
+        private const string DEBUG_FLAG = "[UIWindowLobby]";
         private IObjectResolver objectResolver;
         private ISceneManagementAPIGateway sceneManagementAPIGateway;
 
@@ -63,7 +65,14 @@ namespace RhythmPulse.UI
 
         void EnterGameplay(Gameplay.GameplayData gameplayData)
         {
-            sceneManagementAPIGateway.Push(SceneDefinitions.Gameplay, null, gameplayData, null);
+            if (gameplayData.IsVliad)
+            {
+                sceneManagementAPIGateway.Push(SceneDefinitions.Gameplay, null, gameplayData, null);
+            }
+            else
+            {
+                CLogger.LogWarning($"{DEBUG_FLAG} Invalid GamplayData");
+            }
         }
 
         public void EnterGameModeSelection()
