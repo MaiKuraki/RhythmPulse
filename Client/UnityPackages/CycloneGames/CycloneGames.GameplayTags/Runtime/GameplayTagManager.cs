@@ -83,7 +83,6 @@ namespace CycloneGames.GameplayTags.Runtime
             // Discover tags from attributes in all loaded assemblies.
             foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
             {
-                // OPTIMIZATION: Use try-catch for assembly.GetCustomAttributes to handle potential reflection errors gracefully.
                 try
                 {
                     foreach (GameplayTagAttribute attribute in assembly.GetCustomAttributes<GameplayTagAttribute>())
@@ -94,13 +93,18 @@ namespace CycloneGames.GameplayTags.Runtime
                         }
                         catch (Exception e)
                         {
-                            // UnityEngine.Debug.LogError($"Failed to register tag '{attribute.TagName}' from assembly '{assembly.FullName}': {e.Message}");
+#if UNITY_2017_1_OR_NEWER
+                            UnityEngine.Debug.LogError($"Failed to register tag '{attribute.TagName}' from assembly '{assembly.FullName}'. Reason: {e.Message}");
+#endif
                         }
                     }
                 }
-                catch (Exception)
+                catch (Exception e)
                 {
                     // Some dynamic assemblies can't be introspected. This is fine, just ignore them.
+#if UNITY_2017_1_OR_NEWER
+                    UnityEngine.Debug.LogWarning($"Could not load attributes from assembly '{assembly.FullName}'. This may be expected for some system assemblies. Error: {e.Message}");
+#endif
                 }
             }
             

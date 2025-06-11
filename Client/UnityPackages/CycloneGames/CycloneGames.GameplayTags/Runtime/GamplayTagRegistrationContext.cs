@@ -34,13 +34,21 @@ namespace CycloneGames.GameplayTags.Runtime
         public void RegisterTag(string name, string description = null, GameplayTagFlags flags = GameplayTagFlags.None)
         {
             GameplayTagUtility.ValidateName(name);
-            if (m_TagsByName.ContainsKey(name))
+            if (m_TagsByName.TryGetValue(name, out var existingDef))
             {
-                // Tag already exists, possibly update its description if the new one is better.
-                if (!string.IsNullOrEmpty(description) && string.IsNullOrEmpty(m_TagsByName[name].Description))
+                // If a tag is registered multiple times, update its description if the new one is provided
+                // and the old one was empty. This allows placeholder parents to get descriptions later.
+                if (!string.IsNullOrEmpty(description) && string.IsNullOrEmpty(existingDef.Description))
                 {
-                    // This is tricky as we would need to create a new definition.
-                    // For now, the simplest rule is: first one to register wins.
+                    // To update it, we need to remove the old and add a new one, as GameplayTagDefinition is immutable.
+                    var updatedDef = new GameplayTagDefinition(name, description, flags);
+                    m_TagsByName[name] = updatedDef;
+
+                    int index = m_Definitions.IndexOf(existingDef);
+                    if (index != -1)
+                    {
+                        m_Definitions[index] = updatedDef;
+                    }
                 }
                 return;
             }
@@ -104,7 +112,7 @@ namespace CycloneGames.GameplayTags.Runtime
                 {
                     continue;
                 }
-                
+
                 if (GameplayTagUtility.TryGetParentName(definition.TagName, out string parentName))
                 {
                     if (m_TagsByName.TryGetValue(parentName, out var parentDefinition))
