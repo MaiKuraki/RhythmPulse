@@ -9,11 +9,6 @@ namespace CycloneGames.Factory.Samples.VContainer
         [Inject]
         private readonly IMemoryPool<ObjectPoolSampleEnemyData, ObjectPoolSampleEnemy> _enemyPool;
 
-        void Start()
-        {
-            _enemyPool.Resize(5);
-        }
-
         void Update()
         {
             if (Input.GetKeyDown(KeyCode.E))

@@ -15,9 +15,6 @@ namespace CycloneGames.Factory.Samples.PureUnity
             var spawner = new SimpleUnitySpawner();
             _bulletFactory = new MonoPrefabFactory<Bullet>(spawner, BulletPrefab, null);
             _bulletPool = new ObjectPool<BulletData, Bullet>(_bulletFactory, 10);
-
-            // 2. Pre-warm the pool with 10 bullets
-            _bulletPool.Resize(10);
             Debug.Log($"Pool Initialized. Inactive objects: {_bulletPool.NumInactive}");
         }
 

@@ -15,9 +15,7 @@ namespace CycloneGames.Factory.Samples.PureCSharp
 
             // 2. Create the pool using the factory
             _particlePool = new ObjectPool<ParticleData, Particle>(particleFactory, 10);
-
-            // 3. Pre-warm the pool to avoid allocations during the simulation
-            _particlePool.Resize(5);
+            
             Console.WriteLine($"Particle System Initialized. Pool contains {_particlePool.NumInactive} inactive particles.\n");
         }
 
