@@ -4,8 +4,8 @@
     "references": [
         "VContainer",
         "CycloneGames.Logger",
-        "CycloneGames.Factory",
-        "CycloneGames.GameplayFramework"
+        "CycloneGames.GameplayFramework",
+        "CycloneGames.Factory.Runtime"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

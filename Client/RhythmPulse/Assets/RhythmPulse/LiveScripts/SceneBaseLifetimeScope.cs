@@ -1,8 +1,9 @@
 using VContainer;
 using VContainer.Unity;
-using CycloneGames.Factory;
 using CycloneGames.Service;
 using CycloneGames.UIFramework;
+using CycloneGames.Factory.Runtime;
+using RhythmPulse.Audio;
 
 namespace RhythmPulse
 {
@@ -21,9 +22,18 @@ namespace RhythmPulse
             /// <param name="builder">The container builder used to register services.</param> 
             public static void RegisterSharedServices(IContainerBuilder builder)
             {
-                builder.Register<IUnityObjectSpawner, RhythmObjectSpawner>(Lifetime.Singleton);
                 builder.Register<IAssetPathBuilderFactory, AssetPathBuilderFactory>(Lifetime.Singleton);
                 builder.Register<IUIService, UIService>(Lifetime.Singleton);
+
+                builder.Register<IUnityObjectSpawner, RhythmObjectSpawner>(Lifetime.Singleton);
+                //builder.Register<IFactory<GameAudioSource>, AudioSourceFactory>(Lifetime.Singleton);
+
+                //  Or if you dont want to create class AudioSourceFactory.
+                builder.Register<IFactory<GameAudioSource>>(container =>
+                    new MonoPrefabFactory<GameAudioSource>(
+                        container.Resolve<IUnityObjectSpawner>(),
+                        container.Resolve<IAudioLoadService>().AudioSourcePrefab
+                    ), Lifetime.Singleton);
             }
         }
         protected override void Configure(IContainerBuilder builder)

@@ -1,4 +1,4 @@
-using CycloneGames.Factory;
+using CycloneGames.Factory.Runtime;
 using RhythmPulse.Audio;
 
 namespace RhythmPulse.Gameplay.Media
@@ -20,21 +20,19 @@ namespace RhythmPulse.Gameplay.Media
         private const string DEBUG_FLAG = "[GameplayMusicPlayer] ";
         private IUnityObjectSpawner spawner;
         private IAudioLoadService audioLoadService;
-        private MonoObjectPool<GameAudioData, GameAudioSource> GameplayMusicPlayerSpawner;
+        private IFactory<GameAudioSource> audioSourceFactory;
+        private IMemoryPool<GameAudioData, GameAudioSource> GameplayMusicPlayerSpawner;
 
         private GameAudioSource MusicPlayer;
         public bool IsAnyAudioInitialized { get; private set; } = false;
 
-        public GameplayMusicPlayer(IUnityObjectSpawner spawner, IAudioLoadService audioLoadService)
+        public GameplayMusicPlayer(IUnityObjectSpawner spawner, IAudioLoadService audioLoadService, IFactory<GameAudioSource> audioSourceFactory)
         {
             this.spawner = spawner;
             this.audioLoadService = audioLoadService;
+            this.audioSourceFactory = audioSourceFactory;
 
-            GameplayMusicPlayerSpawner = new MonoObjectPool<GameAudioData, GameAudioSource>(
-                spawner,
-                audioLoadService.AudioSourcePrefab,
-                initialSize: 5,
-                autoExpand: true);
+            GameplayMusicPlayerSpawner = new ObjectPool<GameAudioData, GameAudioSource>(audioSourceFactory, 5);
             IsAnyAudioInitialized = false;
         }
 

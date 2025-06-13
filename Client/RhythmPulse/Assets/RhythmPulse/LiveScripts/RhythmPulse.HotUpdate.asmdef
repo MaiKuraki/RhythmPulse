@@ -16,10 +16,10 @@
         "MackySoft.Navigathena.SceneManagement",
         "MackySoft.Navigathena.SceneManagement.Addressables",
         "MackySoft.Navigathena.SceneManagement.VContainer",
-        "CycloneGames.Factory",
         "CycloneGames.Service",
         "CycloneGames.UIFramework",
         "CycloneGames.Utility.Runtime",
+        "CycloneGames.Factory.Runtime",
         "FancyScrollView",
         "RhythmPulse.GameplayData.Runtime"
     ],

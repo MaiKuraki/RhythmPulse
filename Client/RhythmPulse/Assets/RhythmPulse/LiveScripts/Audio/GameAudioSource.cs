@@ -1,7 +1,7 @@
 using CycloneGames.Logger;
 using UnityEngine;
 using VContainer;
-using CycloneGames.Factory;
+using CycloneGames.Factory.Runtime;
 using System;
 
 namespace RhythmPulse.Audio
@@ -111,14 +111,22 @@ namespace RhythmPulse.Audio
 
         public void OnDespawned()
         {
+            if (audioSource != null)
+            {
+                audioSource.Stop();
+                audioSource.clip = null;
+            }
+
             _data = default;
             _pool = null;
+            this.gameObject.SetActive(false);
         }
 
         public void OnSpawned(GameAudioData data, IMemoryPool pool)
         {
-            _data = data;
-            _pool = pool;
+            this._data = data;
+            this._pool = pool;
+            this.gameObject.SetActive(true);
         }
 
         public void Dispose()
@@ -130,7 +138,7 @@ namespace RhythmPulse.Audio
             }
             audioClip = null;
             instanceAudioClipLength = 0;
-            
+
             _pool?.Despawn(this);
         }
 

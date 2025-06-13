@@ -1,6 +1,6 @@
 using VContainer;
 using CycloneGames.Logger;
-using CycloneGames.Factory;
+using CycloneGames.Factory.Runtime;
 
 namespace RhythmPulse
 {

@@ -179,7 +179,7 @@ namespace RhythmPulse.UI
             gameplayData = new Gameplay.GameplayData()
             {
                 MapInfo = itemData.MapInfo,
-                BeatMapType = GameModeType,
+                BeatMapType = "Mixed", // TODO: this value should be class field 'GameModeType',but now we don't have a completed pipeline to lead player select gameMode first.
                 BeatMapFileName = "ToBeImplemented.yaml"
             };
             UpdateMediaDataAsync(itemData, cancelForMediaInfoUpdate).Forget();
