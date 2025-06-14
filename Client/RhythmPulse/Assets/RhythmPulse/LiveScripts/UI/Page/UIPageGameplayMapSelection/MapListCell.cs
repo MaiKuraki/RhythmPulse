@@ -8,6 +8,7 @@ using CycloneGames.Logger;
 using FancyScrollView;
 using R3;
 using R3.Triggers;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -18,7 +19,7 @@ namespace RhythmPulse.UI
         private const string DEBUG_FLAG = "[MapListCell]";
         [SerializeField] Transform focusFlagTF = default;
         [SerializeField] Animator animator = default;
-        [SerializeField] Text message = default;
+        [SerializeField] TMP_Text message = default;
         [SerializeField] Image image = default;
         [SerializeField] Button button = default;
 
