@@ -7,7 +7,7 @@
     "com.cyclone-games.cheat": "file:../../UnityPackages/CycloneGames/CycloneGames.Cheat",
     "com.cyclone-games.core": "file:../../UnityPackages/CycloneGames/CycloneGames.Core",
     "com.cyclone-games.factory": "file:../../UnityPackages/CycloneGames/CycloneGames.Factory",
-    "com.cyclone-games.fontassets": "file:E:/Work/GitRepo/RhythmPulse/Client/UnityPackages/CycloneGames/CycloneGames.FontAssets",
+    "com.cyclone-games.fontassets": "file:../../UnityPackages/CycloneGames/CycloneGames.FontAssets",
     "com.cyclone-games.gameplay-framework": "file:../../UnityPackages/CycloneGames/CycloneGames.GameplayFramework",
     "com.cyclone-games.gameplay-tags": "file:../../UnityPackages/CycloneGames/CycloneGames.GameplayTags",
     "com.cyclone-games.gameplay-utility": "file:../../UnityPackages/CycloneGames/CycloneGames.Utility",

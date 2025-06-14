@@ -2,10 +2,10 @@
     "name": "RhythmPulse.Cheat",
     "rootNamespace": "",
     "references": [
-        "GUID:3de88c88fbbb8f944b9210d496af9762",
-        "GUID:58c518d4346be9042bfa20894cfca1d3",
-        "GUID:48fb3fdc5ac444eecb25f449800e72af",
-        "GUID:75589900f47af154d83347160da22f93"
+        "IngameDebugConsole.Runtime",
+        "UnityDebugSheet",
+        "UnityDebugSheet.IngameDebugConsole",
+        "CycloneGames.Cheat"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
