@@ -3,6 +3,7 @@
     "rootNamespace": "",
     "references": [
         "UniTask",
+        "VYaml.Core",
         "Unity.Addressables",
         "Unity.ResourceManager",
         "Unity.RenderPipelines.Universal.Runtime",

@@ -1,10 +1,13 @@
 {
-    "name": "CycloneGames.Factory.Runtime",
+    "name": "CycloneGames.GameplayFramework.Editor",
     "rootNamespace": "",
     "references": [
-        "CycloneGames.Logger"
+        "CycloneGames.GameplayFramework",
+        "Unity.Cinemachine"
     ],
-    "includePlatforms": [],
+    "includePlatforms": [
+        "Editor"
+    ],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
     "overrideReferences": false,
