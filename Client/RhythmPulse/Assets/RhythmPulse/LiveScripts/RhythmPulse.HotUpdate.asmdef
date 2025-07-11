@@ -21,6 +21,7 @@
         "CycloneGames.Utility.Runtime",
         "CycloneGames.Factory.Runtime",
         "FancyScrollView",
+        "RhythmPulse.AOT",
         "RhythmPulse.GameplayData.Runtime"
     ],
     "includePlatforms": [],
