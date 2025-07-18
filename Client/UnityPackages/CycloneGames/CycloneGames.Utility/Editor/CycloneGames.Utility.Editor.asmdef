@@ -1,13 +1,12 @@
 {
-    "name": "CycloneGames.GameplayFramework.Sample.VContainer",
+    "name": "CycloneGames.Utility.Editor",
     "rootNamespace": "",
     "references": [
-        "VContainer",
-        "CycloneGames.Logger",
-        "CycloneGames.Factory.Runtime",
-        "CycloneGames.GameplayFramework"
+        "CycloneGames.Utility.Runtime"
     ],
-    "includePlatforms": [],
+    "includePlatforms": [
+        "Editor"
+    ],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
     "overrideReferences": false,
