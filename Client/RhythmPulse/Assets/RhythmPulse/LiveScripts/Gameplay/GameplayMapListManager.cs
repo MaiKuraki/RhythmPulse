@@ -170,10 +170,9 @@ namespace RhythmPulse.Gameplay
             var tempMapsByType = new Dictionary<string, HashSet<MapInfo>>();
             var uniqueDifficultiesForMap = new HashSet<int>();
 
-            // --- Pass 1: Populate global caches and the temporary hierarchical cache ---
             foreach (var map in _availableMaps)
             {
-                // 1. Populate the global vocalist cache
+                // Populate the global vocalist cache
                 if (!string.IsNullOrEmpty(map.Vocalist))
                 {
                     if (!_globalMapsByVocalist.TryGetValue(map.Vocalist, out var list))
@@ -188,7 +187,7 @@ namespace RhythmPulse.Gameplay
 
                 uniqueDifficultiesForMap.Clear();
 
-                // 2. Populate the temporary hierarchical cache (by BeatMapType) and collect the map's unique difficulties
+                // Populate the temporary hierarchical cache (by BeatMapType) and collect the map's unique difficulties
                 foreach (var difficultyInfo in map.BeatmapDifficultyFiles)
                 {
                     uniqueDifficultiesForMap.Add(difficultyInfo.Difficulty);
@@ -205,7 +204,7 @@ namespace RhythmPulse.Gameplay
                     }
                 }
 
-                // 3. Populate the global difficulty cache
+                // Populate the global difficulty cache
                 foreach (int difficulty in uniqueDifficultiesForMap)
                 {
                     if (!_globalMapsByDifficulty.TryGetValue(difficulty, out var list))
@@ -217,7 +216,6 @@ namespace RhythmPulse.Gameplay
                 }
             }
 
-            // --- Pass 2: Build the final hierarchical cache structure ---
             foreach (var kvp in tempMapsByType)
             {
                 string beatMapType = kvp.Key;

@@ -103,7 +103,7 @@ namespace RhythmPulse.Gameplay
         public async UniTask InitializeMedias(Gameplay.GameplayData gameplayData, CancellationTokenSource cancel)
         {
             audioFileName.Clear();
-            if (!string.IsNullOrEmpty(gameplayData.BeatMapType)) audioFileName.Append(FilePathUtility.GetUnityWebRequestUri(mapStorage.GetAudioPath(gameplayData.MapInfo, gameplayData.BeatMapType), UnityPathSource.AbsoluteOrFullUri));
+            if (gameplayData.HasOverrideMedia) audioFileName.Append(FilePathUtility.GetUnityWebRequestUri(mapStorage.GetAudioPath(gameplayData.MapInfo, gameplayData.BeatMapType), UnityPathSource.AbsoluteOrFullUri));
             else audioFileName.Append(FilePathUtility.GetUnityWebRequestUri(mapStorage.GetAudioPath(gameplayData.MapInfo), UnityPathSource.AbsoluteOrFullUri));
             await audioLoadService.LoadAudioAsync(audioFileName.ToString());
             if (cancel.IsCancellationRequested)
@@ -113,7 +113,7 @@ namespace RhythmPulse.Gameplay
             gameplayMusicPlayer.InitializeMusicPlayer(audioFileName.ToString());
             bool isVideoPrepared = false;
             videoFileName.Clear();
-            if (!string.IsNullOrEmpty(gameplayData.BeatMapType)) videoFileName.Append(FilePathUtility.GetUnityWebRequestUri(mapStorage.GetVideoPath(gameplayData.MapInfo, gameplayData.BeatMapType), UnityPathSource.AbsoluteOrFullUri));
+            if (gameplayData.HasOverrideMedia) videoFileName.Append(FilePathUtility.GetUnityWebRequestUri(mapStorage.GetVideoPath(gameplayData.MapInfo, gameplayData.BeatMapType), UnityPathSource.AbsoluteOrFullUri));
             else videoFileName.Append(FilePathUtility.GetUnityWebRequestUri(mapStorage.GetVideoPath(gameplayData.MapInfo), UnityPathSource.AbsoluteOrFullUri));
             gameplayVideoPlayer.InitializeVideoPlayer(
                                     videoUrl: videoFileName.ToString(),
