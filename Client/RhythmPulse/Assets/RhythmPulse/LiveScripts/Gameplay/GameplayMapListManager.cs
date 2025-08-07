@@ -28,6 +28,13 @@ namespace RhythmPulse.Gameplay
         IReadOnlyList<MapInfo> GetAvailableMapsByBeatMapType(string beatMapType);
         IReadOnlyList<MapInfo> GetAvailableMapsByVocalist(string beatMapType, string vocalist);
         IReadOnlyList<MapInfo> GetAvailableMapsByDifficulty(string beatMapType, int difficulty);
+
+        /// <summary>
+        /// Gets a list of available maps, excluding any map that is exclusively of the specified beatmap type.
+        /// </summary>
+        /// <param name="beatMapTypeToExclude">The single beatmap type to exclude.</param>
+        /// <returns>A read-only list of maps that are not exclusively of the specified type.</returns>
+        IReadOnlyList<MapInfo> GetAvailableMapsExcludingType(string beatMapTypeToExclude);
     }
 
     public class GameplayMapListManager : IGameplayMapListManager
@@ -49,10 +56,10 @@ namespace RhythmPulse.Gameplay
         private static readonly IReadOnlyList<MapInfo> EmptyMapList = Array.Empty<MapInfo>();
 
         // --- Cache Structures ---
-        // 1. Global cache for fast lookups that do not distinguish by BeatMapType.
+        // Global cache for fast lookups that do not distinguish by BeatMapType.
         private readonly Dictionary<string, List<MapInfo>> _globalMapsByVocalist = new();
         private readonly Dictionary<int, List<MapInfo>> _globalMapsByDifficulty = new();
-        // 2. Hierarchical cache for secondary filtering after a BeatMapType lookup.
+        // Hierarchical cache for secondary filtering after a BeatMapType lookup.
         private readonly Dictionary<string, BeatMapTypeCache> _mapsCache = new();
 
         public IReadOnlyList<MapInfo> AvailableMaps => _availableMaps;
@@ -138,6 +145,51 @@ namespace RhythmPulse.Gameplay
         {
             return _mapsCache.TryGetValue(beatMapType, out var cache) ? cache.AllMaps : EmptyMapList;
         }
+        
+        /// <summary>
+        /// Gets a list of maps, excluding those that are *only* of a specific type.
+        /// Maps that contain the excluded type alongside other types will still be included.
+        /// </summary>
+        /// <param name="beatMapTypeToExclude">The beatmap type to check for exclusion.</param>
+        public IReadOnlyList<MapInfo> GetAvailableMapsExcludingType(string beatMapTypeToExclude)
+        {
+            if (string.IsNullOrEmpty(beatMapTypeToExclude))
+            {
+                return _availableMaps; // If no type is specified to exclude, return all maps.
+            }
+
+            var filteredMaps = new List<MapInfo>();
+            var uniqueTypesForMap = new HashSet<string>();
+
+            foreach (var map in _availableMaps)
+            {
+                uniqueTypesForMap.Clear();
+                if (map.BeatmapDifficultyFiles != null)
+                {
+                    foreach (var difficultyInfo in map.BeatmapDifficultyFiles)
+                    {
+                        if (difficultyInfo.BeatMapType != null)
+                        {
+                            foreach (string type in difficultyInfo.BeatMapType)
+                            {
+                                uniqueTypesForMap.Add(type);
+                            }
+                        }
+                    }
+                }
+
+                // If the map has only one type and that type is the one we want to exclude,
+                // then we skip this map. Otherwise, we add it.
+                if (uniqueTypesForMap.Count == 1 && uniqueTypesForMap.Contains(beatMapTypeToExclude))
+                {
+                    continue; // Skip this map as it is exclusively the type to be excluded.
+                }
+
+                filteredMaps.Add(map);
+            }
+
+            return filteredMaps;
+        }
 
         /// <summary>
         /// [Hierarchical] Gets all maps for a specific game mode, sung by a specific vocalist.
@@ -165,100 +217,107 @@ namespace RhythmPulse.Gameplay
 
         #endregion
 
+        /// <summary>
+        /// Builds all filter caches in a single pass for improved performance.
+        /// This method iterates through each map once, populating global and hierarchical caches simultaneously.
+        /// </summary>
         private void PrecomputeAllFilterCaches()
         {
-            var tempMapsByType = new Dictionary<string, HashSet<MapInfo>>();
             var uniqueDifficultiesForMap = new HashSet<int>();
 
             foreach (var map in _availableMaps)
             {
-                // Populate the global vocalist cache
+                // Populate global vocalist cache
                 if (!string.IsNullOrEmpty(map.Vocalist))
                 {
-                    if (!_globalMapsByVocalist.TryGetValue(map.Vocalist, out var list))
+                    if (!_globalMapsByVocalist.TryGetValue(map.Vocalist, out var globalVocalistList))
                     {
-                        list = new List<MapInfo>();
-                        _globalMapsByVocalist[map.Vocalist] = list;
+                        globalVocalistList = new List<MapInfo>();
+                        _globalMapsByVocalist[map.Vocalist] = globalVocalistList;
                     }
-                    list.Add(map);
+                    globalVocalistList.Add(map);
                 }
 
                 if (map.BeatmapDifficultyFiles == null) continue;
 
                 uniqueDifficultiesForMap.Clear();
 
-                // Populate the temporary hierarchical cache (by BeatMapType) and collect the map's unique difficulties
+                // Process all difficulties and types for the current map
                 foreach (var difficultyInfo in map.BeatmapDifficultyFiles)
                 {
                     uniqueDifficultiesForMap.Add(difficultyInfo.Difficulty);
+
                     if (difficultyInfo.BeatMapType == null) continue;
 
                     foreach (string type in difficultyInfo.BeatMapType)
                     {
-                        if (!tempMapsByType.TryGetValue(type, out var mapSet))
+                        // Get or create the hierarchical cache for this type
+                        if (!_mapsCache.TryGetValue(type, out var typeCache))
                         {
-                            mapSet = new HashSet<MapInfo>();
-                            tempMapsByType[type] = mapSet;
+                            typeCache = new BeatMapTypeCache();
+                            _mapsCache[type] = typeCache;
                         }
-                        mapSet.Add(map);
+
+                        // Add to this type's difficulty-specific list
+                        if (!typeCache.MapsByDifficulty.TryGetValue(difficultyInfo.Difficulty, out var mapsForDifficulty))
+                        {
+                            mapsForDifficulty = new List<MapInfo>();
+                            typeCache.MapsByDifficulty[difficultyInfo.Difficulty] = mapsForDifficulty;
+                        }
+                        
+                        // A map should only be in a specific difficulty list once. A check prevents
+                        // issues if data is structured unexpectedly, though it's often redundant.
+                        if (!mapsForDifficulty.Contains(map))
+                        {
+                            mapsForDifficulty.Add(map);
+                        }
                     }
                 }
 
-                // Populate the global difficulty cache
-                foreach (int difficulty in uniqueDifficultiesForMap)
+                // Populate global difficulty cache using the collected unique difficulties
+                foreach (var difficulty in uniqueDifficultiesForMap)
                 {
-                    if (!_globalMapsByDifficulty.TryGetValue(difficulty, out var list))
+                    if (!_globalMapsByDifficulty.TryGetValue(difficulty, out var globalDifficultyList))
                     {
-                        list = new List<MapInfo>();
-                        _globalMapsByDifficulty[difficulty] = list;
+                        globalDifficultyList = new List<MapInfo>();
+                        _globalMapsByDifficulty[difficulty] = globalDifficultyList;
                     }
-                    list.Add(map);
+                    globalDifficultyList.Add(map);
                 }
             }
 
-            foreach (var kvp in tempMapsByType)
+            // Post-process to build the remaining hierarchical caches (AllMaps, MapsByVocalist)
+            // This is done after the main loop to avoid adding the same map multiple times to these lists.
+            foreach (var kvp in _mapsCache)
             {
-                string beatMapType = kvp.Key;
-                var mapsForThisType = kvp.Value;
+                var typeCache = kvp.Value;
+                var uniqueMapsInCache = new HashSet<MapInfo>();
 
-                var newCache = new BeatMapTypeCache();
-                _mapsCache[beatMapType] = newCache;
-
-                newCache.AllMaps.AddRange(mapsForThisType);
-
-                // Within this BeatMapType's subset, categorize again by vocalist and difficulty
-                foreach (var map in newCache.AllMaps)
+                // Gather all unique maps for this type from the difficulty lists we just built
+                foreach (var mapList in typeCache.MapsByDifficulty.Values)
+                {
+                    uniqueMapsInCache.UnionWith(mapList);
+                }
+                
+                // Now populate the AllMaps list and the vocalist sub-cache from the unique set
+                typeCache.AllMaps.AddRange(uniqueMapsInCache);
+                
+                foreach (var map in uniqueMapsInCache)
                 {
                     if (!string.IsNullOrEmpty(map.Vocalist))
                     {
-                        if (!newCache.MapsByVocalist.TryGetValue(map.Vocalist, out var list))
+                        if (!typeCache.MapsByVocalist.TryGetValue(map.Vocalist, out var mapsForVocalist))
                         {
-                            list = new List<MapInfo>();
-                            newCache.MapsByVocalist[map.Vocalist] = list;
+                            mapsForVocalist = new List<MapInfo>();
+                            typeCache.MapsByVocalist[map.Vocalist] = mapsForVocalist;
                         }
-                        list.Add(map);
-                    }
-
-                    foreach (var difficultyInfo in map.BeatmapDifficultyFiles)
-                    {
-                        if (difficultyInfo.BeatMapType != null && Array.Exists(difficultyInfo.BeatMapType, t => t == beatMapType))
-                        {
-                            if (!newCache.MapsByDifficulty.TryGetValue(difficultyInfo.Difficulty, out var list))
-                            {
-                                list = new List<MapInfo>();
-                                newCache.MapsByDifficulty[difficultyInfo.Difficulty] = list;
-                            }
-                            if (!list.Contains(map))
-                            {
-                                list.Add(map);
-                            }
-                        }
+                        mapsForVocalist.Add(map);
                     }
                 }
             }
         }
 
-        #region File Loading (No changes needed here)
+        #region File Loading
 
         private async UniTask PopulateAvailableMapsListAsync(CancellationToken cancellationToken)
         {

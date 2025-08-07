@@ -106,7 +106,7 @@ namespace RhythmPulse.UI
 
         private void EnterTraditionalBeatsGame()
         {
-            EnterMusicSelection(RhythmPulse.GameplayData.Runtime.BeatMapTypeConstant.Combined);
+            EnterMusicSelection(string.Empty);
         }
 
         private void EnterJustDanceGame()

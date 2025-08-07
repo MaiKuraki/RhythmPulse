@@ -132,22 +132,23 @@ namespace RhythmPulse.UI
             await UniTask.WaitUntil(() => IsDIInitialized /* && gameplayMapListManager.Initialized */, PlayerLoopTiming.Update, cancellationToken);
 
             this.BeatMapType = beatMapType;
+            items.Clear();
 
             //  TODO: to be implemented, generate the map list.
-            items.Clear();
-            if (string.IsNullOrEmpty(beatMapType))
+            bool isJustDanceMode = beatMapType == BeatMapTypeConstant.JustDance;
+
+            if (isJustDanceMode)
             {
-                var allMaps = gameplayMapListManager.AvailableMaps;
-                foreach (var mapInfo in allMaps)
+                var justDanceMaps = gameplayMapListManager.GetAvailableMapsByBeatMapType(BeatMapTypeConstant.JustDance);
+                foreach (var mapInfo in justDanceMaps)
                 {
                     items.Add(new ItemData(mapInfo));
                 }
             }
             else
             {
-                //  TODO: now only JustDance mode
-                var justDanceMaps = gameplayMapListManager.GetAvailableMapsByBeatMapType(BeatMapTypeConstant.JustDance);
-                foreach (var mapInfo in justDanceMaps)
+                var avaliableMapExceptJustDance = gameplayMapListManager.GetAvailableMapsExcludingType(BeatMapTypeConstant.JustDance);
+                foreach (var mapInfo in avaliableMapExceptJustDance)
                 {
                     items.Add(new ItemData(mapInfo));
                 }
