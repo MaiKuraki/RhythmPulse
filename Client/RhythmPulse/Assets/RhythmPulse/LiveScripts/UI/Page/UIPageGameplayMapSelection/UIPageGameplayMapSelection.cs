@@ -18,23 +18,33 @@ using VContainer;
 
 namespace RhythmPulse.UI
 {
-    class UIPageGameplayMapSelection : MonoBehaviour
+    /// <summary>
+    /// Manages the UI page for selecting a gameplay map, handling map lists,
+    /// difficulty selection, and media previews.
+    /// </summary>
+    public class UIPageGameplayMapSelection : MonoBehaviour
     {
         private const string DEBUG_FLAG = "[UIPageGameplayMapSelection]";
-        [SerializeField] RhythmPulse.UI.MapListScrollView scrollView = default;
-        [SerializeField] Button enterMusicGameplayButton = default;
-        [SerializeField] Button backButton = default;
-        [SerializeField] TMP_Text Text_MapDisplayName;
-        [SerializeField] RawImage rawImg_PreviewVideoScreen;
-        [SerializeField] int confirmDelayMs = 200;
-        [Space(20)]
-        [Header("------ Difficulty Selection ------")]
-        [SerializeField] TMP_Text Text_DifficultyName;
-        [SerializeField] Button Btn_SelectLast;
-        [SerializeField] Button Btn_SelectNext;
+        
+        [Header("Component References")]
+        [SerializeField] private RhythmPulse.UI.MapListScrollView scrollView = default;
+        [SerializeField] private Button enterMusicGameplayButton = default;
+        [SerializeField] private Button backButton = default;
+        [SerializeField] private TMP_Text Text_MapDisplayName;
+        [SerializeField] private RawImage rawImg_PreviewVideoScreen;
+        
+        [Header("Difficulty Selection")]
+        [SerializeField] private TMP_Text Text_DifficultyName;
+        [SerializeField] private Button Btn_SelectLast;
+        [SerializeField] private Button Btn_SelectNext;
+
+        [Header("Configuration")]
+        [SerializeField] private int confirmDelayMs = 200;
 
         public Action<Gameplay.GameplayData> EnterGameplayEvent;
         public Action ClickBackEvent;
+        public Timeline PreviewMediaTimeline => timeline as Timeline;
+
         private IGameplayMapListManager gameplayMapListManager;
         private IUIService uiService;
         private IAudioLoadService audioLoadService;
@@ -42,24 +52,35 @@ namespace RhythmPulse.UI
         private ITimeline timeline;
         private IGameplayMusicPlayer musicPlayer;
         private IGameplayVideoPlayer videoPlayer;
+        
         private bool IsDIInitialized = false;
         private List<ItemData> items = new List<ItemData>();
         private CancellationTokenSource cancelForSelection;
         private CancellationTokenSource cancelForMediaInfoUpdate;
-        public Timeline PreviewVideoTimeline => (Timeline)timeline;
         private Gameplay.GameplayData gameplayData;
         private string BeatMapType = string.Empty;
         private StringBuilder previewAudioName = new StringBuilder();
         private StringBuilder previewVideoName = new StringBuilder();
-        private List<int> difficultyList = new List<int>();
-        private string INVLID_DIFFICULTY_FILE = "INVALID_CONFIG.yaml";
-
+        
+        // State for the currently selected map's difficulties
+        private List<BeatMapInfo> difficultyFilesForCurrentMode = new List<BeatMapInfo>();
+        private int currentDifficultyIndex = -1;
+        
+        private const string INVLID_DIFFICULTY_FILE = "INVALID_CONFIG.yaml";
+        
         void Awake()
         {
-            enterMusicGameplayButton.OnClickAsObservable().Subscribe(_ => EnterGameplay(gameplayData));
+            enterMusicGameplayButton.OnClickAsObservable().Subscribe(_ => EnterGameplay());
             backButton.OnClickAsObservable().Subscribe(_ => ClickBack());
+            
             scrollView.OnSelectedEvent -= OnSelectItem;
             scrollView.OnSelectedEvent += OnSelectItem;
+
+            // PERFORMANCE: Subscribe to difficulty change buttons only once.
+            // The handlers will use class state to determine behavior.
+            Btn_SelectLast.OnClickAsObservable().Subscribe(_ => ChangeDifficulty(-1)).AddTo(this);
+            Btn_SelectNext.OnClickAsObservable().Subscribe(_ => ChangeDifficulty(1)).AddTo(this);
+            
             AdjustConfirmDelayForHighPerformanceDevices();
         }
 
@@ -89,7 +110,7 @@ namespace RhythmPulse.UI
         void OnDestroy()
         {
             IsDIInitialized = false;
-
+            
             cancelForSelection?.Cancel();
             cancelForSelection?.Dispose();
             cancelForSelection = null;
@@ -113,171 +134,250 @@ namespace RhythmPulse.UI
         void Update()
         {
             if (!IsDIInitialized) return;
-
-            if (PreviewVideoTimeline != null)
-            {
-                PreviewVideoTimeline?.Tick();   //  For AV-Sync
-            }
+            
+            // AV-Sync tick for media playback.
+            PreviewMediaTimeline?.Tick();
         }
 
         private void AdjustConfirmDelayForHighPerformanceDevices()
         {
-#if UNITY_STANDALONE
+#if UNITY_STANDALONE || UNITY_EDITOR
             confirmDelayMs = 0;
 #endif
         }
 
         public async UniTask RebuildMapListAfterDIInitialized(string beatMapType, CancellationToken cancellationToken)
         {
-            await UniTask.WaitUntil(() => IsDIInitialized /* && gameplayMapListManager.Initialized */, PlayerLoopTiming.Update, cancellationToken);
+            await UniTask.WaitUntil(() => IsDIInitialized, PlayerLoopTiming.Update, cancellationToken);
 
             this.BeatMapType = beatMapType;
             items.Clear();
 
-            //  TODO: to be implemented, generate the map list.
             bool isJustDanceMode = beatMapType == BeatMapTypeConstant.JustDance;
+            var mapsToList = isJustDanceMode
+                ? gameplayMapListManager.GetAvailableMapsByBeatMapType(BeatMapTypeConstant.JustDance)
+                : gameplayMapListManager.GetAvailableMapsExcludingType(BeatMapTypeConstant.JustDance);
 
-            if (isJustDanceMode)
+            foreach (var mapInfo in mapsToList)
             {
-                var justDanceMaps = gameplayMapListManager.GetAvailableMapsByBeatMapType(BeatMapTypeConstant.JustDance);
-                foreach (var mapInfo in justDanceMaps)
-                {
-                    items.Add(new ItemData(mapInfo));
-                }
+                items.Add(new ItemData(mapInfo));
+            }
+            
+            scrollView.UpdateData(items);
+            
+            if (items.Count > 0)
+            {
+                scrollView.SelectCell(0);
+
+                cancelForSelection?.Cancel();
+                cancelForSelection?.Dispose();
+                cancelForSelection = new CancellationTokenSource();
+                scrollView.ForceUpdateSelectionAsync(0, cancelForSelection).Forget();
             }
             else
             {
-                var avaliableMapExceptJustDance = gameplayMapListManager.GetAvailableMapsExcludingType(BeatMapTypeConstant.JustDance);
-                foreach (var mapInfo in avaliableMapExceptJustDance)
-                {
-                    items.Add(new ItemData(mapInfo));
-                }
+                OnSelectItem(null); // Handle empty list case
             }
-
-            scrollView.UpdateData(items);
-            scrollView.SelectCell(0);
-
-            cancelForSelection?.Cancel();
-            cancelForSelection?.Dispose();
-            cancelForSelection = null;
-            cancelForSelection = new CancellationTokenSource();
-            scrollView.ForceUpdateSelectionAsync(0, cancelForSelection).Forget();
         }
 
-        void EnterGameplay(Gameplay.GameplayData gameplayData)
+        private void EnterGameplay()
         {
-            EnterGameplayEvent?.Invoke(gameplayData);
+            if (gameplayData.IsVliad)
+            {
+                EnterGameplayEvent?.Invoke(gameplayData);
+            }
+            else
+            {
+                CLogger.LogWarning($"{DEBUG_FLAG} Cannot enter gameplay, GameplayData is invalid. Likely no valid difficulty selected.");
+            }
         }
 
-        void ClickBack()
+        private void ClickBack()
         {
             cancelForSelection?.Cancel();
             cancelForSelection?.Dispose();
             cancelForSelection = null;
+            
             timeline?.Stop();
             ClickBackEvent?.Invoke();
         }
 
         private void OnSelectItem(ItemData itemData)
         {
-            Text_MapDisplayName?.SetText(itemData?.MapInfo.DisplayName);
-
+            // Cancel any pending media update from a previous selection.
             cancelForMediaInfoUpdate?.Cancel();
             cancelForMediaInfoUpdate?.Dispose();
-            cancelForMediaInfoUpdate = null;
             cancelForMediaInfoUpdate = new CancellationTokenSource();
-            bool bHasOverrideMedia = itemData.MapInfo.MediaOverrides != null
-                                    && itemData.MapInfo.MediaOverrides.Count > 0
-                                    && itemData.MapInfo.MediaOverrides.Exists(m => m.BeatMapType == this.BeatMapType);
+
+            if (itemData == null) // Handle case where list is empty or selection is cleared
+            {
+                Text_MapDisplayName?.SetText("No Maps Available");
+                gameplayData = default;
+                RefreshDifficulty(default);
+                return;
+            }
+
+            Text_MapDisplayName?.SetText(itemData.MapInfo.DisplayName);
+
+            bool bHasOverrideMedia = CheckForOverrideMedia(itemData.MapInfo, this.BeatMapType);
 
             gameplayData = new Gameplay.GameplayData(itemData.MapInfo, this.BeatMapType, INVLID_DIFFICULTY_FILE);
-            RefreshDifficulty(itemData.MapInfo, this.BeatMapType);
+            RefreshDifficulty(itemData.MapInfo);
 
             UpdateMediaDataAsync(itemData, bHasOverrideMedia, cancelForMediaInfoUpdate).Forget();
+        }
+
+        /// <summary>
+        /// A GC-friendly check for media overrides, avoiding LINQ.
+        /// </summary>
+        private bool CheckForOverrideMedia(MapInfo mapInfo, string beatMapType)
+        {
+            if (mapInfo.MediaOverrides == null || string.IsNullOrEmpty(beatMapType))
+            {
+                return false;
+            }
+            foreach (var overrideInfo in mapInfo.MediaOverrides)
+            {
+                if (overrideInfo.BeatMapType == beatMapType)
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         private async UniTask UpdateMediaDataAsync(ItemData itemData, bool bHasOverrideMedia, CancellationTokenSource cancellationTokenSource)
         {
             await UniTask.Delay(confirmDelayMs, false, PlayerLoopTiming.Update, cancellationTokenSource.Token);
-            if (cancellationTokenSource != null && cancellationTokenSource.IsCancellationRequested) return;
+            if (cancellationTokenSource.IsCancellationRequested) return;
+
+            // Prepare audio path
             previewAudioName.Clear();
-            if (bHasOverrideMedia) previewAudioName.Append(FilePathUtility.GetUnityWebRequestUri(mapStorage.GetPreviewAudioPath(itemData.MapInfo, BeatMapType), UnityPathSource.AbsoluteOrFullUri));
-            else previewAudioName.Append(FilePathUtility.GetUnityWebRequestUri(mapStorage.GetPreviewAudioPath(itemData.MapInfo), UnityPathSource.AbsoluteOrFullUri));
+            string audioPath = bHasOverrideMedia 
+                ? mapStorage.GetPreviewAudioPath(itemData.MapInfo, BeatMapType) 
+                : mapStorage.GetPreviewAudioPath(itemData.MapInfo);
+            previewAudioName.Append(FilePathUtility.GetUnityWebRequestUri(audioPath, UnityPathSource.AbsoluteOrFullUri));
+            
+            // Load audio
             await audioLoadService.LoadAudioAsync(previewAudioName.ToString());
-            CLogger.LogInfo($"{DEBUG_FLAG} UpdateMediaDataAsync {itemData.MapInfo.DisplayName}, Time: {Time.time}");
-            if (cancellationTokenSource != null && cancellationTokenSource.IsCancellationRequested) return;
+            if (cancellationTokenSource.IsCancellationRequested) return;
+
+            // Stop previous media and initialize new audio
             timeline?.Stop();
             musicPlayer?.InitializeMusicPlayer(previewAudioName.ToString(), true);
+
+            // Prepare video path
             bool isVideoPrepared = false;
             previewVideoName.Clear();
-            if (bHasOverrideMedia) previewVideoName.Append(FilePathUtility.GetUnityWebRequestUri(mapStorage.GetPreviewVideoPath(itemData.MapInfo, BeatMapType), UnityPathSource.AbsoluteOrFullUri));
-            else previewVideoName.Append(FilePathUtility.GetUnityWebRequestUri(mapStorage.GetPreviewVideoPath(itemData.MapInfo), UnityPathSource.AbsoluteOrFullUri));
-            videoPlayer?.InitializeVideoPlayer(
-                videoUrl: previewVideoName.ToString(),
-                bLoop: true,
-                OnPrepared: () => { isVideoPrepared = true; });
-            await UniTask.WaitUntil(() => isVideoPrepared, PlayerLoopTiming.Update, cancellationTokenSource.Token);
-            if (cancellationTokenSource != null && cancellationTokenSource.IsCancellationRequested) return;
+            string videoPath = bHasOverrideMedia
+                ? mapStorage.GetPreviewVideoPath(itemData.MapInfo, BeatMapType)
+                : mapStorage.GetPreviewVideoPath(itemData.MapInfo);
+            
+            // Initialize video player
+            if (!string.IsNullOrEmpty(videoPath))
+            {
+                previewVideoName.Append(FilePathUtility.GetUnityWebRequestUri(videoPath, UnityPathSource.AbsoluteOrFullUri));
+                videoPlayer?.InitializeVideoPlayer(
+                    videoUrl: previewVideoName.ToString(),
+                    bLoop: true,
+                    OnPrepared: () => { isVideoPrepared = true; });
 
-            if (rawImg_PreviewVideoScreen) rawImg_PreviewVideoScreen.texture = ((GameplayVideoPlayer)videoPlayer)?.CurrentVideoTexture;
+                await UniTask.WaitUntil(() => isVideoPrepared, PlayerLoopTiming.Update, cancellationTokenSource.Token);
+                if (cancellationTokenSource.IsCancellationRequested) return;
+            }
+            else
+            {
+                isVideoPrepared = true; // No video to prepare
+            }
+            
+            if (rawImg_PreviewVideoScreen)
+            {
+                rawImg_PreviewVideoScreen.texture = ((GameplayVideoPlayer)videoPlayer)?.CurrentVideoTexture;
+            }
 
             timeline?.Play();
         }
-
-        private void RefreshDifficulty(MapInfo mapInfo, string beatMapType)
+        
+        /// <summary>
+        /// Refreshes the difficulty selector based on the selected map and current game mode.
+        /// </summary>
+        private void RefreshDifficulty(MapInfo mapInfo)
         {
-            difficultyList.Clear();
-            foreach (var beatMapInfo in mapInfo.BeatmapDifficultyFiles)
+            difficultyFilesForCurrentMode.Clear();
+            currentDifficultyIndex = -1;
+
+            if (mapInfo.BeatmapDifficultyFiles != null)
             {
-                if (beatMapType == beatMapInfo.BeatMapType)
+                foreach (var beatMapInfo in mapInfo.BeatmapDifficultyFiles)
                 {
-                    difficultyList.Add(beatMapInfo.Difficulty);
+                    // For the generic "Beats" mode, we include anything that is NOT an exclusive mode like JustDance.
+                    bool isCompatible = string.IsNullOrEmpty(this.BeatMapType)
+                        ? beatMapInfo.BeatMapType != BeatMapTypeConstant.JustDance // Example of exclusion
+                        : beatMapInfo.BeatMapType == this.BeatMapType;
+
+                    if (isCompatible)
+                    {
+                        difficultyFilesForCurrentMode.Add(beatMapInfo);
+                    }
                 }
             }
 
-            int defaultDifficulty = -1;
-            if (difficultyList.Count >= 1)
-            {
-                defaultDifficulty = difficultyList[0];
-                Text_DifficultyName?.SetText(difficultyList[0].ToString());
-            }
-            else
+            // Sort difficulties numerically for consistent order.
+            difficultyFilesForCurrentMode.Sort((a, b) => a.Difficulty.CompareTo(b.Difficulty));
+
+            UpdateDifficultyDisplay();
+        }
+
+        /// <summary>
+        /// Updates the UI elements for difficulty display and interaction.
+        /// </summary>
+        private void UpdateDifficultyDisplay()
+        {
+            if (difficultyFilesForCurrentMode.Count == 0)
             {
                 Text_DifficultyName?.SetText("N/A");
-            }
-
-            if (defaultDifficulty != -1)
-            {
-                var defaultBeatMapFile = BeatMapUtility.GetBeatMapFile(beatMapType, defaultDifficulty, version: "Default");
-                gameplayData.UpdateBeatMapFile(defaultBeatMapFile);
-            }
-            else
-            {
                 gameplayData.UpdateBeatMapFile(INVLID_DIFFICULTY_FILE);
+                Btn_SelectLast.interactable = false;
+                Btn_SelectNext.interactable = false;
+                return;
             }
 
-            Btn_SelectLast.OnClickAsObservable().Subscribe(_ =>
+            if (currentDifficultyIndex < 0 || currentDifficultyIndex >= difficultyFilesForCurrentMode.Count)
             {
-                if (difficultyList.Count <= 1) return;
-                int currentIndex = difficultyList.IndexOf(int.Parse(Text_DifficultyName.text));
-                int nextIndex = (currentIndex - 1 + difficultyList.Count) % difficultyList.Count;
-                Text_DifficultyName.SetText(difficultyList[nextIndex].ToString());
+                currentDifficultyIndex = 0;
+            }
+            
+            var currentBeatMap = difficultyFilesForCurrentMode[currentDifficultyIndex];
+            
+            Text_DifficultyName?.SetText(currentBeatMap.Difficulty.ToString());
 
-                // TODO: implement BeatMapFileName 
-                var beatMapFile = BeatMapUtility.GetBeatMapFile(beatMapType, difficultyList[nextIndex], version: "Default");
-                gameplayData.UpdateBeatMapFile(beatMapFile);
-            });
-            Btn_SelectNext.OnClickAsObservable().Subscribe(_ =>
+            var beatMapFile = BeatMapUtility.GetBeatMapFile(currentBeatMap.BeatMapType, currentBeatMap.Difficulty, currentBeatMap.Version);
+            gameplayData.UpdateBeatMapFile(beatMapFile);
+
+            bool canChange = difficultyFilesForCurrentMode.Count > 1;
+            Btn_SelectLast.interactable = canChange;
+            Btn_SelectNext.interactable = canChange;
+        }
+
+        /// <summary>
+        /// Changes the selected difficulty index.
+        /// </summary>
+        /// <param name="direction">-1 for previous, 1 for next.</param>
+        private void ChangeDifficulty(int direction)
+        {
+            if (difficultyFilesForCurrentMode.Count <= 1) return;
+
+            currentDifficultyIndex += direction;
+            if (currentDifficultyIndex < 0)
             {
-                if (difficultyList.Count <= 1) return;
-                int currentIndex = difficultyList.IndexOf(int.Parse(Text_DifficultyName.text));
-                int nextIndex = (currentIndex + 1) % difficultyList.Count;
-                Text_DifficultyName.SetText(difficultyList[nextIndex].ToString());
-
-                // TODO: implement BeatMapFileName
-                var beatMapFile = BeatMapUtility.GetBeatMapFile(beatMapType, difficultyList[nextIndex], version: "Default");
-                gameplayData.UpdateBeatMapFile(beatMapFile);
-            });
+                currentDifficultyIndex = difficultyFilesForCurrentMode.Count - 1;
+            }
+            else if (currentDifficultyIndex >= difficultyFilesForCurrentMode.Count)
+            {
+                currentDifficultyIndex = 0;
+            }
+            
+            UpdateDifficultyDisplay();
         }
     }
 }
