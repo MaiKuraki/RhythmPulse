@@ -145,7 +145,7 @@ namespace RhythmPulse.Gameplay
         {
             return _mapsCache.TryGetValue(beatMapType, out var cache) ? cache.AllMaps : EmptyMapList;
         }
-        
+
         /// <summary>
         /// Gets a list of maps, excluding those that are *only* of a specific type.
         /// Maps that contain the excluded type alongside other types will still be included.
@@ -168,12 +168,9 @@ namespace RhythmPulse.Gameplay
                 {
                     foreach (var difficultyInfo in map.BeatmapDifficultyFiles)
                     {
-                        if (difficultyInfo.BeatMapType != null)
+                        if (!string.IsNullOrEmpty(difficultyInfo.BeatMapType))
                         {
-                            foreach (string type in difficultyInfo.BeatMapType)
-                            {
-                                uniqueTypesForMap.Add(type);
-                            }
+                            uniqueTypesForMap.Add(difficultyInfo.BeatMapType);
                         }
                     }
                 }
@@ -247,30 +244,27 @@ namespace RhythmPulse.Gameplay
                 {
                     uniqueDifficultiesForMap.Add(difficultyInfo.Difficulty);
 
-                    if (difficultyInfo.BeatMapType == null) continue;
+                    if (string.IsNullOrEmpty(difficultyInfo.BeatMapType)) continue;
 
-                    foreach (string type in difficultyInfo.BeatMapType)
+                    // Get or create the hierarchical cache for this type
+                    if (!_mapsCache.TryGetValue(difficultyInfo.BeatMapType, out var typeCache))
                     {
-                        // Get or create the hierarchical cache for this type
-                        if (!_mapsCache.TryGetValue(type, out var typeCache))
-                        {
-                            typeCache = new BeatMapTypeCache();
-                            _mapsCache[type] = typeCache;
-                        }
+                        typeCache = new BeatMapTypeCache();
+                        _mapsCache[difficultyInfo.BeatMapType] = typeCache;
+                    }
 
-                        // Add to this type's difficulty-specific list
-                        if (!typeCache.MapsByDifficulty.TryGetValue(difficultyInfo.Difficulty, out var mapsForDifficulty))
-                        {
-                            mapsForDifficulty = new List<MapInfo>();
-                            typeCache.MapsByDifficulty[difficultyInfo.Difficulty] = mapsForDifficulty;
-                        }
-                        
-                        // A map should only be in a specific difficulty list once. A check prevents
-                        // issues if data is structured unexpectedly, though it's often redundant.
-                        if (!mapsForDifficulty.Contains(map))
-                        {
-                            mapsForDifficulty.Add(map);
-                        }
+                    // Add to this type's difficulty-specific list
+                    if (!typeCache.MapsByDifficulty.TryGetValue(difficultyInfo.Difficulty, out var mapsForDifficulty))
+                    {
+                        mapsForDifficulty = new List<MapInfo>();
+                        typeCache.MapsByDifficulty[difficultyInfo.Difficulty] = mapsForDifficulty;
+                    }
+
+                    // A map should only be in a specific difficulty list once. A check prevents
+                    // issues if data is structured unexpectedly, though it's often redundant.
+                    if (!mapsForDifficulty.Contains(map))
+                    {
+                        mapsForDifficulty.Add(map);
                     }
                 }
 
@@ -298,10 +292,10 @@ namespace RhythmPulse.Gameplay
                 {
                     uniqueMapsInCache.UnionWith(mapList);
                 }
-                
+
                 // Now populate the AllMaps list and the vocalist sub-cache from the unique set
                 typeCache.AllMaps.AddRange(uniqueMapsInCache);
-                
+
                 foreach (var map in uniqueMapsInCache)
                 {
                     if (!string.IsNullOrEmpty(map.Vocalist))

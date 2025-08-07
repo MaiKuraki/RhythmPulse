@@ -227,7 +227,7 @@ namespace RhythmPulse.GameplayData.Editor
             for (int i = 0; i < mapInfo.BeatmapDifficultyFiles.Count; i++)
             {
                 BeatMapInfo beatmap = mapInfo.BeatmapDifficultyFiles[i];
-                string beatMapType = beatmap.BeatMapType != null && beatmap.BeatMapType.Length > 0 ? beatmap.BeatMapType[0] : "";
+                string beatMapType = !string.IsNullOrEmpty(beatmap.BeatMapType) ? beatmap.BeatMapType : "";
 
                 var currentKey = (beatMapType, beatmap.Difficulty, beatmap.Version);
 
@@ -407,11 +407,9 @@ namespace RhythmPulse.GameplayData.Editor
                 if (beatMapTypeOptions != null && beatMapTypeOptions.Length > 0)
                 {
                     // Find the index of the current BeatMapType in the options
-                    int currentSelectionIndex = -1;
-                    if (currentBeatmap.BeatMapType != null && currentBeatmap.BeatMapType.Length > 0)
-                    {
-                        currentSelectionIndex = Array.IndexOf(beatMapTypeOptions, currentBeatmap.BeatMapType[0]);
-                    }
+                    int currentSelectionIndex = string.IsNullOrEmpty(currentBeatmap.BeatMapType)
+                        ? -1
+                        : currentSelectionIndex = Array.IndexOf(beatMapTypeOptions, currentBeatmap.BeatMapType);
 
                     int newSelectionIndex = EditorGUILayout.Popup(
                         new GUIContent("BeatMap Type", "Select the single game mode this difficulty applies to."),
@@ -419,7 +417,7 @@ namespace RhythmPulse.GameplayData.Editor
 
                     if (newSelectionIndex != currentSelectionIndex)
                     {
-                        currentBeatmap.BeatMapType = new string[] { beatMapTypeOptions[newSelectionIndex] };
+                        currentBeatmap.BeatMapType = (newSelectionIndex >= 0) ? beatMapTypeOptions[newSelectionIndex] : string.Empty;
                         mapInfo.BeatmapDifficultyFiles[i] = currentBeatmap; // Write back immediately
                         ValidateBeatMapTypeSelection($"BeatMapType_{i}", currentBeatmap.BeatMapType);
                     }
@@ -441,9 +439,9 @@ namespace RhythmPulse.GameplayData.Editor
                 DisplayValidationMessage($"DifficultyLevel_{i}");
 
                 // Add to hash set for uniqueness check
-                if (currentBeatmap.BeatMapType != null && currentBeatmap.BeatMapType.Length > 0)
+                if (!string.IsNullOrEmpty(currentBeatmap.BeatMapType))
                 {
-                    var entry = (currentBeatmap.BeatMapType[0], currentBeatmap.Difficulty, currentBeatmap.Version);
+                    var entry = (currentBeatmap.BeatMapType, currentBeatmap.Difficulty, currentBeatmap.Version);
                     if (!existingDifficultyEntries.Add(entry))
                     {
                         SetValidationMessage($"DuplicateEntry_{i}", "This difficulty entry (Type, Level, Version) is a duplicate of another entry.", MessageType.Error);
@@ -458,8 +456,8 @@ namespace RhythmPulse.GameplayData.Editor
 
 
                 // Display the generated Difficulty File name (read-only)
-                string displayBeatMapType = currentBeatmap.BeatMapType != null && currentBeatmap.BeatMapType.Length > 0
-                                            ? currentBeatmap.BeatMapType[0]
+                string displayBeatMapType = !string.IsNullOrEmpty(currentBeatmap.BeatMapType)
+                                            ? currentBeatmap.BeatMapType
                                             : "N/A"; // Fallback for display if no type selected
 
                 string generatedFileName = BeatMapUtility.GetBeatMapFile(
@@ -481,8 +479,8 @@ namespace RhythmPulse.GameplayData.Editor
                 {
                     int local_i = i;
                     // Pass the actual type for MD5 generation
-                    string actualBeatMapTypeForMD5 = mapInfo.BeatmapDifficultyFiles[local_i].BeatMapType != null && mapInfo.BeatmapDifficultyFiles[local_i].BeatMapType.Length > 0
-                                                     ? mapInfo.BeatmapDifficultyFiles[local_i].BeatMapType[0]
+                    string actualBeatMapTypeForMD5 = !string.IsNullOrEmpty(mapInfo.BeatmapDifficultyFiles[local_i].BeatMapType)
+                                                     ? mapInfo.BeatmapDifficultyFiles[local_i].BeatMapType
                                                      : "N/A";
                     string fileNameForMD5 = BeatMapUtility.GetBeatMapFile(
                         actualBeatMapTypeForMD5,
@@ -518,8 +516,8 @@ namespace RhythmPulse.GameplayData.Editor
             {
                 mapInfo.BeatmapDifficultyFiles.Add(new BeatMapInfo
                 {
-                    MD5 = "", // Initialize MD5 as empty
-                    BeatMapType = new string[0], // Start with no type selected
+                    MD5 = string.Empty, // Initialize MD5 as empty
+                    BeatMapType = string.Empty, // Start with no type selected
                     Difficulty = 1,
                     Version = "Default" // Initialize with a default version
                 });
@@ -541,7 +539,7 @@ namespace RhythmPulse.GameplayData.Editor
                 return;
             }
 
-            string beatMapTypeForFile = beatmap.BeatMapType.Length > 0 ? beatmap.BeatMapType[0] : "InvalidType"; // Should be caught by validation
+            string beatMapTypeForFile = !string.IsNullOrEmpty(beatmap.BeatMapType) ? beatmap.BeatMapType : "InvalidType"; // Should be caught by validation
             string generatedFileName = BeatMapUtility.GetBeatMapFile(beatMapTypeForFile, beatmap.Difficulty, beatmap.Version);
 
             if (string.IsNullOrWhiteSpace(generatedFileName))
@@ -807,7 +805,7 @@ namespace RhythmPulse.GameplayData.Editor
             for (int i = 0; i < mapInfo.BeatmapDifficultyFiles.Count; i++)
             {
                 BeatMapInfo beatmap = mapInfo.BeatmapDifficultyFiles[i];
-                string beatMapTypeForFile = beatmap.BeatMapType != null && beatmap.BeatMapType.Length > 0 ? beatmap.BeatMapType[0] : "N/A";
+                string beatMapTypeForFile = !string.IsNullOrEmpty(beatmap.BeatMapType) ? beatmap.BeatMapType : "N/A";
 
                 // Use BeatMapUtility's internal validation first to get a clean filename
                 string generatedFileName = BeatMapUtility.GetBeatMapFile(beatMapTypeForFile, beatmap.Difficulty, beatmap.Version);
@@ -1123,19 +1121,17 @@ namespace RhythmPulse.GameplayData.Editor
         /// <summary>
         /// Validates that exactly one BeatMapType is selected.
         /// </summary>
-        private bool ValidateBeatMapTypeSelection(string fieldNameKey, string[] selectedTypes)
+        private bool ValidateBeatMapTypeSelection(string fieldNameKey, string selectedTypes)
         {
             string message = "";
             MessageType type = MessageType.None;
 
-            // Now, we expect exactly one selection.
-            if (selectedTypes == null || selectedTypes.Length != 1)
+            if (string.IsNullOrEmpty(selectedTypes))
             {
                 message = "Exactly one BeatMap Type must be selected.";
                 type = MessageType.Error;
             }
-            // Optional: Also check if the selected type is actually a valid constant
-            else if (!BeatMapUtility.ValidBeatMapTypes.Contains(selectedTypes[0]))
+            else if (!BeatMapUtility.ValidBeatMapTypes.Contains(selectedTypes))
             {
                 message = $"Selected BeatMap Type '{selectedTypes[0]}' is not a valid constant.";
                 type = MessageType.Error;
@@ -1324,10 +1320,10 @@ namespace RhythmPulse.GameplayData.Editor
                     string generatedFileName = string.Empty;
 
                     // Only attempt to generate if BeatMapType is valid (length check is part of ValidateBeatMapTypeSelection)
-                    if (beatmap.BeatMapType != null && beatmap.BeatMapType.Length == 1)
+                    if (!string.IsNullOrEmpty(beatmap.BeatMapType))
                     {
                         generatedFileName = BeatMapUtility.GetBeatMapFile(
-                            beatmap.BeatMapType[0],
+                            beatmap.BeatMapType,
                             beatmap.Difficulty,
                             beatmap.Version
                         );

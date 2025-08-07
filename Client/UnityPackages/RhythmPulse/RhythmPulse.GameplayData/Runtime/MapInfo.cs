@@ -65,7 +65,7 @@ namespace RhythmPulse.GameplayData.Runtime
         public string MD5 { get; set; }
 
         [YamlMember(Order = 1)]
-        public string[] BeatMapType { get; set; }
+        public string BeatMapType { get; set; }
 
         [YamlMember(Order = 2)]
         public int Difficulty { get; set; }

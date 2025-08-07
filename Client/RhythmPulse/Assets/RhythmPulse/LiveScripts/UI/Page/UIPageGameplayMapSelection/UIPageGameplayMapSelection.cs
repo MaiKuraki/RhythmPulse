@@ -229,7 +229,7 @@ namespace RhythmPulse.UI
             difficultyList.Clear();
             foreach (var beatMapInfo in mapInfo.BeatmapDifficultyFiles)
             {
-                if (beatMapType == beatMapInfo.BeatMapType[0])
+                if (beatMapType == beatMapInfo.BeatMapType)
                 {
                     difficultyList.Add(beatMapInfo.Difficulty);
                 }
