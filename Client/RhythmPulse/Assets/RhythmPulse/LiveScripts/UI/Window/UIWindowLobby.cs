@@ -87,7 +87,7 @@ namespace RhythmPulse.UI
             uiPageGameModeSelection.EnterDanceGame += EnterJustDanceGame;
         }
 
-        private void EnterMusicSelection(string gameModeType)
+        private void EnterMusicSelection(MusicSelectionContext context)
         {
             GameModeSelectionTF.gameObject.SetActive(false);
             GameplayMapSelectionTF.gameObject.SetActive(true);
@@ -101,17 +101,17 @@ namespace RhythmPulse.UI
             cancelRebuildMapList?.Dispose();
             cancelRebuildMapList = null;
             cancelRebuildMapList = new CancellationTokenSource();
-            uiPageGameplayMapSelection.RebuildMapListAfterDIInitialized(gameModeType, cancelRebuildMapList.Token).Forget();
+            uiPageGameplayMapSelection.RebuildMapListAfterDIInitialized(context, cancelRebuildMapList.Token).Forget();
         }
 
         private void EnterTraditionalBeatsGame()
         {
-            EnterMusicSelection(string.Empty);
+            EnterMusicSelection(new MusicSelectionContext(string.Empty));
         }
 
         private void EnterJustDanceGame()
         {
-            EnterMusicSelection(RhythmPulse.GameplayData.Runtime.BeatMapTypeConstant.JustDance);
+            EnterMusicSelection(new MusicSelectionContext(RhythmPulse.GameplayData.Runtime.BeatMapTypeConstant.JustDance));
         }
     }
 }

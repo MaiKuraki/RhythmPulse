@@ -25,18 +25,21 @@ namespace RhythmPulse.UI
     public class UIPageGameplayMapSelection : MonoBehaviour
     {
         private const string DEBUG_FLAG = "[UIPageGameplayMapSelection]";
-        
+
         [Header("Component References")]
         [SerializeField] private RhythmPulse.UI.MapListScrollView scrollView = default;
         [SerializeField] private Button enterMusicGameplayButton = default;
         [SerializeField] private Button backButton = default;
         [SerializeField] private TMP_Text Text_MapDisplayName;
         [SerializeField] private RawImage rawImg_PreviewVideoScreen;
-        
-        [Header("Difficulty Selection")]
+
+        [Header("BeatMap Info")]
+        [SerializeField] private TMP_Text Text_BeatMapType;
+        [SerializeField] private TMP_Text Text_BeatMapVersion;
         [SerializeField] private TMP_Text Text_DifficultyName;
         [SerializeField] private Button Btn_SelectLast;
         [SerializeField] private Button Btn_SelectNext;
+
 
         [Header("Configuration")]
         [SerializeField] private int confirmDelayMs = 200;
@@ -52,27 +55,28 @@ namespace RhythmPulse.UI
         private ITimeline timeline;
         private IGameplayMusicPlayer musicPlayer;
         private IGameplayVideoPlayer videoPlayer;
-        
+
         private bool IsDIInitialized = false;
         private List<ItemData> items = new List<ItemData>();
         private CancellationTokenSource cancelForSelection;
         private CancellationTokenSource cancelForMediaInfoUpdate;
         private Gameplay.GameplayData gameplayData;
-        private string BeatMapType = string.Empty;
+        private MapInfo? currentMapInfo; // To store the currently selected map's info.
+        private MusicSelectionContext currentContext;
         private StringBuilder previewAudioName = new StringBuilder();
         private StringBuilder previewVideoName = new StringBuilder();
-        
+
         // State for the currently selected map's difficulties
         private List<BeatMapInfo> difficultyFilesForCurrentMode = new List<BeatMapInfo>();
         private int currentDifficultyIndex = -1;
-        
+
         private const string INVLID_DIFFICULTY_FILE = "INVALID_CONFIG.yaml";
-        
+
         void Awake()
         {
             enterMusicGameplayButton.OnClickAsObservable().Subscribe(_ => EnterGameplay());
             backButton.OnClickAsObservable().Subscribe(_ => ClickBack());
-            
+
             scrollView.OnSelectedEvent -= OnSelectItem;
             scrollView.OnSelectedEvent += OnSelectItem;
 
@@ -80,7 +84,7 @@ namespace RhythmPulse.UI
             // The handlers will use class state to determine behavior.
             Btn_SelectLast.OnClickAsObservable().Subscribe(_ => ChangeDifficulty(-1)).AddTo(this);
             Btn_SelectNext.OnClickAsObservable().Subscribe(_ => ChangeDifficulty(1)).AddTo(this);
-            
+
             AdjustConfirmDelayForHighPerformanceDevices();
         }
 
@@ -110,7 +114,7 @@ namespace RhythmPulse.UI
         void OnDestroy()
         {
             IsDIInitialized = false;
-            
+
             cancelForSelection?.Cancel();
             cancelForSelection?.Dispose();
             cancelForSelection = null;
@@ -134,7 +138,7 @@ namespace RhythmPulse.UI
         void Update()
         {
             if (!IsDIInitialized) return;
-            
+
             // AV-Sync tick for media playback.
             PreviewMediaTimeline?.Tick();
         }
@@ -146,14 +150,14 @@ namespace RhythmPulse.UI
 #endif
         }
 
-        public async UniTask RebuildMapListAfterDIInitialized(string beatMapType, CancellationToken cancellationToken)
+        public async UniTask RebuildMapListAfterDIInitialized(MusicSelectionContext context, CancellationToken cancellationToken)
         {
             await UniTask.WaitUntil(() => IsDIInitialized, PlayerLoopTiming.Update, cancellationToken);
 
-            this.BeatMapType = beatMapType;
+            currentContext = context;
             items.Clear();
 
-            bool isJustDanceMode = beatMapType == BeatMapTypeConstant.JustDance;
+            bool isJustDanceMode = context.FilterBeatMapType == BeatMapTypeConstant.JustDance;
             var mapsToList = isJustDanceMode
                 ? gameplayMapListManager.GetAvailableMapsByBeatMapType(BeatMapTypeConstant.JustDance)
                 : gameplayMapListManager.GetAvailableMapsExcludingType(BeatMapTypeConstant.JustDance);
@@ -162,9 +166,9 @@ namespace RhythmPulse.UI
             {
                 items.Add(new ItemData(mapInfo));
             }
-            
+
             scrollView.UpdateData(items);
-            
+
             if (items.Count > 0)
             {
                 scrollView.SelectCell(0);
@@ -197,7 +201,7 @@ namespace RhythmPulse.UI
             cancelForSelection?.Cancel();
             cancelForSelection?.Dispose();
             cancelForSelection = null;
-            
+
             timeline?.Stop();
             ClickBackEvent?.Invoke();
         }
@@ -211,34 +215,40 @@ namespace RhythmPulse.UI
 
             if (itemData == null) // Handle case where list is empty or selection is cleared
             {
+                currentMapInfo = null;
                 Text_MapDisplayName?.SetText("No Maps Available");
-                gameplayData = default;
-                RefreshDifficulty(default);
+                // RefreshDifficulty will handle clearing the old state and invalidating gameplayData
+                RefreshDifficulty(null);
                 return;
             }
 
-            Text_MapDisplayName?.SetText(itemData.MapInfo.DisplayName);
+            currentMapInfo = itemData.MapInfo;
+            // Use .Value as currentMapInfo is now nullable
+            Text_MapDisplayName?.SetText(currentMapInfo.Value.DisplayName);
 
-            bool bHasOverrideMedia = CheckForOverrideMedia(itemData.MapInfo, this.BeatMapType);
+            // The BeatMapType here is the *filter* type from the lobby, used to find correct media overrides.
+            bool bHasOverrideMedia = CheckForOverrideMedia(currentMapInfo.Value, currentContext.FilterBeatMapType);
 
-            gameplayData = new Gameplay.GameplayData(itemData.MapInfo, this.BeatMapType, INVLID_DIFFICULTY_FILE);
-            RefreshDifficulty(itemData.MapInfo);
+            // Refresh the list of available difficulties for the selected map and current mode.
+            // This will trigger an update to the gameplayData via UpdateDifficultyDisplay.
+            RefreshDifficulty(currentMapInfo);
 
+            // Asynchronously load and prepare media preview.
             UpdateMediaDataAsync(itemData, bHasOverrideMedia, cancelForMediaInfoUpdate).Forget();
         }
 
         /// <summary>
         /// A GC-friendly check for media overrides, avoiding LINQ.
         /// </summary>
-        private bool CheckForOverrideMedia(MapInfo mapInfo, string beatMapType)
+        private bool CheckForOverrideMedia(in MapInfo mapInfo, string filterBeatMapType)
         {
-            if (mapInfo.MediaOverrides == null || string.IsNullOrEmpty(beatMapType))
+            if (mapInfo.MediaOverrides == null || string.IsNullOrEmpty(filterBeatMapType))
             {
                 return false;
             }
             foreach (var overrideInfo in mapInfo.MediaOverrides)
             {
-                if (overrideInfo.BeatMapType == beatMapType)
+                if (overrideInfo.BeatMapType == filterBeatMapType)
                 {
                     return true;
                 }
@@ -253,11 +263,11 @@ namespace RhythmPulse.UI
 
             // Prepare audio path
             previewAudioName.Clear();
-            string audioPath = bHasOverrideMedia 
-                ? mapStorage.GetPreviewAudioPath(itemData.MapInfo, BeatMapType) 
+            string audioPath = bHasOverrideMedia
+                ? mapStorage.GetPreviewAudioPath(itemData.MapInfo, currentContext.FilterBeatMapType)
                 : mapStorage.GetPreviewAudioPath(itemData.MapInfo);
             previewAudioName.Append(FilePathUtility.GetUnityWebRequestUri(audioPath, UnityPathSource.AbsoluteOrFullUri));
-            
+
             // Load audio
             await audioLoadService.LoadAudioAsync(previewAudioName.ToString());
             if (cancellationTokenSource.IsCancellationRequested) return;
@@ -270,9 +280,9 @@ namespace RhythmPulse.UI
             bool isVideoPrepared = false;
             previewVideoName.Clear();
             string videoPath = bHasOverrideMedia
-                ? mapStorage.GetPreviewVideoPath(itemData.MapInfo, BeatMapType)
+                ? mapStorage.GetPreviewVideoPath(itemData.MapInfo, currentContext.FilterBeatMapType)
                 : mapStorage.GetPreviewVideoPath(itemData.MapInfo);
-            
+
             // Initialize video player
             if (!string.IsNullOrEmpty(videoPath))
             {
@@ -289,7 +299,7 @@ namespace RhythmPulse.UI
             {
                 isVideoPrepared = true; // No video to prepare
             }
-            
+
             if (rawImg_PreviewVideoScreen)
             {
                 rawImg_PreviewVideoScreen.texture = ((GameplayVideoPlayer)videoPlayer)?.CurrentVideoTexture;
@@ -297,23 +307,25 @@ namespace RhythmPulse.UI
 
             timeline?.Play();
         }
-        
+
         /// <summary>
-        /// Refreshes the difficulty selector based on the selected map and current game mode.
+        /// Refreshes the difficulty selector based on the selected map and current game mode filter.
+        /// This method is responsible for populating the list of available difficulties.
         /// </summary>
-        private void RefreshDifficulty(MapInfo mapInfo)
+        private void RefreshDifficulty(MapInfo? mapInfo)
         {
             difficultyFilesForCurrentMode.Clear();
-            currentDifficultyIndex = -1;
 
-            if (mapInfo.BeatmapDifficultyFiles != null)
+            if (mapInfo?.BeatmapDifficultyFiles != null)
             {
-                foreach (var beatMapInfo in mapInfo.BeatmapDifficultyFiles)
+                foreach (var beatMapInfo in mapInfo.Value.BeatmapDifficultyFiles)
                 {
-                    // For the generic "Beats" mode, we include anything that is NOT an exclusive mode like JustDance.
-                    bool isCompatible = string.IsNullOrEmpty(this.BeatMapType)
-                        ? beatMapInfo.BeatMapType != BeatMapTypeConstant.JustDance // Example of exclusion
-                        : beatMapInfo.BeatMapType == this.BeatMapType;
+                    // For the generic "Beats" mode (where BeatMapType is empty), we include anything 
+                    // that is NOT an exclusive mode like JustDance. For a specific mode like JustDance, 
+                    // we only include beatmaps of that type.
+                    bool isCompatible = string.IsNullOrEmpty(currentContext.FilterBeatMapType)
+                        ? beatMapInfo.BeatMapType != BeatMapTypeConstant.JustDance // Example of exclusion for "traditional" modes
+                        : beatMapInfo.BeatMapType == currentContext.FilterBeatMapType;
 
                     if (isCompatible)
                     {
@@ -322,61 +334,61 @@ namespace RhythmPulse.UI
                 }
             }
 
-            // Sort difficulties numerically for consistent order.
+            // Sort difficulties for a consistent and predictable order.
+            // This assumes 'Difficulty' is a comparable type (e.g., int or enum).
             difficultyFilesForCurrentMode.Sort((a, b) => a.Difficulty.CompareTo(b.Difficulty));
 
+            // After refreshing the list, reset the selection to the first item.
+            currentDifficultyIndex = difficultyFilesForCurrentMode.Count > 0 ? 0 : -1;
             UpdateDifficultyDisplay();
         }
 
         /// <summary>
-        /// Updates the UI elements for difficulty display and interaction.
+        /// Updates the UI for the difficulty display and, crucially, constructs the final
+        /// GameplayData based on the currently selected difficulty. This is the single
+        /// point of truth for the selected gameplay configuration.
         /// </summary>
         private void UpdateDifficultyDisplay()
         {
-            if (difficultyFilesForCurrentMode.Count == 0)
-            {
-                Text_DifficultyName?.SetText("N/A");
-                gameplayData.UpdateBeatMapFile(INVLID_DIFFICULTY_FILE);
-                Btn_SelectLast.interactable = false;
-                Btn_SelectNext.interactable = false;
-                return;
-            }
+            bool hasDifficulties = currentDifficultyIndex != -1;
 
-            if (currentDifficultyIndex < 0 || currentDifficultyIndex >= difficultyFilesForCurrentMode.Count)
-            {
-                currentDifficultyIndex = 0;
-            }
-            
-            var currentBeatMap = difficultyFilesForCurrentMode[currentDifficultyIndex];
-            
-            Text_DifficultyName?.SetText(currentBeatMap.Difficulty.ToString());
-
-            var beatMapFile = BeatMapUtility.GetBeatMapFile(currentBeatMap.BeatMapType, currentBeatMap.Difficulty, currentBeatMap.Version);
-            gameplayData.UpdateBeatMapFile(beatMapFile);
-
+            // Enable/disable navigation buttons based on whether there's more than one difficulty.
             bool canChange = difficultyFilesForCurrentMode.Count > 1;
             Btn_SelectLast.interactable = canChange;
             Btn_SelectNext.interactable = canChange;
+
+            if (!hasDifficulties || !currentMapInfo.HasValue)
+            {
+                Text_DifficultyName?.SetText("N/A");
+                // Invalidate gameplay data if no valid difficulty is available for the current map/mode.
+                gameplayData = default;
+                return;
+            }
+
+            // A valid difficulty is selected, so update the display and construct the GameplayData.
+            var currentBeatMap = difficultyFilesForCurrentMode[currentDifficultyIndex];
+            Text_DifficultyName?.SetText(currentBeatMap.Difficulty.ToString());
+            Text_BeatMapType?.SetText(currentBeatMap.BeatMapType);
+            Text_BeatMapVersion?.SetText(currentBeatMap.Version);
+
+            // We construct the final, valid GameplayData using the specific BeatMapType
+            // from the selected difficulty, not the filter type from the lobby. This ensures
+            // the correct game mode, difficulty, and version are used to start the gameplay scene.
+            var beatMapFile = BeatMapUtility.GetBeatMapFile(currentBeatMap.BeatMapType, currentBeatMap.Difficulty, currentBeatMap.Version);
+            gameplayData = new Gameplay.GameplayData(currentMapInfo.Value, currentBeatMap.BeatMapType, beatMapFile);
         }
 
         /// <summary>
-        /// Changes the selected difficulty index.
+        /// Changes the selected difficulty index and updates the UI.
         /// </summary>
         /// <param name="direction">-1 for previous, 1 for next.</param>
         private void ChangeDifficulty(int direction)
         {
             if (difficultyFilesForCurrentMode.Count <= 1) return;
 
-            currentDifficultyIndex += direction;
-            if (currentDifficultyIndex < 0)
-            {
-                currentDifficultyIndex = difficultyFilesForCurrentMode.Count - 1;
-            }
-            else if (currentDifficultyIndex >= difficultyFilesForCurrentMode.Count)
-            {
-                currentDifficultyIndex = 0;
-            }
-            
+            // Cycle through the available difficulties.
+            currentDifficultyIndex = (currentDifficultyIndex + direction + difficultyFilesForCurrentMode.Count) % difficultyFilesForCurrentMode.Count;
+
             UpdateDifficultyDisplay();
         }
     }
