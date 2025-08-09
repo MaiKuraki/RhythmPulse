@@ -1,31 +1,30 @@
+#if !UNITY_WEBGL || UNITY_EDITOR
 using System;
-using System.Collections.Concurrent;
 using System.IO;
 using System.Text;
-using System.Threading;
 using CycloneGames.Logger.Util;
 
-namespace CycloneGames.Logger // Ensure namespace matches if it contains LogMessage
+namespace CycloneGames.Logger
 {
     /// <summary>
-    /// Logs messages to a file, with asynchronous batch writing.
+    /// Logs messages to a file.
+    /// Thread-safety: writes are serialized via a private lock; queuing is handled by <see cref="CLogger"/>.
+    /// Performance: uses a larger FileStream buffer and formats into a pooled StringBuilder to minimize GC.
     /// </summary>
-    public sealed class FileLogger : ILogger, IDisposable
+    public sealed class FileLogger : ILogger
     {
-        private const int MaxBatchSize = 100;       // Max log entries per flush.
-        private const int FlushIntervalMs = 1000;   // Interval for timed flush.
-
         private readonly StreamWriter _writer;
-        private readonly Timer _flushTimer;
-        private readonly ConcurrentQueue<LogMessage> _logQueue = new();
+        private readonly object _writeLock = new object(); // Lock to ensure thread-safe writes.
         private volatile bool _disposed;
+        private readonly string _logFilePath;
+        private readonly FileLoggerOptions _options;
 
-        public FileLogger(string logFilePath)
+        public FileLogger(string logFilePath, FileLoggerOptions options = null)
         {
             if (string.IsNullOrEmpty(logFilePath)) throw new ArgumentNullException(nameof(logFilePath));
+            _logFilePath = logFilePath;
+            _options = options ?? FileLoggerOptions.Default;
 
-            StreamWriter tempWriter = null;
-            Timer tempTimer = null;
             try
             {
                 var directory = Path.GetDirectoryName(logFilePath);
@@ -34,112 +33,206 @@ namespace CycloneGames.Logger // Ensure namespace matches if it contains LogMess
                     Directory.CreateDirectory(directory);
                 }
 
-                // Use a larger buffer for FileStream for potentially better IO performance.
-                var fileStream = new FileStream(logFilePath, FileMode.Append, FileAccess.Write, FileShare.Read, bufferSize: 4096, useAsync: true);
-                tempWriter = new StreamWriter(fileStream, Encoding.UTF8) { AutoFlush = false };
-                _writer = tempWriter;
+                // Use a larger buffer for FileStream for better IO performance.
+                // AutoFlush is set to true to ensure logs are written immediately, which is simpler and safer
+                // now that CLogger handles the background processing.
+                var fileStream = new FileStream(logFilePath, FileMode.Append, FileAccess.Write, FileShare.Read, bufferSize: 8192, useAsync: false);
+                _writer = new StreamWriter(fileStream, Encoding.UTF8) { AutoFlush = true };
 
-                tempTimer = new Timer(TimerFlushLogs, null, FlushIntervalMs, FlushIntervalMs);
-                _flushTimer = tempTimer;
+                PerformMaintenanceIfNeeded();
             }
             catch (Exception ex)
             {
                 _disposed = true; // Mark as disposed to prevent operations.
-                tempTimer?.Dispose();
-                tempWriter?.Dispose();
                 Console.Error.WriteLine($"[CRITICAL] FileLogger: Failed to initialize for path '{logFilePath}'. {ex.Message}");
                 throw new InvalidOperationException($"Failed to initialize FileLogger for path '{logFilePath}'", ex);
             }
         }
 
-        public void LogTrace(in LogMessage logMessage) => EnqueueLogMessage(logMessage);
-        public void LogDebug(in LogMessage logMessage) => EnqueueLogMessage(logMessage);
-        public void LogInfo(in LogMessage logMessage) => EnqueueLogMessage(logMessage);
-        public void LogWarning(in LogMessage logMessage) => EnqueueLogMessage(logMessage);
-        public void LogError(in LogMessage logMessage) => EnqueueLogMessage(logMessage);
-        public void LogFatal(in LogMessage logMessage) => EnqueueLogMessage(logMessage);
+        public void LogTrace(LogMessage logMessage) => WriteLog(logMessage);
+        public void LogDebug(LogMessage logMessage) => WriteLog(logMessage);
+        public void LogInfo(LogMessage logMessage) => WriteLog(logMessage);
+        public void LogWarning(LogMessage logMessage) => WriteLog(logMessage);
+        public void LogError(LogMessage logMessage) => WriteLog(logMessage);
+        public void LogFatal(LogMessage logMessage) => WriteLog(logMessage);
 
-        private void EnqueueLogMessage(in LogMessage logMessage)
+        private void WriteLog(LogMessage logMessage)
         {
             if (_disposed) return;
-            _logQueue.Enqueue(logMessage); // Enqueue the struct directly.
-        }
 
-        private void TimerFlushLogs(object state) => FlushQueue();
-
-        private void FlushQueue()
-        {
-            if (_disposed || _logQueue.IsEmpty) return;
-
-            StringBuilder batchBuilder = StringBuilderPool.Get();
+            StringBuilder sb = StringBuilderPool.Get();
             try
             {
-                int processedCount = 0;
-                while (processedCount < MaxBatchSize && _logQueue.TryDequeue(out var logMessage)) // Dequeue LogMessage struct
+                // Format the log message using the pooled StringBuilder.
+                DateTimeUtil.FormatDateTimePrecise(logMessage.Timestamp, sb);
+                sb.Append(" [");
+                sb.Append(LogLevelStrings.Get(logMessage.Level)); // Optimized level to string
+                sb.Append("] ");
+
+                if (!string.IsNullOrEmpty(logMessage.Category))
                 {
-                    // Format the LogMessage here
-                    DateTimeUtil.FormatDateTimePrecise(logMessage.Timestamp, batchBuilder);
-                    batchBuilder.Append(" [");
-                    batchBuilder.Append(LogLevelStrings.Get(logMessage.Level)); // Optimized level to string
-                    batchBuilder.Append("] ");
-
-                    if (!string.IsNullOrEmpty(logMessage.Category))
-                    {
-                        batchBuilder.Append("[");
-                        batchBuilder.Append(logMessage.Category);
-                        batchBuilder.Append("] ");
-                    }
-                    batchBuilder.Append(logMessage.OriginalMessage);
-
-                    // Optionally include file/line info in file logs
-                    // if (!string.IsNullOrEmpty(logMessage.FilePath))
-                    // {
-                    //     batchBuilder.Append($" (at {Path.GetFileName(logMessage.FilePath)}:{logMessage.LineNumber})");
-                    // }
-                    batchBuilder.AppendLine(); // Each log entry on a new line in the batch
-                    processedCount++;
+                    sb.Append("[");
+                    sb.Append(logMessage.Category);
+                    sb.Append("] ");
                 }
-
-                if (processedCount > 0)
+                if (logMessage.OriginalMessage != null) sb.Append(logMessage.OriginalMessage);
+                
+                // File/line info can be very useful in file logs.
+                if (!string.IsNullOrEmpty(logMessage.FilePath))
                 {
-                    _writer.Write(batchBuilder.ToString()); // Write the entire batch
-                    _writer.Flush(); // Ensure data is written to the OS. Underlying stream might still buffer.
+                    sb.Append(" (at ");
+                    // Only append file name without allocating substrings
+                    string path = logMessage.FilePath;
+                    int lastSep = -1;
+                    for (int i = 0; i < path.Length; i++)
+                    {
+                        char c = path[i];
+                        if (c == '/' || c == '\\') lastSep = i;
+                    }
+                    int start = lastSep + 1;
+                    for (int i = start; i < path.Length; i++)
+                    {
+                        char c = path[i];
+                        sb.Append(c == '\\' ? '/' : c);
+                    }
+                    sb.Append(':');
+                    sb.Append(logMessage.LineNumber);
+                    sb.Append(')');
+                }
+                sb.AppendLine();
+
+                // Lock ensures that writes from different threads are serialized.
+                lock (_writeLock)
+                {
+                    if (!_disposed)
+                    {
+                        _writer.Write(sb.ToString());
+                        // Opportunistic maintenance: cheap size check after writes
+                        if (_options.MaintenanceMode != FileMaintenanceMode.None)
+                        {
+                            TryPerformMaintenanceQuick();
+                        }
+                    }
                 }
             }
             catch (Exception ex)
             {
-                // Fallback error logging for issues during flush.
+                // Fallback error logging for issues during write.
                 Console.Error.WriteLine($"[ERROR] FileLogger: Failed to write to log. {ex.Message}");
             }
             finally
             {
-                StringBuilderPool.Return(batchBuilder);
+                StringBuilderPool.Return(sb);
+            }
+        }
+
+        private void PerformMaintenanceIfNeeded()
+        {
+            if (_options.MaintenanceMode == FileMaintenanceMode.None) return;
+            try
+            {
+                var fi = new FileInfo(_logFilePath);
+                if (!fi.Exists) return;
+                if (fi.Length <= _options.MaxFileBytes) return;
+
+                switch (_options.MaintenanceMode)
+                {
+                    case FileMaintenanceMode.WarnOnly:
+                        Console.Error.WriteLine($"[WARNING] FileLogger: Log file exceeded {_options.MaxFileBytes} bytes. Path: {_logFilePath}");
+                        break;
+                    case FileMaintenanceMode.Rotate:
+                        RotateFiles(fi);
+                        break;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[ERROR] FileLogger: Maintenance failed. {ex.Message}");
+            }
+        }
+
+        private void TryPerformMaintenanceQuick()
+        {
+            try
+            {
+                var length = (_writer.BaseStream?.Length) ?? 0L;
+                if (length > _options.MaxFileBytes)
+                {
+                    PerformMaintenanceIfNeeded();
+                }
+            }
+            catch { /* ignore lightweight check errors */ }
+        }
+
+        private void RotateFiles(FileInfo current)
+        {
+            // Close writer temporarily to allow rename
+            _writer.Flush();
+            var timestamp = DateTime.Now.ToString(_options.ArchiveTimestampFormat);
+            string archivePath = Path.Combine(current.DirectoryName!, Path.GetFileNameWithoutExtension(current.Name) + "_" + timestamp + current.Extension);
+            try
+            {
+                _writer.BaseStream.Dispose();
+            }
+            catch { }
+
+            try
+            {
+                File.Move(_logFilePath, archivePath);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[ERROR] FileLogger: Rotation rename failed. {ex.Message}");
+            }
+
+            // Reopen writer on original path
+            var fileStream = new FileStream(_logFilePath, FileMode.Append, FileAccess.Write, FileShare.Read, bufferSize: 8192, useAsync: false);
+            typeof(StreamWriter)
+                .GetField("_stream", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                ?.SetValue(_writer, fileStream);
+
+            // Cleanup old archives
+            try
+            {
+                var dir = current.Directory;
+                if (dir != null)
+                {
+                    var baseName = Path.GetFileNameWithoutExtension(current.Name);
+                    var ext = current.Extension;
+                    var archives = dir.GetFiles(baseName + "_*" + ext);
+                    Array.Sort(archives, (a, b) => b.LastWriteTimeUtc.CompareTo(a.LastWriteTimeUtc));
+                    for (int i = _options.MaxArchiveFiles; i < archives.Length; i++)
+                    {
+                        try { archives[i].Delete(); } catch { }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[WARNING] FileLogger: Archive cleanup failed. {ex.Message}");
             }
         }
 
         public void Dispose()
         {
             if (_disposed) return;
-            _disposed = true;
-
-            _flushTimer?.Change(Timeout.Infinite, Timeout.Infinite); // Stop the timer
-            _flushTimer?.Dispose();
-
-            FlushQueue(); // Attempt to flush any remaining logs.
-
-            try
+            
+            lock (_writeLock)
             {
-                _writer?.Flush();
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine($"[ERROR] FileLogger: Failed to flush during dispose. {ex.Message}");
-            }
-            finally
-            {
+                if (_disposed) return;
+                _disposed = true;
+                
                 // StreamWriter.Dispose() also disposes the underlying stream.
-                _writer?.Dispose();
+                try
+                {
+                    _writer?.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[ERROR] FileLogger: Failed to dispose writer. {ex.Message}");
+                }
             }
         }
     }
 }
+#endif

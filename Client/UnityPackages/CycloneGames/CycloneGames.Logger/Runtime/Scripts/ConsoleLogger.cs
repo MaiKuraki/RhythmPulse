@@ -6,25 +6,26 @@ using CycloneGames.Logger.Util;
 namespace CycloneGames.Logger
 {
     /// <summary>
-    /// Logs messages to the standard console output and error streams.
+    /// Logs messages to standard console output and error streams.
+    /// Uses a shared lock to avoid interleaved writes across threads.
     /// </summary>
     public sealed class ConsoleLogger : ILogger
     {
         private static readonly object _consoleLock = new();
 
-        public void LogTrace(in LogMessage logMessage) => LogInternal("TRACE", logMessage, Console.Out);
-        public void LogDebug(in LogMessage logMessage) => LogInternal("DEBUG", logMessage, Console.Out);
-        public void LogInfo(in LogMessage logMessage) => LogInternal("INFO", logMessage, Console.Out);
-        public void LogWarning(in LogMessage logMessage) => LogInternal("WARNING", logMessage, Console.Out); // Warnings can go to Console.Out or Console.Error depending on preference.
-        public void LogError(in LogMessage logMessage) => LogInternal("ERROR", logMessage, Console.Error);
-        public void LogFatal(in LogMessage logMessage) => LogInternal("FATAL", logMessage, Console.Error);
+        public void LogTrace(LogMessage logMessage) => LogInternal("TRACE", logMessage, Console.Out);
+        public void LogDebug(LogMessage logMessage) => LogInternal("DEBUG", logMessage, Console.Out);
+        public void LogInfo(LogMessage logMessage) => LogInternal("INFO", logMessage, Console.Out);
+        public void LogWarning(LogMessage logMessage) => LogInternal("WARNING", logMessage, Console.Out);
+        public void LogError(LogMessage logMessage) => LogInternal("ERROR", logMessage, Console.Error);
+        public void LogFatal(LogMessage logMessage) => LogInternal("FATAL", logMessage, Console.Error);
 
-        private static void LogInternal(string levelString, in LogMessage logMessage, TextWriter writer)
+        private static void LogInternal(string levelString, LogMessage logMessage, TextWriter writer)
         {
             StringBuilder sb = StringBuilderPool.Get();
             try
             {
-                sb.Append(levelString); // Using pre-supplied level string. Could also use LogLevelStrings.Get(logMessage.Level)
+                sb.Append(levelString);
                 sb.Append(": ");
                 if (!string.IsNullOrEmpty(logMessage.Category))
                 {
@@ -32,12 +33,20 @@ namespace CycloneGames.Logger
                     sb.Append(logMessage.Category);
                     sb.Append("] ");
                 }
-                sb.Append(logMessage.OriginalMessage);
-                // FilePath and LineNumber are typically not logged to console by default, but could be added.
-                // if (!string.IsNullOrEmpty(logMessage.FilePath))
-                // {
-                //    sb.Append($" (at {Path.GetFileName(logMessage.FilePath)}:{logMessage.LineNumber})");
-                // }
+                if (logMessage.OriginalMessage != null) sb.Append(logMessage.OriginalMessage);
+                if (!string.IsNullOrEmpty(logMessage.FilePath))
+                {
+                    sb.Append(" (at ");
+                    string src = logMessage.FilePath;
+                    for (int i = 0; i < src.Length; i++)
+                    {
+                        char c = src[i];
+                        sb.Append(c == '\\' ? '/' : c);
+                    }
+                    sb.Append(':');
+                    sb.Append(logMessage.LineNumber);
+                    sb.Append(')');
+                }
 
                 lock (_consoleLock)
                 {

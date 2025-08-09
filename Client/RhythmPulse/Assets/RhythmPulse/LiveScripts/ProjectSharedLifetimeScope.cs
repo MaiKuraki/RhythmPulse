@@ -6,7 +6,6 @@ using RhythmPulse.APIGateway;
 using RhythmPulse.Audio;
 using RhythmPulse.Gameplay;
 using CycloneGames.Utility.Runtime;
-using CycloneGames.Factory.Runtime;
 
 namespace RhythmPulse
 {
@@ -16,7 +15,6 @@ namespace RhythmPulse
         {
             base.Configure(builder);
 
-            CLogger.Instance.AddLogger(new UnityLogger());
             builder.Register<IMainCameraService, MainCameraService>(Lifetime.Singleton);
             builder.Register<ISceneManagementAPIGateway, SceneManagementAPIGateway>(Lifetime.Singleton);
             builder.Register<IAudioLoadService, AudioLoadService>(Lifetime.Singleton);
