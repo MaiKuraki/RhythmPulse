@@ -88,6 +88,16 @@ namespace RhythmPulse.UI
             AdjustConfirmDelayForHighPerformanceDevices();
         }
 
+        void OnEnable()
+        {
+            // Re-subscribe safely when the page is re-enabled
+            if (scrollView != null)
+            {
+                scrollView.OnSelectedEvent -= OnSelectItem;
+                scrollView.OnSelectedEvent += OnSelectItem;
+            }
+        }
+
         [Inject]
         void Construct(
             IUIService uiService,
@@ -126,6 +136,10 @@ namespace RhythmPulse.UI
 
         void OnDisable()
         {
+            if (scrollView != null)
+            {
+                scrollView.OnSelectedEvent -= OnSelectItem;
+            }
             cancelForSelection?.Cancel();
             cancelForSelection?.Dispose();
             cancelForSelection = null;
@@ -208,6 +222,7 @@ namespace RhythmPulse.UI
 
         private void OnSelectItem(ItemData itemData)
         {
+            if (!isActiveAndEnabled || this == null) return; // Guard for rapid page disable/destroy
             // Cancel any pending media update from a previous selection.
             cancelForMediaInfoUpdate?.Cancel();
             cancelForMediaInfoUpdate?.Dispose();
@@ -300,9 +315,13 @@ namespace RhythmPulse.UI
                 isVideoPrepared = true; // No video to prepare
             }
 
-            if (rawImg_PreviewVideoScreen)
+            if (rawImg_PreviewVideoScreen && isActiveAndEnabled && this != null)
             {
-                rawImg_PreviewVideoScreen.texture = ((GameplayVideoPlayer)videoPlayer)?.CurrentVideoTexture;
+                var gp = videoPlayer as GameplayVideoPlayer;
+                if (gp != null)
+                {
+                    rawImg_PreviewVideoScreen.texture = gp.CurrentVideoTexture;
+                }
             }
 
             timeline?.Play();
@@ -350,6 +369,10 @@ namespace RhythmPulse.UI
         /// </summary>
         private void UpdateDifficultyDisplay()
         {
+            if (!IsDIInitialized || !isActiveAndEnabled || this == null)
+            {
+                return; // Page is not in a valid state to update UI
+            }
             bool hasDifficulties = currentDifficultyIndex != -1;
 
             // Enable/disable navigation buttons based on whether there's more than one difficulty.
@@ -359,7 +382,10 @@ namespace RhythmPulse.UI
 
             if (!hasDifficulties || !currentMapInfo.HasValue)
             {
-                Text_DifficultyName?.SetText("N/A");
+                if (Text_DifficultyName)
+                {
+                    Text_DifficultyName.SetText("N/A");
+                }
                 // Invalidate gameplay data if no valid difficulty is available for the current map/mode.
                 gameplayData = default;
                 return;
@@ -367,9 +393,18 @@ namespace RhythmPulse.UI
 
             // A valid difficulty is selected, so update the display and construct the GameplayData.
             var currentBeatMap = difficultyFilesForCurrentMode[currentDifficultyIndex];
-            Text_DifficultyName?.SetText(currentBeatMap.Difficulty.ToString());
-            Text_BeatMapType?.SetText(currentBeatMap.BeatMapType);
-            Text_BeatMapVersion?.SetText(currentBeatMap.Version);
+            if (Text_DifficultyName)
+            {
+                Text_DifficultyName.SetText(currentBeatMap.Difficulty.ToString());
+            }
+            if (Text_BeatMapType)
+            {
+                Text_BeatMapType.SetText(currentBeatMap.BeatMapType);
+            }
+            if (Text_BeatMapVersion)
+            {
+                Text_BeatMapVersion.SetText(currentBeatMap.Version);
+            }
 
             // We construct the final, valid GameplayData using the specific BeatMapType
             // from the selected difficulty, not the filter type from the lobby. This ensures

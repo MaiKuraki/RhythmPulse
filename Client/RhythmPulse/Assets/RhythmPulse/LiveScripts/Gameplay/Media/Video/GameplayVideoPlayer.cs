@@ -231,7 +231,22 @@ namespace RhythmPulse.Gameplay.Media
                 else
                 {
                     // CLogger.LogInfo($"{DEBUG_FLAG} CancelCurrentMasterPreparation: Stopping standby VideoPlayer (ID: {_standbyVideoPlayer.GetInstanceID()}, URL: '{_standbyVideoPlayer.url}').");
-                    _standbyVideoPlayer.Stop(); // This call might cause an NRE if the VideoPlayer is in a bad state.
+                    try
+                    {
+                        _standbyVideoPlayer.Stop(); // This call might cause an exception if the VideoPlayer is in a bad state during rapid teardown
+                    }
+                    catch (MissingReferenceException)
+                    {
+                        // Expected during teardown
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                        // Expected during teardown
+                    }
+                    catch (Exception ex)
+                    {
+                        CLogger.LogWarning($"{DEBUG_FLAG} Exception while stopping standby VideoPlayer: {ex}");
+                    }
                 }
             }
             else if (stopStandbyPlayerIfPreparing && _standbyVideoPlayer == null)
@@ -293,28 +308,48 @@ namespace RhythmPulse.Gameplay.Media
             // CLogger.LogInfo($"{DEBUG_FLAG} Launching Master Prepare for '{videoUrl}' on STANDBY. MasterCTS Hash: {_masterPrepareCts.GetHashCode()}, LinkedTaskCTS Hash: {linkedCtsForThisAsyncTask.GetHashCode()}");
 
             // Pass the token of the linkedCtsForThisAsyncTask to the async method.
-            LaunchMasterPrepareAsync(_standbyVideoPlayer, videoUrl, bLoop, linkedCtsForThisAsyncTask.Token)
+            var capturedTokenForHandlers = linkedCtsForThisAsyncTask.Token;
+            LaunchMasterPrepareAsync(_standbyVideoPlayer, videoUrl, bLoop, capturedTokenForHandlers)
                 .ContinueWith(() => // UniTask's ContinueWith, similar to Task.ContinueWith
                 {
                     // This block executes after LaunchMasterPrepareAsync completes, faults, or is cancelled.
                     // This is the correct and sole place to dispose linkedCtsForThisAsyncTask.
-                    // CLogger.LogInfo($"{DEBUG_FLAG} LaunchMasterPrepareAsync chain for '{_currentVideoUrlBeingPreparedOnStandby}' (LinkedTaskCTS Hash: {linkedCtsForThisAsyncTask.GetHashCode()}) ended. Disposing its linked CTS.");
-                    linkedCtsForThisAsyncTask.Dispose();
+                    if (this == null) return; // Unity destroyed
+                    try
+                    {
+                        linkedCtsForThisAsyncTask.Dispose();
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                        // Expected if already disposed due to teardown; ignore
+                    }
+                    catch (Exception ex)
+                    {
+                        CLogger.LogWarning($"{DEBUG_FLAG} ContinueWith dispose threw: {ex}");
+                    }
                 })
                 .Forget((ex) => // Handle any exceptions from LaunchMasterPrepareAsync or the ContinueWith block
                 {
-                    CLogger.LogError($"{DEBUG_FLAG} Uncaught exception from LaunchMasterPrepareAsync chain for '{_currentVideoUrlBeingPreparedOnStandby}': {ex}");
-                    // linkedCtsForThisAsyncTask should have been disposed by the ContinueWith block.
-                    // If this Forget block is reached due to an error and this operation was still considered active,
-                    // reset its tracking state.
-                    if (_activeAsyncOperationToken == linkedCtsForThisAsyncTask.Token)
+                    try
                     {
-                        CLogger.LogWarning($"{DEBUG_FLAG} Resetting active prepare state due to Forget exception for token {linkedCtsForThisAsyncTask.Token.GetHashCode()}.");
-                        _activeAsyncOperationToken = CancellationToken.None;
-                        _currentVideoUrlBeingPreparedOnStandby = null;
-                        // _currentUserOnPreparedCallback = null; // LaunchMasterPrepareAsync's finally block handles this on failure/cancellation
+                        if (this == null) return; // Unity destroyed
+                        if (ex is OperationCanceledException || ex is MissingReferenceException || ex is ObjectDisposedException || ex is NullReferenceException)
+                        {
+                            // Expected during rapid switches or object teardown on mobile
+                            return;
+                        }
+                        CLogger.LogError($"{DEBUG_FLAG} Uncaught exception from LaunchMasterPrepareAsync chain for '{_currentVideoUrlBeingPreparedOnStandby}': {ex}");
                     }
-                    // DO NOT dispose _masterPrepareCts here; it's managed by CancelCurrentMasterPreparation.
+                    finally
+                    {
+                        // If this Forget block is reached and this operation was still considered active, reset its tracking state.
+                        if (_activeAsyncOperationToken == capturedTokenForHandlers)
+                        {
+                            _activeAsyncOperationToken = CancellationToken.None;
+                            _currentVideoUrlBeingPreparedOnStandby = null;
+                        }
+                        // DO NOT dispose _masterPrepareCts here; it's managed by CancelCurrentMasterPreparation.
+                    }
                 });
         }
 

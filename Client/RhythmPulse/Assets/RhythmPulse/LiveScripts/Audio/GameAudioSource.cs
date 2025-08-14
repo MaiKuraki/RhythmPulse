@@ -21,6 +21,7 @@ namespace RhythmPulse.Audio
         private AudioSource audioSource;
         private AudioClip audioClip = null;
         private long instanceAudioClipLength = 0;
+		private bool isBeingDestroyed = false;
 
         [Inject]
         public void Construct(IAudioLoadService audioLoadService)
@@ -33,8 +34,9 @@ namespace RhythmPulse.Audio
             audioSource = GetComponent<AudioSource>();
         }
 
-        void OnDestroy()
+		void OnDestroy()
         {
+			isBeingDestroyed = true;
             Dispose();
         }
 
@@ -52,14 +54,15 @@ namespace RhythmPulse.Audio
         {
             if (_data.Equals(default(GameAudioData))) return;
 
+            if (audioLoadService == null)
+            {
+                CLogger.LogWarning($"{DEBUG_FLAG} audioLoadService is null in Play() for key: {_data.Key}");
+                return;
+            }
+
             if (!audioLoadService.GetLoadedClips().TryGetValue(_data.Key, out audioClip))
             {
                 CLogger.LogWarning($"{DEBUG_FLAG} Audio clip not found for key: {_data.Key}");
-                return;
-            }
-            if (audioLoadService == null || !audioLoadService.GetLoadedClips().TryGetValue(_data.Key, out audioClip))
-            {
-                // CycloneGames.Logger.CLogger.LogError($"{DEBUG_FLAG} Audio clip not found for key: {_data.Key} or audioLoadService is null.");
                 return;
             }
             if (audioClip == null)
@@ -69,8 +72,12 @@ namespace RhythmPulse.Audio
             }
             if (audioSource == null)
             {
-                // CycloneGames.Logger.CLogger.LogError($"{DEBUG_FLAG} AudioSource component is null.");
-                return;
+                audioSource = GetComponent<AudioSource>();
+                if (audioSource == null)
+                {
+                    // CycloneGames.Logger.CLogger.LogError($"{DEBUG_FLAG} AudioSource component is null.");
+                    return;
+                }
             }
 
             audioSource.clip = audioClip;
@@ -126,10 +133,18 @@ namespace RhythmPulse.Audio
         {
             this._data = data;
             this._pool = pool;
+            if (audioSource == null)
+            {
+                audioSource = GetComponent<AudioSource>();
+                if (audioSource == null)
+                {
+                    CLogger.LogWarning($"{DEBUG_FLAG} OnSpawned: missing AudioSource component on {name}. Activating anyway to keep pool stable.");
+                }
+            }
             this.gameObject.SetActive(true);
         }
 
-        public void Dispose()
+		public void Dispose()
         {
             if (audioSource != null)
             {
@@ -138,8 +153,11 @@ namespace RhythmPulse.Audio
             }
             audioClip = null;
             instanceAudioClipLength = 0;
-
-            _pool?.Despawn(this);
+			// Despawn only when not in OnDestroy to avoid teardown races on mobile
+			if (!isBeingDestroyed)
+			{
+				_pool?.Despawn(this);
+			}
         }
 
         public void Tick()
