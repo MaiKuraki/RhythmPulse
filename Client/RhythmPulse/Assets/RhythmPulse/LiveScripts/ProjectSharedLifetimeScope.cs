@@ -1,11 +1,11 @@
 using VContainer;
 using VContainer.Unity;
 using CycloneGames.Logger;
-using CycloneGames.Service;
 using RhythmPulse.APIGateway;
 using RhythmPulse.Audio;
 using RhythmPulse.Gameplay;
 using CycloneGames.Utility.Runtime;
+using CycloneGames.Service.Runtime;
 
 namespace RhythmPulse
 {

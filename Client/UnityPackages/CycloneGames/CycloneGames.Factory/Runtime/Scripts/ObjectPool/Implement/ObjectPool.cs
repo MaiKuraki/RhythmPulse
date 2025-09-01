@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Threading;
 
 namespace CycloneGames.Factory.Runtime
@@ -20,7 +21,8 @@ namespace CycloneGames.Factory.Runtime
         private readonly List<TValue> _activeItems;
         private readonly Dictionary<TValue, int> _activeItemIndices;
         private readonly ReaderWriterLockSlim _rwLock = new ReaderWriterLockSlim();
-        
+        private readonly ConcurrentQueue<TValue> _pendingDespawns = new ConcurrentQueue<TValue>();
+
         // --- Auto-Scaling Fields ---
         private readonly float _expansionFactor;
         private readonly float _shrinkBufferFactor;
@@ -44,6 +46,7 @@ namespace CycloneGames.Factory.Runtime
                 {
                     if (_rwLock.IsReadLockHeld) _rwLock.ExitReadLock();
                 }
+
             }
         }
         public int NumInactive
@@ -72,17 +75,17 @@ namespace CycloneGames.Factory.Runtime
         /// <param name="shrinkBufferFactor">The buffer to maintain above the high-water mark (e.g., 0.2f for 20%).</param>
         /// <param name="shrinkCooldownTicks">The number of ticks of inactivity before the pool considers shrinking.</param>
         public ObjectPool(
-            IFactory<TValue> factory, 
-            int initialCapacity = 0, 
-            float expansionFactor = 0.5f, 
-            float shrinkBufferFactor = 0.2f, 
+            IFactory<TValue> factory,
+            int initialCapacity = 0,
+            float expansionFactor = 0.5f,
+            float shrinkBufferFactor = 0.2f,
             int shrinkCooldownTicks = 6000)
         {
             _factory = factory ?? throw new ArgumentNullException(nameof(factory));
             _inactivePool = new Stack<TValue>(initialCapacity);
             _activeItems = new List<TValue>(initialCapacity);
             _activeItemIndices = new Dictionary<TValue, int>(initialCapacity);
-            
+
             _expansionFactor = Math.Max(0, expansionFactor);
             _shrinkBufferFactor = Math.Max(0, shrinkBufferFactor);
             _shrinkCooldownTicks = Math.Max(0, shrinkCooldownTicks);
@@ -91,7 +94,7 @@ namespace CycloneGames.Factory.Runtime
             {
                 Resize(initialCapacity);
             }
-            
+
             ResetShrinkTracker();
         }
 
@@ -102,23 +105,34 @@ namespace CycloneGames.Factory.Runtime
             {
                 if (_inactivePool.Count == 0)
                 {
-                    // Auto-expansion logic.
-                    // When the pool is exhausted, expand by a factor of the current total size.
-                    // This handles sudden high demand more gracefully than creating one item at a time.
-                    int expansionAmount = Math.Max(1, (int)(NumTotal * _expansionFactor));
+                    // Expansion logic is sound. It correctly calculates the amount inside the lock
+                    // to prevent race conditions from multiple threads trying to expand simultaneously.
+                    int currentTotal = _activeItems.Count + _inactivePool.Count;
+                    int expansionAmount = Math.Max(1, (int)(currentTotal * _expansionFactor));
                     ExpandPoolInternal(expansionAmount);
                 }
 
                 TValue item = _inactivePool.Pop();
-                
                 int index = _activeItems.Count;
                 _activeItems.Add(item);
                 _activeItemIndices[item] = index;
 
-                // Update high-water mark for auto-shrinking logic.
+                try
+                {
+                    item.OnSpawned(param, this);
+                }
+                catch (Exception ex)
+                {
+                    _activeItems.RemoveAt(_activeItems.Count - 1);
+                    _activeItemIndices.Remove(item);
+                    _inactivePool.Push(item);
+#if DEVELOPMENT_BUILD || UNITY_EDITOR
+                    UnityEngine.Debug.LogError($"[CycloneGames.Factory] OnSpawned failed for item of type {typeof(TValue).Name}. Reverting spawn. Error: {ex.Message}");
+#endif
+                    throw;
+                }
+
                 _maxActiveSinceLastShrink = Math.Max(_maxActiveSinceLastShrink, _activeItems.Count);
-                
-                item.OnSpawned(param, this);
                 return item;
             }
             finally
@@ -131,25 +145,25 @@ namespace CycloneGames.Factory.Runtime
         {
             if (item == null) return;
 
+            // If current thread holds a read lock (e.g., inside Tick), avoid deadlock and queue the request.
+            if (_rwLock.IsReadLockHeld)
+            {
+                _pendingDespawns.Enqueue(item);
+                return;
+            }
+
+            // If current thread already holds the write lock (e.g., re-entrant call from within Spawn or other write-locked code),
+            // perform the despawn immediately without attempting to acquire the lock again.
+            if (_rwLock.IsWriteLockHeld)
+            {
+                DespawnWithoutLock(item);
+                return;
+            }
+
             _rwLock.EnterWriteLock();
             try
             {
-                if (!_activeItemIndices.TryGetValue(item, out int index))
-                {
-                    // Item is not currently active, possibly already despawned.
-                    return;
-                }
-
-                // Efficiently remove from active list using swap-and-pop.
-                // This avoids shifting list elements, making despawn an O(1) operation.
-                TValue lastItem = _activeItems[_activeItems.Count - 1];
-                _activeItems[index] = lastItem;
-                _activeItemIndices[lastItem] = index;
-                _activeItems.RemoveAt(_activeItems.Count - 1);
-                _activeItemIndices.Remove(item);
-
-                item.OnDespawned();
-                _inactivePool.Push(item);
+                DespawnWithoutLock(item);
             }
             finally
             {
@@ -159,18 +173,12 @@ namespace CycloneGames.Factory.Runtime
 
         public void Tick()
         {
-            // First, tick all active items under a read lock to allow for concurrent reads.
             _rwLock.EnterReadLock();
             try
             {
-                // Iterate backwards to safely handle cases where an item despawns itself during its Tick.
                 for (int i = _activeItems.Count - 1; i >= 0; i--)
                 {
-                    // Boundary check in case another thread modified the collection after the loop started.
-                    if (i < _activeItems.Count)
-                    {
-                        _activeItems[i].Tick();
-                    }
+                    _activeItems[i].Tick();
                 }
             }
             finally
@@ -178,11 +186,15 @@ namespace CycloneGames.Factory.Runtime
                 if (_rwLock.IsReadLockHeld) _rwLock.ExitReadLock();
             }
 
-            // Second, perform auto-shrink check under a write lock.
-            // This is separated because lock escalation (Read->Write) is not permitted.
+            if (_pendingDespawns.IsEmpty && _shrinkCooldownTicks <= 0)
+            {
+                return;
+            }
+
             _rwLock.EnterWriteLock();
             try
             {
+                DrainPendingDespawnsWithoutLock();
                 UpdateShrinkLogic();
             }
             finally
@@ -190,7 +202,47 @@ namespace CycloneGames.Factory.Runtime
                 if (_rwLock.IsWriteLockHeld) _rwLock.ExitWriteLock();
             }
         }
-        
+
+        private void DrainPendingDespawnsWithoutLock()
+        {
+            while (_pendingDespawns.TryDequeue(out var item))
+            {
+                DespawnWithoutLock(item);
+            }
+        }
+
+        private void DespawnWithoutLock(TValue item)
+        {
+            if (item == null) return;
+
+            if (!_activeItemIndices.TryGetValue(item, out int index))
+            {
+                return;
+            }
+
+            TValue lastItem = _activeItems[_activeItems.Count - 1];
+            _activeItems[index] = lastItem;
+            _activeItemIndices[lastItem] = index;
+            _activeItems.RemoveAt(_activeItems.Count - 1);
+            _activeItemIndices.Remove(item);
+
+            try
+            {
+                item.OnDespawned();
+            }
+            catch (Exception ex)
+            {
+
+#if DEVELOPMENT_BUILD || UNITY_EDITOR
+                UnityEngine.Debug.LogError($"[CycloneGames.Factory] OnDespawned failed for item of type {typeof(TValue).Name}. The item will still be returned to the pool. Error: {ex.Message}");
+#endif
+            }
+            finally
+            {
+                _inactivePool.Push(item);
+            }
+        }
+
         private void UpdateShrinkLogic()
         {
             if (_shrinkCooldownTicks <= 0) return;
@@ -202,7 +254,7 @@ namespace CycloneGames.Factory.Runtime
             // The desired size is the peak active count plus a configurable buffer.
             int desiredSize = (int)(_maxActiveSinceLastShrink * (1 + _shrinkBufferFactor));
             int prewarmedSize = _activeItems.Count + _inactivePool.Count;
-            
+
             if (prewarmedSize > desiredSize)
             {
                 int itemsToRemove = prewarmedSize - desiredSize;
@@ -245,7 +297,7 @@ namespace CycloneGames.Factory.Runtime
         public void ExpandBy(int numToAdd)
         {
             if (numToAdd <= 0) return;
-            
+
             _rwLock.EnterWriteLock();
             try
             {
@@ -257,7 +309,7 @@ namespace CycloneGames.Factory.Runtime
                 if (_rwLock.IsWriteLockHeld) _rwLock.ExitWriteLock();
             }
         }
-        
+
         public void ShrinkBy(int numToRemove)
         {
             if (numToRemove <= 0) return;
@@ -273,12 +325,16 @@ namespace CycloneGames.Factory.Runtime
                 if (_rwLock.IsWriteLockHeld) _rwLock.ExitWriteLock();
             }
         }
-        
+
         private void ExpandPoolInternal(int count)
         {
             for (int i = 0; i < count; i++)
             {
-                _inactivePool.Push(_factory.Create());
+                var created = _factory.Create();
+                if (created != null)
+                {
+                    _inactivePool.Push(created);
+                }
             }
         }
 
@@ -303,19 +359,27 @@ namespace CycloneGames.Factory.Runtime
             _rwLock.EnterWriteLock();
             try
             {
+                // Ensure active items receive proper shutdown callbacks before disposal
                 foreach (var item in _activeItems)
                 {
-                    (item as IDisposable)?.Dispose();
+                    try
+                    {
+                        item.OnDespawned();
+                    }
+                    finally
+                    {
+                        (item as IDisposable)?.Dispose();
+                    }
                 }
                 _activeItems.Clear();
                 _activeItemIndices.Clear();
-                
+
                 foreach (var item in _inactivePool)
                 {
                     (item as IDisposable)?.Dispose();
                 }
                 _inactivePool.Clear();
-                
+
                 ResetShrinkTracker();
             }
             finally
@@ -328,9 +392,29 @@ namespace CycloneGames.Factory.Runtime
         {
             if (_disposed) return;
             _disposed = true;
-            
+
             Clear();
             _rwLock.Dispose();
+        }
+
+        public void DespawnAllActive()
+        {
+            _rwLock.EnterWriteLock();
+            try
+            {
+                // Despawn from the back to avoid shifting costs
+                for (int i = _activeItems.Count - 1; i >= 0; i--)
+                {
+                    var item = _activeItems[_activeItems.Count - 1];
+                    DespawnWithoutLock(item);
+                }
+                DrainPendingDespawnsWithoutLock();
+                ResetShrinkTracker();
+            }
+            finally
+            {
+                if (_rwLock.IsWriteLockHeld) _rwLock.ExitWriteLock();
+            }
         }
     }
 }

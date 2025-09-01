@@ -1,5 +1,5 @@
 using System;
-using CycloneGames.Service;
+using CycloneGames.AssetManagement.Runtime;
 
 namespace RhythmPulse.UI
 {

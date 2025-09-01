@@ -4,7 +4,7 @@
     "references": [
         "VitalRouter",
         "UniTask",
-        "CycloneGames.Cheat"
+        "CycloneGames.Cheat.Runtime"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

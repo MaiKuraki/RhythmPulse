@@ -1,0 +1,26 @@
+{
+    "name": "CycloneGames.AssetManagement.Integrations.Factory",
+    "rootNamespace": "CycloneGames.AssetManagement.Integrations.Factory",
+    "references": [
+        "YooAsset",
+        "CycloneGames.Factory.Runtime",
+        "CycloneGames.AssetManagement.Runtime"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "CYCLONEGAMES_FACTORY_PRESENT"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.cyclone-games.factory",
+            "expression": "",
+            "define": "CYCLONEGAMES_FACTORY_PRESENT"
+        }
+    ],
+    "noEngineReferences": false
+}

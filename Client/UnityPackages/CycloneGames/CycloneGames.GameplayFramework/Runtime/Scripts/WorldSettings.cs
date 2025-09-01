@@ -1,7 +1,7 @@
 using CycloneGames.Logger;
 using UnityEngine;
 
-namespace CycloneGames.GameplayFramework
+namespace CycloneGames.GameplayFramework.Runtime
 {
     public interface IWorldSettings
     {
@@ -31,7 +31,7 @@ namespace CycloneGames.GameplayFramework
 
         void OnEnable()
         {
-            CLogger.Instance.AddLoggerUnique(new UnityLogger());
+            // CLogger.Instance.AddLoggerUnique(new UnityLogger());
         }
     }
 }

@@ -1,8 +1,11 @@
 using System;
-using CycloneGames.Factory.Runtime; // For IUnityObjectSpawner
-using CycloneGames.Service; // For IAssetPathBuilderFactory, IMainCameraService
+using Cysharp.Threading.Tasks;
+using CycloneGames.Factory.Runtime;             // For IUnityObjectSpawner
+using CycloneGames.Service.Runtime;             // For IMainCameraService
+using CycloneGames.AssetManagement.Runtime;     // For IAssetPathBuilderFactory
+using CycloneGames.AssetManagement.Runtime.Integrations.Common;
 
-namespace CycloneGames.UIFramework
+namespace CycloneGames.UIFramework.Runtime
 {
     public interface IUIService
     {
@@ -12,12 +15,14 @@ namespace CycloneGames.UIFramework
         /// <param name="windowName">The name of the UI window to open.</param>
         /// <param name="onWindowCreated">Optional callback invoked when the window is created.</param>
         void OpenUI(string windowName, System.Action<UIWindow> onWindowCreated = null);
+        UniTask<UIWindow> OpenUIAsync(string windowName, System.Threading.CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Closes a UI by its registered name.
         /// </summary>
         /// <param name="windowName">The name of the UI window to close.</param>
         void CloseUI(string windowName);
+        UniTask CloseUIAsync(string windowName, System.Threading.CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Checks if a UI window is currently considered valid (e.g., open and active).
@@ -40,6 +45,7 @@ namespace CycloneGames.UIFramework
         (float, float) GetRootCanvasSize();
 
         void Initialize(IAssetPathBuilderFactory factory, IUnityObjectSpawner spawner, IMainCameraService cameraService);
+        void Initialize(IAssetPathBuilderFactory factory, IUnityObjectSpawner spawner, IMainCameraService cameraService, IAssetPackage package);
     }
 
     public class UIService : IDisposable, IUIService
@@ -69,7 +75,12 @@ namespace CycloneGames.UIFramework
             Initialize(factory, spawner, cameraService);
         }
 
-        public void Initialize(IAssetPathBuilderFactory factory, IUnityObjectSpawner spawner, IMainCameraService cameraService)
+        public UIService(IAssetPathBuilderFactory factory, IUnityObjectSpawner spawner, IMainCameraService cameraService, IAssetPackage package)
+        {
+            Initialize(factory, spawner, cameraService, package);
+        }
+
+        public virtual void Initialize(IAssetPathBuilderFactory factory, IUnityObjectSpawner spawner, IMainCameraService cameraService)
         {
             if (isInitialized)
             {
@@ -85,12 +96,30 @@ namespace CycloneGames.UIFramework
             this.objectSpawner = spawner;
             this.mainCameraService = cameraService;
 
-            InitializeUIManager();
+            InitializeUIManager(null);
+            isInitialized = true;
+        }
+
+        public virtual void Initialize(IAssetPathBuilderFactory factory, IUnityObjectSpawner spawner, IMainCameraService cameraService, IAssetPackage package)
+        {
+            if (isInitialized)
+            {
+                UnityEngine.Debug.LogWarning($"{DEBUG_FLAG} UIService already initialized. Operation aborted.");
+                return;
+            }
+            if (factory == null) throw new ArgumentNullException(nameof(factory));
+            if (spawner == null) throw new ArgumentNullException(nameof(spawner));
+
+            this.assetPathBuilderFactory = factory;
+            this.objectSpawner = spawner;
+            this.mainCameraService = cameraService;
+
+            InitializeUIManager(package);
             isInitialized = true;
         }
 
         // This method could also be an explicit Init if dependencies aren't constructor-injected.
-        private void InitializeUIManager()
+        private void InitializeUIManager(IAssetPackage package)
         {
             // Try to find an existing UIManager in the scene.
             uiManagerInstance = UnityEngine.GameObject.FindFirstObjectByType<UIManager>();
@@ -109,7 +138,8 @@ namespace CycloneGames.UIFramework
             }
 
             // Initialize the UIManager instance with the provided dependencies.
-            uiManagerInstance.Initialize(assetPathBuilderFactory, objectSpawner, mainCameraService);
+            var pkg = package ?? AssetManagementLocator.DefaultPackage;
+            uiManagerInstance.Initialize(assetPathBuilderFactory, objectSpawner, mainCameraService, pkg);
         }
 
         private bool CheckInitialization()
@@ -138,10 +168,33 @@ namespace CycloneGames.UIFramework
             uiManagerInstance.OpenUI(windowName, onWindowCreated);
         }
 
+        public UniTask<UIWindow> OpenUIAsync(string windowName, System.Threading.CancellationToken cancellationToken = default)
+        {
+            if (!CheckInitialization()) return UniTask.FromResult<UIWindow>(null);
+            return uiManagerInstance.OpenUIAndWait(windowName, cancellationToken);
+        }
+
         public void CloseUI(string windowName)
         {
             if (!CheckInitialization()) return;
             uiManagerInstance.CloseUI(windowName);
+        }
+
+        public async UniTask CloseUIAsync(string windowName, System.Threading.CancellationToken cancellationToken = default)
+        {
+            if (!CheckInitialization()) return;
+            await uiManagerInstance.CloseUIAsync(windowName, cancellationToken);
+        }
+
+        /// <summary>
+        /// Optionally open and await until the window reports Opened (strict sequencing use-cases).
+        /// </summary>
+        public UniTask<UIWindow> OpenUIAndWait(string windowName, System.Threading.CancellationToken cancellationToken = default)
+        {
+            if (!CheckInitialization()) return UniTask.FromResult<UIWindow>(null);
+            // This method is now just a wrapper for OpenUIAsync.
+            // The original implementation with UniTaskCompletionSource is redundant if OpenUIAsync is already awaitable.
+            return uiManagerInstance.OpenUIAndWait(windowName, cancellationToken);
         }
 
         public UIWindow GetUIWindow(string windowName)

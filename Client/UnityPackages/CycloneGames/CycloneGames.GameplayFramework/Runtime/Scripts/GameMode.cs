@@ -1,12 +1,14 @@
+using System.Threading;
 using CycloneGames.Logger;
 using CycloneGames.Factory.Runtime;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 
-namespace CycloneGames.GameplayFramework
+namespace CycloneGames.GameplayFramework.Runtime
 {
     public interface IGameMode
     {
-        void LaunchGameMode();
+        UniTask LaunchGameModeAsync(CancellationToken cancellationToken = default);
     }
     public class GameMode : Actor, IGameMode
     {
@@ -66,7 +68,7 @@ namespace CycloneGames.GameplayFramework
             {
                 foreach (var st in playerStartArray)
                 {
-                    if (st.GetName() == IncommingName)
+                    if (string.Equals(st.GetName(), IncommingName, System.StringComparison.Ordinal))
                     {
                         Player.SetStartSpot(st);
                         return st;
@@ -148,7 +150,7 @@ namespace CycloneGames.GameplayFramework
                 return;
             }
 
-            Quaternion SpawnRotation = SpawnTransform.rotation;
+            Quaternion SpawnRotation = SpawnTransform != null ? SpawnTransform.rotation : Quaternion.identity;
             if (NewPlayer.GetPawn() != null)
             {
                 SpawnRotation = NewPlayer.GetPawn().transform.rotation;
@@ -226,20 +228,35 @@ namespace CycloneGames.GameplayFramework
 
         Pawn SpawnDefaultPawnAtTransform(Controller NewPlayer, Transform SpawnTransform)
         {
+            if (SpawnTransform == null)
+            {
+                CLogger.LogError($"{DEBUG_FLAG} Invalid target transform, please check your spawn pipeline");
+                return null;
+            }
             Pawn p = objectSpawner?.Create(GetDefaultPawnPrefabForController(NewPlayer)) as Pawn;
             if (p == null)
             {
                 CLogger.LogError($"{DEBUG_FLAG} Failed to spawn Pawn, please check your spawn pipeline");
                 return null;
             }
-            if (SpawnTransform == null)
+
+            //  To teleport a CharacterController, we should disable it first, move the transform, and then re-enable it.
+            //  This forces the controller to re-synchronize its internal state with the new transform data.
+            var characterController = p.GetComponent<CharacterController>();
+            if (characterController)
             {
-                CLogger.LogError($"{DEBUG_FLAG} Invalid target transform, please check your spawn pipeline");
-                return null;
+                characterController.enabled = false;
             }
+
             p.transform.position = SpawnTransform.position;
             p.transform.localScale = Vector3.one;
             p.transform.rotation = SpawnTransform.rotation;
+
+            if (characterController)
+            {
+                characterController.enabled = true;
+            }
+            
             return p;
         }
 
@@ -279,11 +296,20 @@ namespace CycloneGames.GameplayFramework
             return InController.GetDefaultPawnPrefab();
         }
 
-        public virtual void LaunchGameMode()
+        public virtual async UniTask LaunchGameModeAsync(CancellationToken cancellationToken = default)
         {
             CLogger.LogInfo($"{DEBUG_FLAG} Launch GameMode");
 
             PlayerController PC = SpawnPlayerController();
+            if (!PC)
+            {
+                return;
+            }
+
+            await PC.InitializationTask.AttachExternalCancellation(cancellationToken);
+            if (cancellationToken.IsCancellationRequested) return;
+
+            //  Now PlayerController is fully initialized, we can restart player(spawn pawn and possess it)
             RestartPlayer(PC);
         }
     }

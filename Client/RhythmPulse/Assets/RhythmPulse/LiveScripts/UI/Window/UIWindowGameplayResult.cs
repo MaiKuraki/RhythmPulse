@@ -1,4 +1,4 @@
-using CycloneGames.UIFramework;
+using CycloneGames.UIFramework.Runtime;
 using R3;
 using RhythmPulse.Gameplay;
 using RhythmPulse.Scene;
@@ -14,10 +14,8 @@ namespace RhythmPulse.UI
 
         [SerializeField] private Button buttonBackToLobby;
 
-        protected override void Start()
+        void Start()
         {
-            base.Start();
-
             buttonBackToLobby.OnClickAsObservable().Subscribe(_ => ClickBackToLobby());
         }
 

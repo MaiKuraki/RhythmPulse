@@ -1,8 +1,6 @@
 using System;
 using System.Threading;
-using CycloneGames.Logger;
-using CycloneGames.Service;
-using CycloneGames.UIFramework;
+using CycloneGames.UIFramework.Runtime;
 using Cysharp.Threading.Tasks;
 using MackySoft.Navigathena;
 using MackySoft.Navigathena.SceneManagement;

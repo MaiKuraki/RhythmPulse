@@ -1,13 +1,14 @@
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 using CycloneGames.Factory.Runtime;
 
-namespace CycloneGames.GameplayFramework.Sample.PureUnity
+namespace CycloneGames.GameplayFramework.Runtime.Sample.PureUnity
 {
     public class UnitySampleBoot : MonoBehaviour
     {
         private IUnityObjectSpawner objectSpawner;
 
-        void Start()
+        async void Start()
         {
             // Init Services First
             UnitySampleGameInstance.Instance.InitializeWorld();
@@ -20,7 +21,7 @@ namespace CycloneGames.GameplayFramework.Sample.PureUnity
             ((GameMode)exampleGameMode).Initialize(objectSpawner, exampleWorldSettings);
             // Set the GameMode for the World
             UnitySampleGameInstance.Instance.World.SetGameMode((GameMode)exampleGameMode);
-            exampleGameMode.LaunchGameMode();
+            await exampleGameMode.LaunchGameModeAsync(this.GetCancellationTokenOnDestroy());
         }
     }
 }

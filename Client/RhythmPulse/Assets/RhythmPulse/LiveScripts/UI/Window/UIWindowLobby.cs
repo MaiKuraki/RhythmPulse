@@ -1,6 +1,6 @@
 using System.Threading;
 using CycloneGames.Logger;
-using CycloneGames.UIFramework;
+using CycloneGames.UIFramework.Runtime;
 using Cysharp.Threading.Tasks;
 using RhythmPulse.APIGateway;
 using RhythmPulse.Scene;

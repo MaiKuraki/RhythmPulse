@@ -2,7 +2,8 @@
     "name": "CycloneGames.UIFramework.Editor",
     "rootNamespace": "",
     "references": [
-        "CycloneGames.UIFramework"
+        "CycloneGames.AssetManagement.Runtime",
+        "CycloneGames.UIFramework.Runtime"
     ],
     "includePlatforms": [
         "Editor"

@@ -5,7 +5,7 @@ using MackySoft.Navigathena;
 using MackySoft.Navigathena.SceneManagement;
 using MackySoft.Navigathena.SceneManagement.VContainer;
 using VContainer;
-using CycloneGames.UIFramework;
+using CycloneGames.UIFramework.Runtime;
 using RhythmPulse.UI;
 
 namespace RhythmPulse.Scene

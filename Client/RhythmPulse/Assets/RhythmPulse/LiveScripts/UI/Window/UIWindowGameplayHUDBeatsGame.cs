@@ -1,4 +1,4 @@
-using CycloneGames.UIFramework;
+using CycloneGames.UIFramework.Runtime;
 using R3;
 using RhythmPulse.APIGateway;
 using RhythmPulse.Gameplay;
@@ -23,10 +23,8 @@ namespace RhythmPulse.UI
             progressBar.value = 0;
         }
 
-        protected override void Start()
+        void Start()
         {
-            base.Start();
-
             buttonPause.OnClickAsObservable().Subscribe(_ => ClickPause());
             buttonExit.OnClickAsObservable().Subscribe(_ => ClickExit());
             gameplayManager.OnUpdatePlaybackProgress -= UpdateProgressValue;

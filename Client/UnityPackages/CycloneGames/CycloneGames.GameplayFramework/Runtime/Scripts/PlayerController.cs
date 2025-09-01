@@ -1,12 +1,13 @@
-using CycloneGames.Factory;
 using CycloneGames.Logger;
 using Cysharp.Threading.Tasks;
-using UnityEngine;
+using System.Threading;
 
-namespace CycloneGames.GameplayFramework
+namespace CycloneGames.GameplayFramework.Runtime
 {
     public class PlayerController : Controller
     {
+        public UniTask InitializationTask { get; private set; }
+        
         private SpectatorPawn spectatorPawn;
         public SpectatorPawn GetSpectatorPawn() => spectatorPawn;
         private CameraManager cameraManager;
@@ -24,33 +25,53 @@ namespace CycloneGames.GameplayFramework
 
         void SpawnCameraManager()
         {
-            cameraManager = objectSpawner?.Create(worldSettings?.CameraManagerClass) as CameraManager;
+            if (worldSettings?.CameraManagerClass == null)
+            {
+                //  This is an expected case, CameraManager is optional.
+                return;
+            }
+            
+            cameraManager = objectSpawner?.Create(worldSettings.CameraManagerClass) as CameraManager;
             if (cameraManager == null)
             {
-                CLogger.LogError("Spawn CameraManager Failed, please check your spawn pipeline");
+                CLogger.LogError("Spawn CameraManager Failed, a CameraManagerClass was provided in WorldSettings but it could not be spawned. Check your spawn pipeline.");
                 return;
             }
 
-            if (cameraManager)
-            {
-                cameraManager.SetOwner(this);
-                cameraManager.InitializeFor(this);
-            }
+            cameraManager.SetOwner(this);
+            cameraManager.InitializeFor(this);
         }
+
+        private CancellationTokenSource initCts;
 
         protected override void Awake()
         {
             base.Awake();
 
-            InitializePlayerController().Forget();
+            initCts = new CancellationTokenSource();
+            InitializationTask = InitializePlayerController(initCts.Token);
         }
 
-        private async UniTask InitializePlayerController()
+        private async UniTask InitializePlayerController(CancellationToken token)
         {
-            await UniTask.WaitUntil(() => base.IsInitialized);
+            await UniTask.WaitUntil(() => base.IsInitialized, cancellationToken: token);
+            if (token.IsCancellationRequested) return;
             InitPlayerState();
+            if (token.IsCancellationRequested) return;
             SpawnCameraManager();
+            if (token.IsCancellationRequested) return;
             SpawnSpectatorPawn();
+        }
+
+        protected override void OnDestroy()
+        {
+            base.OnDestroy();
+            if (initCts != null)
+            {
+                initCts.Cancel();
+                initCts.Dispose();
+                initCts = null;
+            }
         }
     }
 }
