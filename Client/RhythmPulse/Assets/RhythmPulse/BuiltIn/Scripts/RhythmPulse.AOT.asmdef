@@ -7,7 +7,8 @@
         "MackySoft.Navigathena",
         "MackySoft.Navigathena.SceneManagement",
         "MackySoft.Navigathena.SceneManagement.Addressables",
-        "MackySoft.Navigathena.SceneManagement.VContainer"
+        "MackySoft.Navigathena.SceneManagement.VContainer",
+        "CycloneGames.AssetManagement.Runtime"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

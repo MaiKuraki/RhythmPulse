@@ -1,16 +1,37 @@
-using VContainer;
-using VContainer.Unity;
+using CycloneGames.AssetManagement.Runtime;
+using CycloneGames.Factory.Runtime;
 using CycloneGames.Logger;
+using CycloneGames.Service.Runtime;
+using CycloneGames.UIFramework.Runtime;
+using CycloneGames.Utility.Runtime;
 using RhythmPulse.APIGateway;
 using RhythmPulse.Audio;
 using RhythmPulse.Gameplay;
-using CycloneGames.Utility.Runtime;
-using CycloneGames.Service.Runtime;
+using RhythmPulse.Misc;
+using RhythmPulse.UI;
+using UnityEngine;
+using VContainer;
+using VContainer.Unity;
 
 namespace RhythmPulse
 {
     public class ProjectSharedLifetimeScope : LifetimeScope
     {
+        public ProjectSharedLifetimeScope Instance { get; private set; }
+        [SerializeField] private AddressableResolverForDontDestroy assetResolver;
+        protected override void Awake()
+        {
+            base.Awake();
+
+            if (Instance != null && Instance != this)
+            {
+                Destroy(gameObject);
+                return;
+            }
+
+            Instance = this;
+            DontDestroyOnLoad(gameObject);
+        }
         protected override void Configure(IContainerBuilder builder)
         {
             base.Configure(builder);
@@ -43,6 +64,11 @@ namespace RhythmPulse
             builder.Register<IGameplayMapStorage, GameplayMapStorage>(Lifetime.Singleton);
             builder.Register<IGameplayMapListManager, GameplayMapListManager>(Lifetime.Singleton);
 
+            builder.RegisterComponentInNewPrefab(assetResolver, Lifetime.Singleton).UnderTransform(transform);
+            builder.RegisterBuildCallback(resolver =>
+            {
+                resolver.Resolve<AddressableResolverForDontDestroy>();
+            });
             builder.RegisterEntryPoint<MapListGlobalInitializer>();
         }
 

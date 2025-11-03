@@ -3,7 +3,16 @@
     "rootNamespace": "",
     "references": [
         "RhythmPulse.HotUpdate",
-        "CycloneGames.Utility.Runtime"
+        "CycloneGames.Utility.Runtime",
+        "CycloneGames.AssetManagement.Runtime",
+        "CycloneGames.Factory.Runtime",
+        "CycloneGames.Logger",
+        "CycloneGames.Logger.Util",
+        "CycloneGames.Service.Runtime",
+        "CycloneGames.UIFramework.Runtime",
+        "FancyScrollView",
+        "RhythmPulse.AOT",
+        "RhythmPulse.GameplayData.Runtime"
     ],
     "includePlatforms": [
         "Editor"

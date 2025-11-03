@@ -1,0 +1,20 @@
+{
+    "name": "CycloneGames.AssetManagement.Editor",
+    "rootNamespace": "",
+    "references": [
+        "CycloneGames.AssetManagement.Runtime",
+        "CycloneGames.Logger",
+        "CycloneGames.Logger.Util"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

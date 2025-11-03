@@ -119,6 +119,7 @@ namespace RhythmPulse.UI
             scrollView.SetCellInterval(1 / (uiService.GetRootCanvasSize().Item2 / 140.0f));
 
             IsDIInitialized = true;
+            UnityEngine.Debug.Log($"Construct MapSelection");
         }
 
         void OnDestroy()

@@ -3,7 +3,11 @@
     "rootNamespace": "",
     "references": [
         "CycloneGames.AssetManagement.Runtime",
-        "CycloneGames.UIFramework.Runtime"
+        "CycloneGames.UIFramework.Runtime",
+        "CycloneGames.Factory.Runtime",
+        "CycloneGames.Logger",
+        "CycloneGames.Logger.Util",
+        "CycloneGames.Service.Runtime"
     ],
     "includePlatforms": [
         "Editor"

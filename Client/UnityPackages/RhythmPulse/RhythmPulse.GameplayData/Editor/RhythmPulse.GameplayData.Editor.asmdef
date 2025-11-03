@@ -4,7 +4,8 @@
     "references": [
         "RhythmPulse.GameplayData.Runtime",
         "CycloneGames.Logger",
-        "CycloneGames.Utility.Runtime"
+        "CycloneGames.Utility.Runtime",
+        "CycloneGames.Logger.Util"
     ],
     "includePlatforms": [
         "Editor"

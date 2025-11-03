@@ -48,3 +48,5 @@ MonoBehaviour:
     TypeName: RhythmPulse.AOT.RootLifetimeScope
   autoRun: 1
   autoInjectGameObjects: []
+  assetResolver: {fileID: 4961938545525435680, guid: 56d9835487f7b884996247c17461f49a,
+    type: 3}

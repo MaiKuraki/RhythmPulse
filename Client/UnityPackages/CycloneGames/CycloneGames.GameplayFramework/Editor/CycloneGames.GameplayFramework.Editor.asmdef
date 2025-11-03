@@ -3,7 +3,10 @@
     "rootNamespace": "",
     "references": [
         "Unity.Cinemachine",
-        "CycloneGames.GameplayFramework.Runtime"
+        "CycloneGames.GameplayFramework.Runtime",
+        "CycloneGames.Factory.Runtime",
+        "CycloneGames.Logger",
+        "CycloneGames.Logger.Util"
     ],
     "includePlatforms": [
         "Editor"

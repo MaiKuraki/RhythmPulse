@@ -5,7 +5,6 @@ using CycloneGames.Logger;
 using CycloneGames.Service.Runtime;         // For IMainCameraService
 using CycloneGames.Factory.Runtime;         // For IUnityObjectSpawner
 using CycloneGames.AssetManagement.Runtime; // For IAssetPathBuilderFactory
-using CycloneGames.AssetManagement.Runtime.Integrations.Common;
 
 namespace CycloneGames.UIFramework.Runtime
 {
@@ -84,18 +83,7 @@ namespace CycloneGames.UIFramework.Runtime
                 CLogger.LogError($"{DEBUG_FLAG} IAssetPackage is null. Ensure AssetManagement is initialized and DefaultPackage assigned or pass a package explicitly.");
             }
 
-            // Find UIRoot. This assumes UIRoot is already in the scene.
-            // If UIRoot could be instantiated by UIManager, that logic would be here.
-            uiRoot = GameObject.FindFirstObjectByType<UIRoot>();
-            if (uiRoot == null)
-            {
-                CLogger.LogError($"{DEBUG_FLAG} UIRoot not found in the scene. UIManager requires a UIRoot to function.");
-            }
-            else
-            {
-                // Initial camera setup if UIRoot and mainCameraService are available
-                AddUICameraToMainCameraStack();
-            }
+            AddUICameraToMainCameraStack();
         }
 
         /// <summary>
@@ -107,19 +95,25 @@ namespace CycloneGames.UIFramework.Runtime
             this.transitionDriver = driver;
         }
 
-        private void Awake()
+        private UIRoot GetUIRoot()
         {
-            UnityEngine.Application.onBeforeRender += ResetPerFrameBudget;
-            // It's better to get UIRoot in Initialize if UIManager is created and initialized from code.
-            // If UIManager is a scene object and Initialize is called later, Awake can find UIRoot.
             if (uiRoot == null)
             {
                 uiRoot = GameObject.FindFirstObjectByType<UIRoot>();
                 if (uiRoot == null)
                 {
-                    CLogger.LogWarning($"{DEBUG_FLAG} UIRoot not found in Awake. Ensure it exists or Initialize is called with a valid scene setup.");
+                    CLogger.LogWarning($"{DEBUG_FLAG} UIRoot not found in the scene. UIManager requires a UIRoot to function.");
                 }
             }
+            return uiRoot;
+        }
+
+        private void Awake()
+        {
+            UnityEngine.Application.onBeforeRender += ResetPerFrameBudget;
+            // It's better to get UIRoot in Initialize if UIManager is created and initialized from code.
+            // If UIManager is a scene object and Initialize is called later, Awake can find UIRoot.
+            GetUIRoot();
         }
         private void ResetPerFrameBudget()
         {
@@ -136,7 +130,7 @@ namespace CycloneGames.UIFramework.Runtime
         /// <param name="onUIWindowCreated">Optional callback when the window is instantiated and added.</param>
         public void OpenUI(string windowName, System.Action<UIWindow> onUIWindowCreated = null)
         {
-            if (uiRoot == null || assetPathBuilder == null || objectSpawner == null)
+            if (GetUIRoot() == null || assetPathBuilder == null || objectSpawner == null)
             {
                 CLogger.LogError($"{DEBUG_FLAG} UIManager not properly initialized. Cannot open UI: {windowName}");
                 onUIWindowCreated?.Invoke(null); // Notify failure
@@ -150,7 +144,7 @@ namespace CycloneGames.UIFramework.Runtime
         /// </summary>
         public void CloseUI(string windowName)
         {
-            if (uiRoot == null)
+            if (GetUIRoot() == null)
             {
                 CLogger.LogError($"{DEBUG_FLAG} UIManager not properly initialized or UIRoot missing. Cannot close UI: {windowName}");
                 return;
@@ -264,7 +258,7 @@ namespace CycloneGames.UIFramework.Runtime
                 return null;
             }
             string layerName = windowConfig.Layer.LayerName;
-            UILayer uiLayer = uiRoot.GetUILayer(layerName);
+            UILayer uiLayer = GetUIRoot()?.GetUILayer(layerName);
 
             if (uiLayer == null)
             {
@@ -478,9 +472,10 @@ namespace CycloneGames.UIFramework.Runtime
 
         public void AddUICameraToMainCameraStack()
         {
-            if (uiRoot != null && uiRoot.UICamera != null && mainCameraService != null)
+            var root = GetUIRoot();
+            if (root != null && root.UICamera != null && mainCameraService != null)
             {
-                mainCameraService.AddCameraToStack(uiRoot.UICamera, 0); // Specify position if needed
+                mainCameraService.AddCameraToStack(root.UICamera, 0); // Specify position if needed
             }
             else
             {
@@ -490,9 +485,10 @@ namespace CycloneGames.UIFramework.Runtime
 
         public void RemoveUICameraFromMainCameraStack()
         {
-            if (uiRoot != null && uiRoot.UICamera != null && mainCameraService != null)
+            var root = GetUIRoot();
+            if (root != null && root.UICamera != null && mainCameraService != null)
             {
-                mainCameraService.RemoveCameraFromStack(uiRoot.UICamera);
+                mainCameraService.RemoveCameraFromStack(root.UICamera);
             }
             else
             {
@@ -502,7 +498,7 @@ namespace CycloneGames.UIFramework.Runtime
 
         public (float, float) GetRootCanvasSize()
         {
-            return uiRoot.GetRootCanvasSize();
+            return GetUIRoot()?.GetRootCanvasSize() ?? default;
         }
 
         protected void OnDestroy()

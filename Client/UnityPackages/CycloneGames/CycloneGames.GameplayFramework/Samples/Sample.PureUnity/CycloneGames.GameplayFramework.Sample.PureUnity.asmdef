@@ -5,7 +5,8 @@
         "UniTask",
         "CycloneGames.Logger",
         "CycloneGames.Factory.Runtime",
-        "CycloneGames.GameplayFramework.Runtime"
+        "CycloneGames.GameplayFramework.Runtime",
+        "CycloneGames.Logger.Util"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

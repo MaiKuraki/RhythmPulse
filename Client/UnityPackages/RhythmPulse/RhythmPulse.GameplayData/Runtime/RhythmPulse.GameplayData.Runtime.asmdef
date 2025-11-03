@@ -4,7 +4,8 @@
     "references": [
         "VYaml.Core",
         "MessagePack.Unity",
-        "CycloneGames.Logger"
+        "CycloneGames.Logger",
+        "CycloneGames.Logger.Util"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

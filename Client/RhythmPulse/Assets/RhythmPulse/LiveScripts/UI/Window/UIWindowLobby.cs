@@ -3,6 +3,9 @@ using CycloneGames.Logger;
 using CycloneGames.UIFramework.Runtime;
 using Cysharp.Threading.Tasks;
 using RhythmPulse.APIGateway;
+using RhythmPulse.Audio;
+using RhythmPulse.Gameplay;
+using RhythmPulse.Gameplay.Media;
 using RhythmPulse.Scene;
 using UnityEngine;
 using VContainer;
@@ -12,8 +15,8 @@ namespace RhythmPulse.UI
     public class UIWindowLobby : UIWindow
     {
         private const string DEBUG_FLAG = "[UIWindowLobby]";
-        private IObjectResolver objectResolver;
-        private ISceneManagementAPIGateway sceneManagementAPIGateway;
+        [Inject] private IObjectResolver objectResolver;
+        [Inject] private ISceneManagementAPIGateway sceneManagementAPIGateway;
 
         [SerializeField] Transform GameModeSelectionTF;
         [SerializeField] Transform GameplayMapSelectionTF;
@@ -21,7 +24,6 @@ namespace RhythmPulse.UI
         private UIPageGameModeSelection uiPageGameModeSelection;
         private UIPageGameplayMapSelection uiPageGameplayMapSelection;
         private CancellationTokenSource cancelRebuildMapList;
-        private bool IsDIInitialized = false;
 
         protected override void Awake()
         {
@@ -29,23 +31,11 @@ namespace RhythmPulse.UI
 
             uiPageGameModeSelection = GameModeSelectionTF.GetComponent<UIPageGameModeSelection>();
             uiPageGameplayMapSelection = GameplayMapSelectionTF.GetComponent<UIPageGameplayMapSelection>();
+        }
+
+        void Start()
+        {
             RegisterElementsAfterDIInitialized(destroyCancellationToken).Forget();
-        }
-
-        protected override void OnDestroy()
-        {
-            base.OnDestroy();
-
-            IsDIInitialized = false;
-        }
-
-        [Inject]
-        void Construct(IObjectResolver objectResolver, ISceneManagementAPIGateway sceneManagementAPIGateway)
-        {
-            this.objectResolver = objectResolver;
-            this.sceneManagementAPIGateway = sceneManagementAPIGateway;
-
-            IsDIInitialized = true;
         }
 
         protected override void OnFinishedOpen()
@@ -57,8 +47,6 @@ namespace RhythmPulse.UI
 
         private async UniTask RegisterElementsAfterDIInitialized(CancellationToken cancellationToken)
         {
-            await UniTask.WaitUntil(() => IsDIInitialized, PlayerLoopTiming.Update, cancellationToken);
-
             objectResolver.Inject(uiPageGameModeSelection);
             objectResolver.Inject(uiPageGameplayMapSelection);
         }

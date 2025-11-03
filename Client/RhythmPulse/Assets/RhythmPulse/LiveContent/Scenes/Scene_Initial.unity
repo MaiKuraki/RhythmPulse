@@ -185,86 +185,8 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents:
-    - targetCorrespondingSourceObject: {fileID: 4619720110733631812, guid: 28bbc9defa9026b4989a247ee6662523,
-        type: 3}
-      insertIndex: -1
-      addedObject: {fileID: 245611980}
+    m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 28bbc9defa9026b4989a247ee6662523, type: 3}
---- !u!1 &245611979 stripped
-GameObject:
-  m_CorrespondingSourceObject: {fileID: 4619720110733631812, guid: 28bbc9defa9026b4989a247ee6662523,
-    type: 3}
-  m_PrefabInstance: {fileID: 245611978}
-  m_PrefabAsset: {fileID: 0}
---- !u!114 &245611980
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 245611979}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 63ed68d54d101034a89474ea963631c2, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
---- !u!1 &260616250
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 260616252}
-  - component: {fileID: 260616251}
-  m_Layer: 0
-  m_Name: AddressableResolverForDontDestroy
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &260616251
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 260616250}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1a591ee606d43f6469a1d83752212171, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  dontDestroyAddressablePaths:
-  - DisplayName: DebugGroup
-    AddressablePath: Assets/RhythmPulse/_CHEAT/DebugSystem.prefab
-  - DisplayName: EventSystem
-    AddressablePath: Assets/RhythmPulse/LiveContent/Prefabs/Core/EventSystem.prefab
-  - DisplayName: AudioManager
-    AddressablePath: Assets/RhythmPulse/LiveContent/Prefabs/Audio/AudioManager.prefab
-  - DisplayName: UI
-    AddressablePath: Assets/RhythmPulse/LiveContent/Prefabs/UI/UIFramework.prefab
-  - DisplayName: MainCamera
-    AddressablePath: Assets/RhythmPulse/LiveContent/Prefabs/Core/MainCamera.prefab
-  isSingleton: 1
---- !u!4 &260616252
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 260616250}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &296282368
 GameObject:
   m_ObjectHideFlags: 0
@@ -395,5 +317,4 @@ SceneRoots:
   m_Roots:
   - {fileID: 502011479}
   - {fileID: 245611978}
-  - {fileID: 260616252}
   - {fileID: 296282369}

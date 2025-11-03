@@ -8,7 +8,8 @@
         "CycloneGames.Service.Runtime",
         "CycloneGames.Factory.Runtime",
         "CycloneGames.AssetManagement.Runtime",
-        "LitMotion"
+        "LitMotion",
+        "CycloneGames.Logger.Util"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

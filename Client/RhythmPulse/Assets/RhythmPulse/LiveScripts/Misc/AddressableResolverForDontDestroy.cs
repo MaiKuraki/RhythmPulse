@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using Addler.Runtime.Core.LifetimeBinding;
+using CycloneGames.AssetManagement.Runtime;
 using CycloneGames.Logger;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
 using UnityEngine.ResourceManagement.AsyncOperations;
@@ -48,51 +50,15 @@ namespace RhythmPulse.Misc
         [SerializeField]
         private List<AddressableResolverData> dontDestroyAddressablePaths = new List<AddressableResolverData>();
 
-        // Consider making this public or initializing if always a singleton
-        [SerializeField]
-        private bool isSingleton = true; // Default to true if usually a singleton
-
-        public static AddressableResolverForDontDestroy Instance { get; private set; }
-
-        void Awake()
+        public async UniTask InitializeAsync(IAssetModule addressableModule)
         {
-            if (isSingleton)
+            var pkg = addressableModule.GetPackage("DefaultPackage");
+
+            foreach(AddressableResolverData pathData in dontDestroyAddressablePaths)
             {
-                if (Instance != null && Instance != this)
-                {
-                    CLogger.LogWarning($"Duplicate instance of {nameof(AddressableResolverForDontDestroy)} found. Destroying this one.");
-                    Destroy(gameObject);
-                    return;
-                }
-
-                Instance = this;
-                DontDestroyOnLoad(gameObject); // Make this manager persistent
-            }
-
-            foreach (AddressableResolverData pathData in dontDestroyAddressablePaths)
-            {
-                Addressables.LoadAssetAsync<GameObject>(pathData.AddressablePath).BindTo(this.gameObject)
-                    .Completed += (handle) =>
-                    {
-                        if (handle.Status == AsyncOperationStatus.Succeeded)
-                        {
-                            if (handle.Result == null)
-                            {
-                                CLogger.LogError($"Addressable path '{pathData}' loaded successfully but the result was null.");
-                                return;
-                            }
-                            // Instantiate the loaded prefab. Optionally parent it to this resolver.
-                            GameObject instance = Instantiate(handle.Result /*, transform */); // Uncomment ', transform' to parent
-
-                            // Make the instantiated GameObject persistent
-                            DontDestroyOnLoad(instance);
-                            // Debug.Log($"Successfully loaded and instantiated '{path}' as DontDestroyOnLoad.");
-                        }
-                        else
-                        {
-                            CLogger.LogError($"Failed to load Addressable: {pathData}. Error: {handle.OperationException}");
-                        }
-                    };
+                var prefab = pkg.LoadAssetAsync<GameObject>(pathData.AddressablePath);
+                await prefab.Task;
+                await InstantiateAsync(prefab.AssetObject);
             }
         }
     }
