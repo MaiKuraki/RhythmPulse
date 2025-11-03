@@ -8,8 +8,7 @@
         "Unity.ResourceManager",
         "YooAsset",
         "VContainer",
-        "MackySoft.Navigathena",
-        "CycloneGames.Logger.Util"
+        "MackySoft.Navigathena"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

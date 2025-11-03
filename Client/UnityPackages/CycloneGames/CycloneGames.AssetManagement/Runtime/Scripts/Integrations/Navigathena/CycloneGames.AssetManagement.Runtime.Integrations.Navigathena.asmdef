@@ -5,9 +5,7 @@
         "UniTask",
         "MackySoft.Navigathena",
         "MackySoft.Navigathena.SceneManagement",
-        "CycloneGames.AssetManagement.Runtime",
-        "CycloneGames.Logger",
-        "CycloneGames.Logger.Util"
+        "CycloneGames.AssetManagement.Runtime"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
