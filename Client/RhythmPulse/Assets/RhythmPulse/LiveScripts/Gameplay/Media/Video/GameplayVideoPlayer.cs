@@ -73,6 +73,15 @@ namespace RhythmPulse.Gameplay.Media
         public RenderTextureFormat textureFormat = RenderTextureFormat.ARGB32;
         public int depthBuffer = 0; // Typically 0 for video, 16 or 24 if depth is needed for some reason
         public FilterMode filterMode = FilterMode.Bilinear;
+		// Controls how the video player's time is advanced. 
+		public VideoTimeUpdateMode timeUpdateMode = VideoTimeUpdateMode.DSPTime;
+		// When true, frames may be dropped to catch up with decode timing. Recommended on low-end devices for smoother playback.
+		public bool skipOnDrop = true;
+		// When true, if a standby preparation is targeting the same URL as the current player during Seek,
+		// the standby preparation is cancelled to prevent a later swap from discarding the seeked time.
+		public bool cancelStandbyPrepareOnSeekSameUrl = true;
+		// Maximum time to wait for a seek operation to complete before proceeding (in milliseconds).
+		public int seekTimeoutMs = 2000;
 
         [Header("Prepare Settings")]
         // These Delays is designed for solve the freeze when the Mobile devices call the Prepare method, 
@@ -117,21 +126,21 @@ namespace RhythmPulse.Gameplay.Media
             _videoPlayers = GetComponents<VideoPlayer>();
             if (_videoPlayers.Length < 2)
             {
-                // CLogger.LogWarning($"{DEBUG_FLAG} Requires 2 VideoPlayer components. Found {_videoPlayers.Length}. Attempting to add missing ones.");
-                var existingPlayers = _videoPlayers.ToList();
-                while (existingPlayers.Count < 2)
-                {
-                    VideoPlayer newPlayer = gameObject.AddComponent<VideoPlayer>();
-                    existingPlayers.Add(newPlayer);
-                }
-                _videoPlayers = existingPlayers.ToArray();
-                // CLogger.LogInfo($"{DEBUG_FLAG} Ensured 2 VideoPlayer components are present. Count: {_videoPlayers.Length}");
+				if (_videoPlayers.Length == 1)
+				{
+					_videoPlayers = new VideoPlayer[2] { _videoPlayers[0], gameObject.AddComponent<VideoPlayer>() };
+				}
+				else // 0 found
+				{
+					_videoPlayers = new VideoPlayer[2] { gameObject.AddComponent<VideoPlayer>(), gameObject.AddComponent<VideoPlayer>() };
+				}
             }
 
             //  Initialize Default Values, should be overridden in InitializeVideoPlayer
             foreach (var player in _videoPlayers)
             {
-                player.timeUpdateMode = VideoTimeUpdateMode.DSPTime;
+				player.timeUpdateMode = timeUpdateMode;
+				player.skipOnDrop = skipOnDrop;
                 player.playOnAwake = false;
             }
 
@@ -161,6 +170,9 @@ namespace RhythmPulse.Gameplay.Media
                 CLogger.LogError($"{DEBUG_FLAG} ConfigureVideoPlayer: Player is null.");
                 return;
             }
+
+			player.timeUpdateMode = timeUpdateMode;
+			player.skipOnDrop = skipOnDrop;
             player.playOnAwake = false;
             player.renderMode = VideoRenderMode.RenderTexture;
             player.targetTexture = targetTexture; // Assign its designated texture
@@ -267,6 +279,14 @@ namespace RhythmPulse.Gameplay.Media
                 CLogger.LogError($"{DEBUG_FLAG} Video URL is null or empty. Cannot initialize.");
                 return;
             }
+#if UNITY_WEBGL
+			// UnityEngine.Video has significant limitations on WebGL (texture output and audio support vary by browser).
+			// For production, consider using a WebGL-specific backend (e.g., HTML5 <video> bridge) behind IGameplayVideoPlayer.
+			CLogger.LogWarning($"{DEBUG_FLAG} WebGL platform detected. Unity VideoPlayer RenderTexture workflow is limited; initialization will no-op.");
+			_currentUserOnPreparedCallback = OnPrepared;
+			_currentUserOnPreparedCallback?.Invoke();
+			return;
+#endif
 
             // Optimization: If the requested video is already current and prepared,
             // and not currently being (re-)prepared on standby for the same URL.
@@ -740,7 +760,14 @@ namespace RhythmPulse.Gameplay.Media
         public long GetPlaybackTimeMSec()
         {
             if (_currentVideoPlayer == null || !_currentVideoPlayer.isPrepared) return 0;
-            return (long)(_currentVideoPlayer.clockTime * 1000.0); // clockTime is in seconds
+			// Prefer player.time for broader platform consistency. Fallback to clockTime when available.
+			double t = _currentVideoPlayer.time;
+			if (t <= 0.0)
+			{
+				double ct = _currentVideoPlayer.clockTime;
+				if (ct > 0.0) t = ct;
+			}
+			return (long)(t * 1000.0);
         }
 
         public void SeekTime(long milliSeconds)
@@ -749,9 +776,17 @@ namespace RhythmPulse.Gameplay.Media
 
             if (IsStandbyActivelyPreparing() && _currentVideoPlayer.url == _currentVideoUrlBeingPreparedOnStandby)
             {
-                // This is a tricky situation: seeking the current player while the standby is preparing the *same URL*.
-                // The seek will apply to the _currentVideoPlayer instance. If the standby finishes and swaps, the seek might be lost.
-                CLogger.LogWarning($"{DEBUG_FLAG} SeekTime called for '{_currentVideoPlayer.url}', which may also be targeted by standby. Seek operates on current instance. This might lead to unexpected behavior if standby swaps with the same video.");
+				// This is a tricky situation: seeking the current player while the standby is preparing the *same URL*.
+				// If a swap occurs later, the seek on the current instance could be lost. Optionally cancel the standby preparation.
+				if (cancelStandbyPrepareOnSeekSameUrl)
+				{
+					CLogger.LogInfo($"{DEBUG_FLAG} SeekTime detected standby preparing the same URL ('{_currentVideoPlayer.url}'). Cancelling standby preparation to preserve seek.");
+					CancelCurrentMasterPreparation(true, "SeekTime same URL cancel standby");
+				}
+				else
+				{
+					CLogger.LogWarning($"{DEBUG_FLAG} SeekTime called for '{_currentVideoPlayer.url}' while standby prepares the same URL. Consider enabling 'cancelStandbyPrepareOnSeekSameUrl' to avoid losing the seek on swap.");
+				}
             }
 
             if (!_currentVideoPlayer.isPrepared)
@@ -805,7 +840,7 @@ namespace RhythmPulse.Gameplay.Media
                 newTimeSec = Math.Min(newTimeSec, player.length); // Clamp to video duration
             }
 
-            CLogger.LogInfo($"{DEBUG_FLAG} Seeking player {player.GetInstanceID()} (URL: '{player.url}') to {newTimeSec}s ({milliSeconds}ms).");
+			CLogger.LogInfo($"{DEBUG_FLAG} Seeking player {player.GetInstanceID()} (URL: '{player.url}') to {newTimeSec}s ({milliSeconds}ms).");
 
             bool wasPlaying = player.isPlaying;
             if (wasPlaying)
@@ -815,27 +850,68 @@ namespace RhythmPulse.Gameplay.Media
                 // cancellationToken.ThrowIfCancellationRequested();
             }
             
-            await UniTask.WaitUntil(() => player.canSetTime, PlayerLoopTiming.Update, cancellationToken);
-            cancellationToken.ThrowIfCancellationRequested();
+			await UniTask.WaitUntil(() => player.canSetTime, PlayerLoopTiming.Update, cancellationToken);
+			cancellationToken.ThrowIfCancellationRequested();
 
-            // Unity's VideoPlayer.time can be unreliable if set too rapidly or if the player is not in a stable state.
-            // Some platforms prefer seeking while paused.
-            player.time = newTimeSec;
+			// Await seek completion via events to ensure the frame/time is actually updated across platforms.
+			var seekSignal = new UniTaskCompletionSource<bool>();
+			VideoPlayer.EventHandler onSeekCompleted = null;
+			VideoPlayer.ErrorEventHandler onError = null;
+			try
+			{
+				using var reg = cancellationToken.RegisterWithoutCaptureExecutionContext(() => seekSignal.TrySetCanceled(cancellationToken));
 
-            // It might take a frame or more for the time to actually apply and for the frame to update.
-            // Waiting for 'seekCompleted' event is more robust if available and needed, but adds complexity.
-            // For now, a short delay or yield might help.
-            await UniTask.Yield(PlayerLoopTiming.Update, cancellationToken); // Give a frame for time to apply
-                                                                             // One could also wait until player.time is close to newTimeSec, with a timeout.
-                                                                             // E.g., await UniTask.WaitUntil(() => Mathf.Approximately((float)player.time, (float)newTimeSec) || !player.isPrepared || player.isLooping /* some exit condition */, cancellationToken: cancellationToken);
+				onSeekCompleted = (source) =>
+				{
+					if (source == player)
+					{
+						seekSignal.TrySetResult(true);
+					}
+				};
+				onError = (source, msg) =>
+				{
+					if (source == player)
+					{
+						CLogger.LogWarning($"{DEBUG_FLAG} Seek error on player {player.GetInstanceID()} ('{player.url}'): {msg}");
+						seekSignal.TrySetResult(false);
+					}
+				};
+				player.seekCompleted += onSeekCompleted;
+				player.errorReceived += onError;
 
-            cancellationToken.ThrowIfCancellationRequested(); // Check after potential delay/yield
+				// Set target time to trigger seek
+				player.time = newTimeSec;
 
-            if (wasPlaying)
-            {
-                player.Play(); // Resume if it was playing
-            }
-            CLogger.LogInfo($"{DEBUG_FLAG} Seek completed for player {player.GetInstanceID()}. Current time: {player.time}s.");
+				// Some platforms require one update tick while paused; StepForward ensures texture updates in pause state.
+				if (!wasPlaying && player.isPrepared)
+				{
+					player.StepForward();
+				}
+
+				// Wait for completion or timeout
+				bool result = await seekSignal.Task.Timeout(TimeSpan.FromMilliseconds(Mathf.Max(1, seekTimeoutMs)));
+				if (!result)
+				{
+					CLogger.LogWarning($"{DEBUG_FLAG} Seek completed with error or not confirmed for player {player.GetInstanceID()}.");
+				}
+			}
+			catch (TimeoutException)
+			{
+				CLogger.LogWarning($"{DEBUG_FLAG} Seek timeout ({seekTimeoutMs}ms) on player {player.GetInstanceID()} ('{player.url}').");
+			}
+			finally
+			{
+				if (onSeekCompleted != null) player.seekCompleted -= onSeekCompleted;
+				if (onError != null) player.errorReceived -= onError;
+			}
+
+			cancellationToken.ThrowIfCancellationRequested(); // Check after potential delay/yield
+
+			if (wasPlaying)
+			{
+				player.Play(); // Resume if it was playing
+			}
+			CLogger.LogInfo($"{DEBUG_FLAG} Seek completed for player {player.GetInstanceID()}. Current time: {player.time}s.");
         }
 
 #if UNITY_EDITOR

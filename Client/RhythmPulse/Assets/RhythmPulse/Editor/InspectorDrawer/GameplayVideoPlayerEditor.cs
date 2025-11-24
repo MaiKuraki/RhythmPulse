@@ -6,8 +6,33 @@ using RhythmPulse.Gameplay.Media;
 [CustomEditor(typeof(GameplayVideoPlayer))]
 public class GameplayVideoPlayerEditor : Editor
 {
-    private string memoryUsage;
-    private string textureResolutionInfo;
+	 private string memoryUsage;
+	 private string textureResolutionInfo;
+	 private string previousMemoryUsage;
+	 private string previousTextureInfo;
+	 private string totalMemoryUsage;
+	 private bool showMemoryGuide;
+
+	 // Cached styles to improve readability and wrap long lines in narrow inspectors
+	 private static GUIStyle s_WordWrapLabel;
+	 private static GUIStyle s_WordWrapRichLabel;
+	 private static bool s_StylesInitialized;
+
+	 private static void EnsureStyles()
+	 {
+		 if (s_StylesInitialized) return;
+		 s_WordWrapLabel = new GUIStyle(EditorStyles.label)
+		 {
+			 wordWrap = true,
+			 richText = false
+		 };
+		 s_WordWrapRichLabel = new GUIStyle(EditorStyles.label)
+		 {
+			 wordWrap = true,
+			 richText = true,
+		 };
+		 s_StylesInitialized = true;
+	 }
 
     public void OnEnable()
     {
@@ -17,40 +42,58 @@ public class GameplayVideoPlayerEditor : Editor
 
     public override void OnInspectorGUI()
     {
+		 EnsureStyles();
         DrawDefaultInspector();
 
         GameplayVideoPlayer player = (GameplayVideoPlayer)target;
         UpdateDebugInfo(player); // Update info continuously in inspector
 
         EditorGUILayout.Space();
-        EditorGUILayout.LabelField("Render Texture Information (Current Video)", EditorStyles.boldLabel);
+		 EditorGUILayout.LabelField("Render Texture Information", EditorStyles.boldLabel);
 
         EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-        EditorGUILayout.LabelField("Current Texture Details:", textureResolutionInfo);
-        EditorGUILayout.LabelField("Est. Memory Usage:", memoryUsage);
+		 EditorGUILayout.LabelField("Current Texture", EditorStyles.boldLabel);
+		 GUILayout.Label(textureResolutionInfo, s_WordWrapLabel);
+		 EditorGUILayout.LabelField("Est. Memory Usage (Current):", memoryUsage);
         if (player.PreviousFrameTexture != null && player.PreviousFrameTexture.IsCreated())
         {
-            EditorGUILayout.LabelField("Previous Frame Texture:", $"{player.PreviousFrameTexture.name} ({player.PreviousFrameTexture.width}x{player.PreviousFrameTexture.height})");
+			 EditorGUILayout.Space(4);
+			 EditorGUILayout.LabelField("Previous Texture", EditorStyles.boldLabel);
+			 GUILayout.Label(previousTextureInfo, s_WordWrapLabel);
+			 EditorGUILayout.LabelField("Est. Memory Usage (Previous):", previousMemoryUsage);
+			 EditorGUILayout.LabelField("Est. Memory Usage (Total):", totalMemoryUsage);
         }
         else
         {
             EditorGUILayout.LabelField("Previous Frame Texture:", "N/A or not created");
+			 EditorGUILayout.LabelField("Est. Memory Usage (Total):", memoryUsage);
         }
         EditorGUILayout.EndVertical();
 
         EditorGUILayout.Space();
-        EditorGUILayout.HelpBox(
-          "Memory usage estimates for uncompressed formats:\n" +
-          "1080p (1920x1080, ARGB32) = ~8.29 MB per texture\n" +
-          "4K (3840x2160, ARGB32) = ~33.18 MB per texture\n\n" +
-          "This component uses two RenderTextures internally for seamless swapping.\n" +
-          "Bits per pixel for common available formats (RenderTextureFormat):\n" +
-          "ARGB32, BGRA32: 32 bpp\n" +
-          "RGB565, ARGB4444, RHalf: 16 bpp\n" +
-          "ARGBHalf, RGFloat: 64 bpp\n" +
-          "ARGBFloat: 128 bpp\n" +
-          "Note: Availability of specific formats varies by Unity version.",
-          MessageType.Info);
+		 showMemoryGuide = EditorGUILayout.BeginFoldoutHeaderGroup(showMemoryGuide, "Memory usage reference");
+		 if (showMemoryGuide)
+		 {
+			 EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+			 // Use rich text for slightly larger and clearer reference text
+			 string guide =
+				 "<b><size=12>Memory usage estimates (uncompressed):</size></b>\n" +
+				 "- 1080p (1920x1080, ARGB32) ≈ 8.29 MB per texture\n" +
+				 "- 4K (3840x2160, ARGB32) ≈ 33.18 MB per texture\n\n" +
+				 "<b><size=12>Notes:</size></b>\n" +
+				 "- This component uses two RenderTextures for seamless swapping.\n" +
+				 "- Bits per pixel examples:\n" +
+				 "  • ARGB32/BGRA32: 32 bpp\n" +
+				 "  • RGB565/ARGB4444/RHalf: 16 bpp\n" +
+				 "  • ARGBHalf/RGFloat: 64 bpp\n" +
+				 "  • ARGBFloat: 128 bpp\n" +
+				 "- MSAA multiplies color buffer memory by antiAliasing.\n" +
+				 "- Depth buffer memory is not included in these estimates.\n" +
+				 "- Actual memory may vary by platform/graphics API.";
+			 GUILayout.Label(guide, s_WordWrapRichLabel);
+			 EditorGUILayout.EndVertical();
+		 }
+		 EditorGUILayout.EndFoldoutHeaderGroup();
 
         if (GUILayout.Button("Force Recreate All Managed Textures"))
         {
@@ -81,103 +124,112 @@ public class GameplayVideoPlayerEditor : Editor
     {
         // Display info for the CurrentVideoTexture
         RenderTexture rt = componentInstance.CurrentVideoTexture;
+		 RenderTexture prev = componentInstance.PreviousFrameTexture;
 
         if (rt == null || !rt.IsCreated())
         {
             memoryUsage = "No current texture allocated or not created";
-            textureResolutionInfo = "N/A";
+			 textureResolutionInfo = "N/A";
+			 previousTextureInfo = (prev != null && prev.IsCreated())
+			 	? $"{prev.name} ({prev.width}x{prev.height}, Format: {prev.format}, Mips: {prev.useMipMap}, AA: {Mathf.Max(prev.antiAliasing, 1)})"
+			 	: "N/A";
+			 previousMemoryUsage = (prev != null && prev.IsCreated())
+			 	? EditorUtility.FormatBytes(EstimateRenderTextureMemoryBytes(prev))
+			 	: "N/A";
+			 totalMemoryUsage = "N/A";
             return;
         }
 
-        int bitsPerPixel;
-        RenderTextureFormat format = rt.format;
+		 long currentBytes = EstimateRenderTextureMemoryBytes(rt);
+		 memoryUsage = EditorUtility.FormatBytes(currentBytes);
+		 int bpp = GetBitsPerPixel(rt.format);
+		 int aa = Mathf.Max(rt.antiAliasing, 1);
+		 textureResolutionInfo =
+			 $"{rt.name}\n" +
+			 $"Size: {rt.width}x{rt.height}\n" +
+			 $"Format: {rt.format} (~{bpp} bpp)\n" +
+			 $"Mips: {rt.useMipMap}    AA: {aa}";
 
-        switch (format)
-        {
-            // 8 bpp
-            case RenderTextureFormat.R8:
-                bitsPerPixel = 8;
-                break;
-
-            // 16 bpp
-            case RenderTextureFormat.ARGB4444:
-            case RenderTextureFormat.RGB565:
-            case RenderTextureFormat.RHalf:
-            case RenderTextureFormat.RG16:
-            case RenderTextureFormat.R16:
-                bitsPerPixel = 16;
-                break;
-
-            // 32 bpp
-            case RenderTextureFormat.ARGB32:
-            case RenderTextureFormat.BGRA32: // Often an alias or swap for ARGB32
-            case RenderTextureFormat.RG32:   // 2x16 fixed point
-            case RenderTextureFormat.RFloat: // 1x32f
-            case RenderTextureFormat.RGB111110Float: // Packed float, ensure this is a valid and desired comparison
-                bitsPerPixel = 32;
-                break;
-
-            // 64 bpp
-            case RenderTextureFormat.ARGBHalf: // 4x16f
-            case RenderTextureFormat.RGFloat:  // 2x32f
-                bitsPerPixel = 64;
-                break;
-
-            // 128 bpp
-            case RenderTextureFormat.ARGBFloat: // 4x32f
-                bitsPerPixel = 128;
-                break;
-
-            // Add more cases if you use other specific formats like Depth, Shadowmap, YUV, etc.
-            // For example, Default might be treated as ARGB32 or a platform specific format.
-            case RenderTextureFormat.Default:
-                // GraphicsFormatUtility.GetGraphicsFormat(RenderTextureFormat.Default, RenderTextureReadWrite.Default)
-                // can give more info, but for a quick estimate:
-                bitsPerPixel = 32; // Common default, but can vary.
-                Debug.LogWarning($"[GameplayVideoPlayerEditor] RenderTextureFormat.Default used for '{rt.name}'. Estimating 32bpp. Actual bpp depends on platform graphics settings.");
-                break;
-
-            default:
-                // Attempt to get bits per pixel using Unity's utility if available (Unity 2019.3+)
-                // This is a more robust way for unlisted formats
-#if UNITY_2019_3_OR_NEWER
-                try
-                {
-                    bitsPerPixel = (int)UnityEngine.Experimental.Rendering.GraphicsFormatUtility.GetBlockSize(UnityEngine.Experimental.Rendering.GraphicsFormatUtility.GetGraphicsFormat(format, rt.sRGB ? RenderTextureReadWrite.sRGB : RenderTextureReadWrite.Linear)) * 8;
-                }
-                catch
-                {
-                    Debug.LogWarning($"[GameplayVideoPlayerEditor] Unhandled RenderTextureFormat '{format}' for memory calculation on '{rt.name}'. Defaulting to 32bpp. Consider adding a case for it.");
-                    bitsPerPixel = 32; // Fallback
-                }
-#else
-                Debug.LogWarning($"[GameplayVideoPlayerEditor] Unhandled RenderTextureFormat '{format}' for memory calculation on '{rt.name}'. Defaulting to 32bpp. Consider adding a case for it or upgrading Unity for GraphicsFormatUtility.");
-                bitsPerPixel = 32; // Fallback
-#endif
-                break;
-        }
-
-        if (bitsPerPixel == 0)
-        { // Should not happen if cases are well-defined
-            Debug.LogError($"[GameplayVideoPlayerEditor] bitsPerPixel is 0 for format {format}. This will result in incorrect memory calculation.");
-            bitsPerPixel = 32; // Safe fallback
-        }
-
-        long memorySizeBytes = (long)rt.width * rt.height * bitsPerPixel / 8;
-        if (rt.dimension == UnityEngine.Rendering.TextureDimension.Tex2DArray || rt.dimension == UnityEngine.Rendering.TextureDimension.Tex3D)
-        {
-            memorySizeBytes *= rt.volumeDepth; // For Texture2DArray or 3D textures
-        }
-        if (rt.useMipMap)
-        {
-            // Mipmaps add roughly 1/3 more memory. This is an approximation.
-            memorySizeBytes = (long)(memorySizeBytes * 1.33333f);
-        }
-
-
-        memoryUsage = EditorUtility.FormatBytes(memorySizeBytes);
-        textureResolutionInfo = $"{rt.name} ({rt.width}x{rt.height}, Format: {format}, ~{bitsPerPixel} bpp, Mips: {rt.useMipMap})";
+		 if (prev != null && prev.IsCreated())
+		 {
+			 long prevBytes = EstimateRenderTextureMemoryBytes(prev);
+			 previousMemoryUsage = EditorUtility.FormatBytes(prevBytes);
+			 int prevBpp = GetBitsPerPixel(prev.format);
+			 int prevAa = Mathf.Max(prev.antiAliasing, 1);
+			 previousTextureInfo =
+				 $"{prev.name}\n" +
+				 $"Size: {prev.width}x{prev.height}\n" +
+				 $"Format: {prev.format} (~{prevBpp} bpp)\n" +
+				 $"Mips: {prev.useMipMap}    AA: {prevAa}";
+			 totalMemoryUsage = EditorUtility.FormatBytes(currentBytes + prevBytes);
+		 }
+		 else
+		 {
+			 previousTextureInfo = "N/A or not created";
+			 previousMemoryUsage = "N/A";
+			 totalMemoryUsage = memoryUsage;
+		 }
     }
+
+	 private static int GetBitsPerPixel(RenderTextureFormat format)
+	 {
+		 switch (format)
+		 {
+			 case RenderTextureFormat.R8: return 8;
+			 case RenderTextureFormat.ARGB4444:
+			 case RenderTextureFormat.RGB565:
+			 case RenderTextureFormat.RHalf:
+			 case RenderTextureFormat.RG16:
+			 case RenderTextureFormat.R16:
+				 return 16;
+			 case RenderTextureFormat.ARGB32:
+			 case RenderTextureFormat.BGRA32:
+			 case RenderTextureFormat.RG32:
+			 case RenderTextureFormat.RFloat:
+			 case RenderTextureFormat.RGB111110Float:
+				 return 32;
+			 case RenderTextureFormat.ARGBHalf:
+			 case RenderTextureFormat.RGFloat:
+				 return 64;
+			 case RenderTextureFormat.ARGBFloat:
+				 return 128;
+			 case RenderTextureFormat.Default:
+				 // Conservative default; actual may vary by graphics API
+				 return 32;
+			 default:
+#if UNITY_2019_3_OR_NEWER
+				 try
+				 {
+					 var gfmt = UnityEngine.Experimental.Rendering.GraphicsFormatUtility.GetGraphicsFormat(format, RenderTextureReadWrite.Default);
+					 // GetBlockSize returns bytes per texel for uncompressed formats; multiply to bits
+					 return (int)UnityEngine.Experimental.Rendering.GraphicsFormatUtility.GetBlockSize(gfmt) * 8;
+				 }
+				 catch
+				 {
+					 return 32;
+				 }
+#else
+				 return 32;
+#endif
+		 }
+	 }
+
+	 private static long EstimateRenderTextureMemoryBytes(RenderTexture rt)
+	 {
+		 int bpp = GetBitsPerPixel(rt.format);
+		 long bytes = (long)rt.width * rt.height * bpp / 8;
+		 if (rt.dimension == UnityEngine.Rendering.TextureDimension.Tex2DArray || rt.dimension == UnityEngine.Rendering.TextureDimension.Tex3D)
+		 {
+			 bytes *= rt.volumeDepth;
+		 }
+		 if (rt.useMipMap)
+		 {
+			 bytes = (long)(bytes * 1.33333f); // Approx mip overhead
+		 }
+		 int aa = Mathf.Max(rt.antiAliasing, 1);
+		 bytes *= aa; // MSAA color buffer overhead approximation
+		 return bytes;
+	 }
 }
 
 #endif
