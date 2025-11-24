@@ -31,7 +31,7 @@ namespace RhythmPulse.UI
         [SerializeField] private Button enterMusicGameplayButton = default;
         [SerializeField] private Button backButton = default;
         [SerializeField] private TMP_Text Text_MapDisplayName;
-        [SerializeField] private RawImage rawImg_PreviewVideoScreen;
+        [SerializeField] private GameplayVideoRender videoRender;
 
         [Header("BeatMap Info")]
         [SerializeField] private TMP_Text Text_BeatMapType;
@@ -316,12 +316,12 @@ namespace RhythmPulse.UI
                 isVideoPrepared = true; // No video to prepare
             }
 
-            if (rawImg_PreviewVideoScreen && isActiveAndEnabled && this != null)
+            if (videoRender && isActiveAndEnabled && this != null)
             {
                 var gp = videoPlayer as GameplayVideoPlayer;
                 if (gp != null)
                 {
-                    rawImg_PreviewVideoScreen.texture = gp.CurrentVideoTexture;
+                    videoRender.SetTargetTexture(gp.CurrentVideoTexture);
                 }
             }
 
