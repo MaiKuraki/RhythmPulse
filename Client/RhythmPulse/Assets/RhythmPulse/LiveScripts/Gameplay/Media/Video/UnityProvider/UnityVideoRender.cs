@@ -1,14 +1,14 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace RhythmPulse.Gameplay.Media
+namespace RhythmPulse.Media
 {
     /// <summary>
     /// Handles rendering of the video texture to a UI RawImage.
     /// Automatically manages the required RawImage component.
     /// </summary>
     [RequireComponent(typeof(RawImage))]
-    public class GameplayVideoRender : MonoBehaviour
+    public class UnityVideoRender : MonoBehaviour
     {
         private RawImage videoImage;
 

@@ -3,7 +3,7 @@ using UnityEditor;
 using UnityEngine;
 using RhythmPulse.Gameplay.Media;
 
-[CustomEditor(typeof(GameplayVideoPlayer))]
+[CustomEditor(typeof(UnityVideoProvider))]
 public class GameplayVideoPlayerEditor : Editor
 {
 	 private string memoryUsage;
@@ -36,8 +36,8 @@ public class GameplayVideoPlayerEditor : Editor
 
     public void OnEnable()
     {
-        GameplayVideoPlayer player = (GameplayVideoPlayer)target;
-        UpdateDebugInfo(player); // Initial update
+        UnityVideoProvider provider = (UnityVideoProvider)target;
+        UpdateDebugInfo(provider); // Initial update
     }
 
     public override void OnInspectorGUI()
@@ -45,8 +45,8 @@ public class GameplayVideoPlayerEditor : Editor
 		 EnsureStyles();
         DrawDefaultInspector();
 
-        GameplayVideoPlayer player = (GameplayVideoPlayer)target;
-        UpdateDebugInfo(player); // Update info continuously in inspector
+        UnityVideoProvider provider = (UnityVideoProvider)target;
+        UpdateDebugInfo(provider); // Update info continuously in inspector
 
         EditorGUILayout.Space();
 		 EditorGUILayout.LabelField("Render Texture Information", EditorStyles.boldLabel);
@@ -55,7 +55,7 @@ public class GameplayVideoPlayerEditor : Editor
 		 EditorGUILayout.LabelField("Current Texture", EditorStyles.boldLabel);
 		 GUILayout.Label(textureResolutionInfo, s_WordWrapLabel);
 		 EditorGUILayout.LabelField("Est. Memory Usage (Current):", memoryUsage);
-        if (player.PreviousFrameTexture != null && player.PreviousFrameTexture.IsCreated())
+        if (provider.PreviousFrameTexture != null && provider.PreviousFrameTexture.IsCreated())
         {
 			 EditorGUILayout.Space(4);
 			 EditorGUILayout.LabelField("Previous Texture", EditorStyles.boldLabel);
@@ -99,7 +99,7 @@ public class GameplayVideoPlayerEditor : Editor
         {
             if (Application.isPlaying)
             {
-                player.EditorRecreateAllManagedTextures();
+                provider.EditorRecreateAllManagedTextures();
             }
             else
             {
@@ -108,19 +108,19 @@ public class GameplayVideoPlayerEditor : Editor
                 // The OnValidate method in GameplayVideoPlayer will handle changes to public
                 // properties like textureResolution when in play mode.
                 // Awake will handle initial creation when entering play mode.
-                player.EditorRecreateAllManagedTextures(); // Call it anyway, it has some checks
-                EditorUtility.SetDirty(player);
+                provider.EditorRecreateAllManagedTextures(); // Call it anyway, it has some checks
+                EditorUtility.SetDirty(provider);
             }
-            UpdateDebugInfo(player); // Refresh info
+            UpdateDebugInfo(provider); // Refresh info
         }
 
-        if (Application.isPlaying && player.IsCurrentVideoPlaying) // Use the new property
+        if (Application.isPlaying && provider.IsCurrentVideoPlaying) // Use the new property
         {
             Repaint(); // Keep UI updated if video is playing
         }
     }
 
-    private void UpdateDebugInfo(GameplayVideoPlayer componentInstance)
+    private void UpdateDebugInfo(UnityVideoProvider componentInstance)
     {
         // Display info for the CurrentVideoTexture
         RenderTexture rt = componentInstance.CurrentVideoTexture;

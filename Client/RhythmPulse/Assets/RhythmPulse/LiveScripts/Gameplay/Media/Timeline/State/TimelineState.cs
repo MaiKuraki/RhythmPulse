@@ -1,4 +1,4 @@
-﻿namespace RhythmPulse.Gameplay.Media
+﻿namespace RhythmPulse.Media
 {
     public interface ITimelineState
     {

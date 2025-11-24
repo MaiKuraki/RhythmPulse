@@ -9,7 +9,7 @@ using Cysharp.Threading.Tasks;
 using R3;
 using RhythmPulse.Audio;
 using RhythmPulse.Gameplay;
-using RhythmPulse.Gameplay.Media;
+using RhythmPulse.Media;
 using RhythmPulse.GameplayData.Runtime;
 using TMPro;
 using UnityEngine;
@@ -31,7 +31,7 @@ namespace RhythmPulse.UI
         [SerializeField] private Button enterMusicGameplayButton = default;
         [SerializeField] private Button backButton = default;
         [SerializeField] private TMP_Text Text_MapDisplayName;
-        [SerializeField] private GameplayVideoRender videoRender;
+        [SerializeField] private UnityVideoRender videoRender;
 
         [Header("BeatMap Info")]
         [SerializeField] private TMP_Text Text_BeatMapType;
@@ -53,8 +53,8 @@ namespace RhythmPulse.UI
         private IAudioLoadService audioLoadService;
         private IGameplayMapStorage mapStorage;
         private ITimeline timeline;
-        private IGameplayMusicPlayer musicPlayer;
-        private IGameplayVideoPlayer videoPlayer;
+        private IUnityMusicPlayer musicPlayer;
+        private IUnityVideoPlayer _unityVideoPlayer;
 
         private bool IsDIInitialized = false;
         private List<ItemData> items = new List<ItemData>();
@@ -105,8 +105,8 @@ namespace RhythmPulse.UI
             IGameplayMapStorage mapStorage,
             IGameplayMapListManager gameplayMapListManager,
             ITimeline timeline,
-            IGameplayMusicPlayer musicPlayer,
-            IGameplayVideoPlayer videoPlayer)
+            IUnityMusicPlayer musicPlayer,
+            IUnityVideoPlayer unityVideoPlayer)
         {
             this.uiService = uiService;
             this.audioLoadService = audioLoadService;
@@ -114,7 +114,7 @@ namespace RhythmPulse.UI
             this.gameplayMapListManager = gameplayMapListManager;
             this.timeline = timeline;
             this.musicPlayer = musicPlayer;
-            this.videoPlayer = videoPlayer;
+            this._unityVideoPlayer = unityVideoPlayer;
 
             scrollView.SetCellInterval(1 / (uiService.GetRootCanvasSize().Item2 / 140.0f));
 
@@ -303,7 +303,7 @@ namespace RhythmPulse.UI
             if (!string.IsNullOrEmpty(videoPath))
             {
                 previewVideoName.Append(FilePathUtility.GetUnityWebRequestUri(videoPath, UnityPathSource.AbsoluteOrFullUri));
-                videoPlayer?.InitializeVideoPlayer(
+                _unityVideoPlayer?.InitializeVideoPlayer(
                     videoUrl: previewVideoName.ToString(),
                     bLoop: true,
                     OnPrepared: () => { isVideoPrepared = true; });
@@ -318,7 +318,7 @@ namespace RhythmPulse.UI
 
             if (videoRender && isActiveAndEnabled && this != null)
             {
-                var gp = videoPlayer as GameplayVideoPlayer;
+                var gp = _unityVideoPlayer as UnityVideoProvider;
                 if (gp != null)
                 {
                     videoRender.SetTargetTexture(gp.CurrentVideoTexture);

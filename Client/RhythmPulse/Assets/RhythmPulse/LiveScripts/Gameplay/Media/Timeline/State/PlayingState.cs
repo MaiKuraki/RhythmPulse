@@ -1,6 +1,6 @@
 using CycloneGames.Logger;
 
-namespace RhythmPulse.Gameplay.Media
+namespace RhythmPulse.Media
 {
     public class PlayingState : TimelineState
     {
@@ -36,7 +36,7 @@ namespace RhythmPulse.Gameplay.Media
         {
             base.OnUpdate();
 
-            long audioPlaybackTimeMsec = _timeline.GameplayMusicPlayer.GetPlaybackTimeMSec();
+            long audioPlaybackTimeMsec = _timeline.UnityMusicPlayer.GetPlaybackTimeMSec();
             _timeline.SetPlaybackTimeMSec(audioPlaybackTimeMsec);
 
             // Check AVOffset every 2 seconds
@@ -52,11 +52,11 @@ namespace RhythmPulse.Gameplay.Media
         {
             if (ShouldAVSync())
             {
-                long videoPlaybackTimeMSec = _timeline.GameplayVideoPlayer.GetPlaybackTimeMSec();
+                long videoPlaybackTimeMSec = _timeline.UnityVideoPlayer.GetPlaybackTimeMSec();
                 if (UnityEngine.Mathf.Abs(audioPlaybackTimeMSec - videoPlaybackTimeMSec) > AVSyncErrorTime /* && !_timeline.VideoPlayer.IsSeeking */)
                 {
                     //  TODO: 
-                    _timeline.GameplayVideoPlayer.SeekTime(audioPlaybackTimeMSec);
+                    _timeline.UnityVideoPlayer.SeekTime(audioPlaybackTimeMSec);
                     CLogger.LogWarning($"[Timeline] AVSync, audioTime:{audioPlaybackTimeMSec} videoTime: {videoPlaybackTimeMSec}");
                 }
             }

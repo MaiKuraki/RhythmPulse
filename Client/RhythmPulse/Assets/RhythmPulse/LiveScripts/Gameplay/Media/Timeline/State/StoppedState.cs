@@ -1,6 +1,6 @@
 ﻿using CycloneGames.Logger;
 
-namespace RhythmPulse.Gameplay.Media
+namespace RhythmPulse.Media
 {
     public class StoppedState : TimelineState
     {

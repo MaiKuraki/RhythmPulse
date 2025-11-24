@@ -1,4 +1,4 @@
-﻿namespace RhythmPulse.Gameplay.Media
+﻿namespace RhythmPulse.Media
 {
     public class PauseCommand : ITimelineCommand
     {
@@ -11,9 +11,9 @@
         {
             if (_timeline.State == _timeline.PlayingState)
             {
-                _timeline?.GameplayMusicPlayer?.Pause();
+                _timeline?.UnityMusicPlayer?.Pause();
                 // _timeline.AudioPlayer.SFXPauseEvent?.Invoke();
-                _timeline?.GameplayVideoPlayer?.Pause();
+                _timeline?.UnityVideoPlayer?.Pause();
                 _timeline.ChangeState(_timeline.PausedState);
             }
         }

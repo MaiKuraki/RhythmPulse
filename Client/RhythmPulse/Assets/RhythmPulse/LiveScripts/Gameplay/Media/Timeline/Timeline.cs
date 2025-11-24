@@ -1,17 +1,8 @@
 using System;
 using VContainer;
 
-namespace RhythmPulse.Gameplay.Media
+namespace RhythmPulse.Media
 {
-    public interface ITimeline
-    {
-        void Play();
-        void Pause();
-        void Stop();
-        void Resume();
-        ITimelineState State { get; }
-    }
-
     public partial class Timeline : ITimeline, IDisposable
     {
         public Timeline()
@@ -27,13 +18,13 @@ namespace RhythmPulse.Gameplay.Media
         }
 
         [Inject]
-        public void Construct(IGameplayMusicPlayer gameplayMusicPlayer, IGameplayVideoPlayer gameplayVideoPlayer)
+        public void Construct(IUnityMusicPlayer unityMusicPlayer, IUnityVideoPlayer unityVideoPlayer)
         {
-            this.GameplayMusicPlayer = gameplayMusicPlayer;
-            this.GameplayVideoPlayer = gameplayVideoPlayer;
+            this.UnityMusicPlayer = unityMusicPlayer;
+            this.UnityVideoPlayer = unityVideoPlayer;
         }
-        public IGameplayMusicPlayer GameplayMusicPlayer { get; private set; }
-        public IGameplayVideoPlayer GameplayVideoPlayer { get; private set; }
+        public IUnityMusicPlayer UnityMusicPlayer { get; private set; }
+        public IUnityVideoPlayer UnityVideoPlayer { get; private set; }
 
         public long PlaybackTimeMSec { get; private set; }
         public void SetPlaybackTimeMSec(long milliSeconds) => PlaybackTimeMSec = milliSeconds;

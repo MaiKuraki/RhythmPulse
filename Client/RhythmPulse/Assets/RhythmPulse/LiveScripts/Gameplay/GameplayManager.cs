@@ -8,7 +8,7 @@ using CycloneGames.Utility.Runtime;
 using Cysharp.Threading.Tasks;
 using RhythmPulse.APIGateway;
 using RhythmPulse.Audio;
-using RhythmPulse.Gameplay.Media;
+using RhythmPulse.Media;
 using RhythmPulse.Scene;
 using RhythmPulse.UI;
 using UnityEngine;
@@ -23,13 +23,13 @@ namespace RhythmPulse.Gameplay
         private IMainCameraService mainCameraService;
         private IAudioLoadService audioLoadService;
         private IGameplayMapStorage mapStorage;
-        private IGameplayMusicPlayer gameplayMusicPlayer;
-        private IGameplayVideoPlayer gameplayVideoPlayer;
+        private IUnityMusicPlayer _unityMusicPlayer;
+        private IUnityVideoPlayer _unityVideoPlayer;
         private ITimeline gameplayTimeline;
         private IUIService uiService;
         private ISceneManagementAPIGateway sceneManagementAPIGateway;
         [SerializeField] Camera gameplayCamera;
-        [SerializeField] GameplayVideoRender gameplayVideoRender;
+        [SerializeField] UnityVideoRender unityVideoRender;
 
         public Timeline GameplayTimeline => (Timeline)gameplayTimeline;
         public Action<float> OnUpdatePlaybackProgress { get; set; }
@@ -41,8 +41,8 @@ namespace RhythmPulse.Gameplay
         public void Construct(IMainCameraService mainCameraService,
                         IAudioLoadService audioLoadService,
                         IGameplayMapStorage mapStorage,
-                        IGameplayMusicPlayer gameplayMusicPlayer,
-                        IGameplayVideoPlayer gameplayVideoPlayer,
+                        IUnityMusicPlayer unityMusicPlayer,
+                        IUnityVideoPlayer unityVideoPlayer,
                         ITimeline gameplayTimeline,
                         IUIService uiService,
                         ISceneManagementAPIGateway sceneManagementAPIGateway)
@@ -50,8 +50,8 @@ namespace RhythmPulse.Gameplay
             this.mainCameraService = mainCameraService;
             this.audioLoadService = audioLoadService;
             this.mapStorage = mapStorage;
-            this.gameplayMusicPlayer = gameplayMusicPlayer;
-            this.gameplayVideoPlayer = gameplayVideoPlayer;
+            this._unityMusicPlayer = unityMusicPlayer;
+            this._unityVideoPlayer = unityVideoPlayer;
             this.gameplayTimeline = gameplayTimeline;
             this.uiService = uiService;
             this.sceneManagementAPIGateway = sceneManagementAPIGateway;
@@ -110,12 +110,12 @@ namespace RhythmPulse.Gameplay
             {
                 return;
             }
-            gameplayMusicPlayer.InitializeMusicPlayer(audioFileName.ToString());
+            _unityMusicPlayer.InitializeMusicPlayer(audioFileName.ToString());
             bool isVideoPrepared = false;
             videoFileName.Clear();
             if (gameplayData.HasOverrideMedia) videoFileName.Append(FilePathUtility.GetUnityWebRequestUri(mapStorage.GetVideoPath(gameplayData.MapInfo, gameplayData.BeatMapType), UnityPathSource.AbsoluteOrFullUri));
             else videoFileName.Append(FilePathUtility.GetUnityWebRequestUri(mapStorage.GetVideoPath(gameplayData.MapInfo), UnityPathSource.AbsoluteOrFullUri));
-            gameplayVideoPlayer.InitializeVideoPlayer(
+            _unityVideoPlayer.InitializeVideoPlayer(
                                     videoUrl: videoFileName.ToString(),
                                     bLoop: false,
                                     OnPrepared: () => { isVideoPrepared = true; });
@@ -125,22 +125,22 @@ namespace RhythmPulse.Gameplay
                 return;
             }
 
-            gameplayVideoRender.SetTargetTexture(((GameplayVideoPlayer)gameplayVideoPlayer).CurrentVideoTexture);
+            unityVideoRender.SetTargetTexture(((UnityVideoProvider)_unityVideoPlayer).CurrentVideoTexture);
 
             IsGameplayMediaReady = true;
         }
 
         public float GetCurrentMusicPlaybackProgress()
         {
-            return GameplayTimeline != null && GameplayTimeline.GameplayMusicPlayer != null && GameplayTimeline.GameplayMusicPlayer.GetCurrentMusicLengthMSec() > 0
-                ? GameplayTimeline.PlaybackTimeMSec / (float)GameplayTimeline.GameplayMusicPlayer.GetCurrentMusicLengthMSec()
+            return GameplayTimeline != null && GameplayTimeline.UnityMusicPlayer != null && GameplayTimeline.UnityMusicPlayer.GetMediaDurationMSec() > 0
+                ? GameplayTimeline.PlaybackTimeMSec / (float)GameplayTimeline.UnityMusicPlayer.GetMediaDurationMSec()
                 : 0;
         }
 
         public long GetPlaybackTimeRemainingMSec()
         {
-            return GameplayTimeline != null && GameplayTimeline.GameplayMusicPlayer != null && GameplayTimeline.GameplayMusicPlayer.GetCurrentMusicLengthMSec() > 0
-                ? GameplayTimeline.GameplayMusicPlayer.GetCurrentMusicLengthMSec() - GameplayTimeline.PlaybackTimeMSec
+            return GameplayTimeline != null && GameplayTimeline.UnityMusicPlayer != null && GameplayTimeline.UnityMusicPlayer.GetMediaDurationMSec() > 0
+                ? GameplayTimeline.UnityMusicPlayer.GetMediaDurationMSec() - GameplayTimeline.PlaybackTimeMSec
                 : -1;   // -1 means invalid
         }
 

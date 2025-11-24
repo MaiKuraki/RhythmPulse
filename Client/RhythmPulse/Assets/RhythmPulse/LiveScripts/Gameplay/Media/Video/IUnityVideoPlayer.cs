@@ -3,13 +3,13 @@ using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 
-namespace RhythmPulse.Gameplay.Media
+namespace RhythmPulse.Media
 {
     /// <summary>
     /// Interface for controlling gameplay video playback.
     /// Supports both callback-based and async/await workflows.
     /// </summary>
-    public interface IGameplayVideoPlayer
+    public interface IUnityVideoPlayer : IMediaPlayer
     {
         RenderTexture CurrentVideoTexture { get; }
         RenderTexture PreviousFrameTexture { get; }
@@ -25,17 +25,9 @@ namespace RhythmPulse.Gameplay.Media
         /// </summary>
         UniTask InitializeVideoPlayerAsync(string videoUrl, bool bLoop = false, CancellationToken cancellationToken = default);
 
-        void Play();
-        void Stop();
-        void Pause();
-        void Resume();
-        long GetPlaybackTimeMSec();
-        void SeekTime(long milliSeconds);
-
         /// <summary>
         /// Sets the audio volume for the current video player.
         /// </summary>
         void SetVolume(float volume);
     }
 }
-

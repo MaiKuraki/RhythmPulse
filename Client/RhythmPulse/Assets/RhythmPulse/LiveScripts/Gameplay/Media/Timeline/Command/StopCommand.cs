@@ -1,4 +1,4 @@
-﻿namespace RhythmPulse.Gameplay.Media
+﻿namespace RhythmPulse.Media
 {
     public class StopCommand : ITimelineCommand
     {
@@ -11,9 +11,9 @@
         {
             if (_timeline.State != _timeline.StoppedState)
             {
-                _timeline?.GameplayMusicPlayer?.Stop();
+                _timeline?.UnityMusicPlayer?.Stop();
                 // _timeline.AudioPlayer.SFXPauseEvent?.Invoke();
-                _timeline?.GameplayVideoPlayer?.Stop();
+                _timeline?.UnityVideoPlayer?.Stop();
                 _timeline.ChangeState(_timeline.StoppedState);
             }
         }

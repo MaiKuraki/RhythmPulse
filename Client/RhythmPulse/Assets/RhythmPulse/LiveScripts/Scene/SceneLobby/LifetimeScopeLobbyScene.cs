@@ -1,7 +1,7 @@
 using VContainer;
 using MackySoft.Navigathena.SceneManagement.VContainer;
 using VContainer.Unity;
-using RhythmPulse.Gameplay.Media;
+using RhythmPulse.Media;
 
 namespace RhythmPulse.Scene
 {
@@ -16,8 +16,8 @@ namespace RhythmPulse.Scene
             builder.RegisterSceneLifecycle<LifecycleLobbyScene>();
 
             //  Preview media players share the same class of GameplayMediaPlayers, This just registered in this scope.
-            builder.Register<IGameplayMusicPlayer, GameplayMusicPlayer>(Lifetime.Singleton);
-            builder.RegisterComponentInHierarchy<GameplayVideoPlayer>().AsImplementedInterfaces();
+            builder.Register<IUnityMusicPlayer, UnityMusicPlayer>(Lifetime.Singleton);
+            builder.RegisterComponentInHierarchy<UnityVideoProvider>().AsImplementedInterfaces();
             builder.Register<ITimeline, Timeline>(Lifetime.Singleton);
         }
     }

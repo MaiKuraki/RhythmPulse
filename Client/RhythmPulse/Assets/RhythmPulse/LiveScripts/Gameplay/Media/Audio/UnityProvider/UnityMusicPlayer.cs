@@ -1,21 +1,9 @@
 using CycloneGames.Factory.Runtime;
 using RhythmPulse.Audio;
 
-namespace RhythmPulse.Gameplay.Media
+namespace RhythmPulse.Media
 {
-    public interface IGameplayMusicPlayer
-    {
-        void InitializeMusicPlayer(in string InAudioKey, bool bLoop = false);
-        void Play();
-        void Stop();
-        void Pause();
-        void Resume();
-        long GetPlaybackTimeMSec();
-        long GetCurrentMusicLengthMSec();
-        void SeekTime(long milliSeconds);
-        bool IsAnyAudioInitialized { get; }
-    }
-    public class GameplayMusicPlayer : IGameplayMusicPlayer
+    public class UnityMusicPlayer : IUnityMusicPlayer
     {
         private const string DEBUG_FLAG = "[GameplayMusicPlayer] ";
         private IUnityObjectSpawner spawner;
@@ -26,7 +14,7 @@ namespace RhythmPulse.Gameplay.Media
         private GameAudioSource MusicPlayer;
         public bool IsAnyAudioInitialized { get; private set; } = false;
 
-        public GameplayMusicPlayer(IUnityObjectSpawner spawner, IAudioLoadService audioLoadService, IFactory<GameAudioSource> audioSourceFactory)
+        public UnityMusicPlayer(IUnityObjectSpawner spawner, IAudioLoadService audioLoadService, IFactory<GameAudioSource> audioSourceFactory)
         {
             this.spawner = spawner;
             this.audioLoadService = audioLoadService;
@@ -79,15 +67,15 @@ namespace RhythmPulse.Gameplay.Media
             return MusicPlayer ? MusicPlayer.GetPlaybackTimeMSec() : 0;
         }
 
-        public long GetCurrentMusicLengthMSec()
-        {
-            return MusicPlayer ? MusicPlayer.GetAudioClipLengthMSec() : 0;
-        }
-
         public void SeekTime(long milliSeconds)
         {
             if (!IsAnyAudioInitialized) return;
             MusicPlayer.SeekTime(milliSeconds);
+        }
+
+        public long GetMediaDurationMSec()
+        {
+            return MusicPlayer ? MusicPlayer.GetAudioClipLengthMSec() : 0;
         }
     }
 }

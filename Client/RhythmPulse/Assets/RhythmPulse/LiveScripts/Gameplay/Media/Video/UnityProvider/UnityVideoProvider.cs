@@ -5,15 +5,15 @@ using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Video;
 
-namespace RhythmPulse.Gameplay.Media
+namespace RhythmPulse.Media
 {
     /// <summary>
-    /// Implementation of IGameplayVideoPlayer using Unity VideoPlayer.
+    /// Implementation of IUnityVideoPlayer using Unity VideoPlayer.
     /// </summary>
     [RequireComponent(typeof(VideoPlayer))]
-    public class GameplayVideoPlayer : MonoBehaviour, IGameplayVideoPlayer
+    public class UnityVideoProvider : MonoBehaviour, IUnityVideoPlayer
     {
-        private const string DEBUG_FLAG = "[GameplayVideoPlayer]";
+        private const string DEBUG_FLAG = "[UnityVideoProvider]";
 
         [Header("Video Settings")]
         [Tooltip("Target resolution for the RenderTextures. On low-end devices, this may be automatically downscaled.")]
@@ -72,6 +72,9 @@ namespace RhythmPulse.Gameplay.Media
         private bool _isLowEndDevice = false;
         // Backup original resolution to support toggling low-end mode
         private Vector2Int _baseTextureResolution;
+
+        // Cached duration to avoid native calls
+        private long _cachedDurationMs = 0;
 
         private void Awake()
         {
@@ -172,7 +175,7 @@ namespace RhythmPulse.Gameplay.Media
             textureField = new RenderTexture(textureResolution.x, textureResolution.y, depthBuffer, textureFormat)
             {
                 filterMode = filterMode,
-                name = $"GameplayVideoRT_{index}",
+                name = $"UnityVideoRT_{index}",
                 autoGenerateMips = false, // Disable mips for video to save memory/perf
                 useMipMap = false
             };
@@ -259,7 +262,7 @@ namespace RhythmPulse.Gameplay.Media
         }
 
         // Original Callback-style overload (mapped to Async)
-        void IGameplayVideoPlayer.InitializeVideoPlayer(in string videoUrl, bool bLoop, Action OnPrepared)
+        void IUnityVideoPlayer.InitializeVideoPlayer(in string videoUrl, bool bLoop, Action OnPrepared)
         {
             // We store the callback to be invoked by the async process
             _currentUserOnPreparedCallback = OnPrepared;
@@ -386,6 +389,16 @@ namespace RhythmPulse.Gameplay.Media
             var oldPlayer = _currentVideoPlayer;
             _currentVideoPlayer = newPlayer;
             _standbyVideoPlayer = oldPlayer;
+
+            // Cache duration for the new player
+            if (_currentVideoPlayer != null && _currentVideoPlayer.isPrepared)
+            {
+                _cachedDurationMs = (long)(_currentVideoPlayer.length * 1000);
+            }
+            else
+            {
+                _cachedDurationMs = 0;
+            }
 
             if (_currentVideoPlayer.targetTexture == _renderTextures[0])
             {
@@ -529,6 +542,15 @@ namespace RhythmPulse.Gameplay.Media
 
             ReleaseRenderTexture(ref _renderTextures[0], _videoPlayers != null && _videoPlayers.Length > 0 ? _videoPlayers[0] : null);
             ReleaseRenderTexture(ref _renderTextures[1], _videoPlayers != null && _videoPlayers.Length > 1 ? _videoPlayers[1] : null);
+        }
+
+        public long GetMediaDurationMSec()
+        {
+            if (_currentVideoPlayer == null || !_currentVideoPlayer.isPrepared)
+            {
+                return 0;
+            }
+            return _cachedDurationMs;
         }
 
 #if UNITY_EDITOR
