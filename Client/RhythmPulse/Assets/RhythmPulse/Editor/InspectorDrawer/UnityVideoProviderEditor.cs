@@ -1,7 +1,7 @@
 #if UNITY_EDITOR
 using UnityEditor;
 using UnityEngine;
-using RhythmPulse.Gameplay.Media;
+using RhythmPulse.Media;
 
 [CustomEditor(typeof(UnityVideoProvider))]
 public class GameplayVideoPlayerEditor : Editor
