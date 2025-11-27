@@ -10,12 +10,12 @@ namespace RhythmPulse.AOT
         {
             builder.Register<IAssetModule, AddressablesModule>(Lifetime.Singleton).Keyed("Addressables");
 
-            builder.RegisterBuildCallback(resolver =>
+            builder.RegisterBuildCallback(async resolver =>
             {
                 var addressableModule = resolver.Resolve<IAssetModule>("Addressables");
-                addressableModule.Initialize(new AssetManagementOptions());
+                await addressableModule.InitializeAsync(new AssetManagementOptions());
                 var pkg = addressableModule.CreatePackage("DefaultPackage");
-                pkg.InitializeAsync(default);
+                await pkg.InitializeAsync(default);
             });
         }
     }

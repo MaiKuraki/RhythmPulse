@@ -2,6 +2,7 @@ using VContainer;
 using VContainer.Unity;
 using CycloneGames.UIFramework.Runtime;
 using CycloneGames.Factory.Runtime;
+using CycloneGames.Factory.Runtime.Integrations.VContainer;
 using CycloneGames.AssetManagement.Runtime;
 using CycloneGames.Service.Runtime;
 using RhythmPulse.Audio;
@@ -19,7 +20,7 @@ namespace RhythmPulse
             base.Configure(builder);
             
             builder.Register<IAssetPathBuilderFactory, AssetPathBuilderFactory>(Lifetime.Singleton);
-            builder.Register<IUnityObjectSpawner, RhythmObjectSpawner>(Lifetime.Singleton);
+            builder.RegisterFactorySystem(Lifetime.Singleton);
             builder.Register<IUIService, RhythmPulseUIService>(Lifetime.Singleton);
 
             builder.RegisterBuildCallback(resolver =>

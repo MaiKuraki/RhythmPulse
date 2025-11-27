@@ -2,9 +2,7 @@
     "name": "CycloneGames.Utility.Editor",
     "rootNamespace": "",
     "references": [
-        "CycloneGames.Utility.Runtime",
-        "CycloneGames.Logger",
-        "CycloneGames.Logger.Util"
+        "CycloneGames.Utility.Runtime"
     ],
     "includePlatforms": [
         "Editor"

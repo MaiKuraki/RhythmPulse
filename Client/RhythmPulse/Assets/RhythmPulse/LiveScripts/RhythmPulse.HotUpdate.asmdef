@@ -18,6 +18,7 @@
         "MackySoft.Navigathena.SceneManagement.VContainer",
         "CycloneGames.Utility.Runtime",
         "CycloneGames.Factory.Runtime",
+        "CycloneGames.Factory.Runtime.Integrations.VContainer",
         "CycloneGames.Service.Runtime",
         "CycloneGames.AssetManagement.Runtime",
         "CycloneGames.UIFramework.Runtime",

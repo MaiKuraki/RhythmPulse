@@ -2,18 +2,16 @@
     "name": "CycloneGames.UIFramework.Runtime",
     "rootNamespace": "",
     "references": [
-        "Unity.ResourceManager",
         "UniTask",
         "CycloneGames.Logger",
         "CycloneGames.Service.Runtime",
         "CycloneGames.Factory.Runtime",
         "CycloneGames.AssetManagement.Runtime",
-        "LitMotion",
-        "CycloneGames.Logger.Util"
+        "LitMotion"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
-    "allowUnsafeCode": false,
+    "allowUnsafeCode": true,
     "overrideReferences": false,
     "precompiledReferences": [],
     "autoReferenced": true,

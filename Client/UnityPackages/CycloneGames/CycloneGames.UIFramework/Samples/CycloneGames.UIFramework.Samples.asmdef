@@ -8,9 +8,7 @@
         "CycloneGames.Factory.Runtime",
         "CycloneGames.AssetManagement.Runtime",
         "CycloneGames.Service.Runtime",
-        "CycloneGames.UIFramework.Runtime",
-        "CycloneGames.Logger",
-        "CycloneGames.Logger.Util"
+        "CycloneGames.UIFramework.Runtime"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
