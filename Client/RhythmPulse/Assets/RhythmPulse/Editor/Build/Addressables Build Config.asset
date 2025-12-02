@@ -1,0 +1,20 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 384e7e65e8377894c9a91420d8b5783f, type: 3}
+  m_Name: Addressables Build Config
+  m_EditorClassIdentifier: Build.Pipeline.Editor::Build.Pipeline.Editor.AddressablesBuildConfig
+  versionMode: 0
+  manualVersion: 1.0.0
+  versionPrefix: v0.1
+  buildRemoteCatalog: 0
+  copyToOutputDirectory: 1
+  buildOutputDirectory: 
