@@ -5,7 +5,7 @@ using RhythmPulse.Media;
 
 namespace RhythmPulse.Scene
 {
-    public class LifetimeScopeLobbyScene : SceneBaseLifetimeScope
+    public class LifetimeScopeLobbyScene : LifetimeScope
     {
         private const string DEBUG_FLAG = "[LifetimeScopeLobbyScene]";
 

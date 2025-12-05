@@ -5,7 +5,7 @@ using VContainer.Unity;
 
 namespace RhythmPulse.Scene
 {
-    public class LifetimeScopeInitialScene : SceneBaseLifetimeScope
+    public class LifetimeScopeInitialScene : LifetimeScope
     {
         protected override void Configure(IContainerBuilder builder)
         {

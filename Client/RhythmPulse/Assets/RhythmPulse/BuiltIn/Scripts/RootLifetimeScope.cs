@@ -14,8 +14,6 @@ namespace RhythmPulse.AOT
             {
                 var addressableModule = resolver.Resolve<IAssetModule>("Addressables");
                 await addressableModule.InitializeAsync(new AssetManagementOptions());
-                var pkg = addressableModule.CreatePackage("DefaultPackage");
-                await pkg.InitializeAsync(default);
             });
         }
     }

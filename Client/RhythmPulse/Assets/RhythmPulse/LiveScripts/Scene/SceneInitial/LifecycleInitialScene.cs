@@ -29,7 +29,6 @@ namespace RhythmPulse.Scene
         {
             var pkg = assetModule.GetPackage("DefaultPackage");
             await assetResolver.InitializeAsync(assetModule);
-            uiService.Initialize(assetPathBuilderFactory, unityObjectSpawner, mainCameraService, pkg);
             await GlobalSceneNavigator.Instance.Push(SceneDefinitions.Splash);
         }
 

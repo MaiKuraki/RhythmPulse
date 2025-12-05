@@ -9,6 +9,7 @@ namespace CycloneGames.AssetManagement.Runtime
 {
     public sealed class AddressablesModule : IAssetModule
     {
+        private const string DEBUG_FLAG = "[AddressablesAssetModule]";
         private readonly Dictionary<string, IAssetPackage> packages = new Dictionary<string, IAssetPackage>(StringComparer.Ordinal);
         private bool initialized;
         private AsyncOperationHandle initializationHandle;
@@ -20,16 +21,73 @@ namespace CycloneGames.AssetManagement.Runtime
         {
             if (initialized) return;
             
-            initializationHandle = Addressables.InitializeAsync();
-            await initializationHandle;
-            
-            if (initializationHandle.Status == AsyncOperationStatus.Succeeded)
+            // Check if Addressables is already initialized
+            try
             {
-                initialized = true;
+                var resourceLocators = Addressables.ResourceLocators;
+                if (resourceLocators != null)
+                {
+                    // Addressables is already initialized
+                    initialized = true;
+                    UnityEngine.Debug.Log($"{DEBUG_FLAG} Addressables already initialized, skipping initialization.");
+                    return;
+                }
             }
-            else
+            catch
             {
-                UnityEngine.Debug.LogError($"[AddressablesAssetModule] Initialization failed. Status: {initializationHandle.Status}, Exception: {initializationHandle.OperationException}");
+                // ResourceLocators access failed, need to initialize
+            }
+            
+            // Initialize Addressables if not already initialized
+            try
+            {
+                initializationHandle = Addressables.InitializeAsync();
+                
+                if (!initializationHandle.IsValid())
+                {
+                    initialized = true;
+                    UnityEngine.Debug.Log($"{DEBUG_FLAG} Addressables initialization handle invalid, assuming already initialized.");
+                    return;
+                }
+                
+                await initializationHandle;
+                
+                if (initializationHandle.IsValid())
+                {
+                    if (initializationHandle.Status == AsyncOperationStatus.Succeeded)
+                    {
+                        initialized = true;
+                    }
+                    else
+                    {
+                        UnityEngine.Debug.LogError($"{DEBUG_FLAG} Initialization failed. Status: {initializationHandle.Status}, Exception: {initializationHandle.OperationException}");
+                    }
+                }
+                else
+                {
+                    initialized = true;
+                    UnityEngine.Debug.Log($"{DEBUG_FLAG} Initialization handle became invalid after await, assuming initialization succeeded.");
+                }
+            }
+            catch (Exception ex)
+            {
+                try
+                {
+                    var resourceLocators = Addressables.ResourceLocators;
+                    if (resourceLocators != null)
+                    {
+                        initialized = true;
+                        UnityEngine.Debug.Log($"{DEBUG_FLAG} Initialization exception caught but Addressables appears initialized: {ex.Message}");
+                    }
+                    else
+                    {
+                        UnityEngine.Debug.LogError($"{DEBUG_FLAG} Initialization exception: {ex.Message}");
+                    }
+                }
+                catch
+                {
+                    UnityEngine.Debug.LogError($"{DEBUG_FLAG} Initialization exception and cannot verify status: {ex.Message}");
+                }
             }
         }
 
@@ -48,9 +106,9 @@ namespace CycloneGames.AssetManagement.Runtime
 
         public IAssetPackage CreatePackage(string packageName)
         {
-            if (string.IsNullOrEmpty(packageName)) throw new ArgumentException("[AddressablesAssetModule] Package name is null or empty", nameof(packageName));
-            if (!initialized) throw new InvalidOperationException("[AddressablesAssetModule] Asset module not initialized");
-            if (packages.ContainsKey(packageName)) throw new InvalidOperationException($"[AddressablesAssetModule] Package already exists: {packageName}");
+            if (string.IsNullOrEmpty(packageName)) throw new ArgumentException($"{DEBUG_FLAG} Package name is null or empty", nameof(packageName));
+            if (!initialized) throw new InvalidOperationException($"{DEBUG_FLAG} Asset module not initialized");
+            if (packages.ContainsKey(packageName)) throw new InvalidOperationException($"{DEBUG_FLAG} Package already exists: {packageName}");
 
             var package = new AddressablesAssetPackage(packageName);
             packages.Add(packageName, package);
@@ -65,20 +123,24 @@ namespace CycloneGames.AssetManagement.Runtime
             return pkg;
         }
 
-        public bool RemovePackage(string packageName)
+        public UniTask<bool> RemovePackageAsync(string packageName)
         {
-            if (string.IsNullOrEmpty(packageName)) return false;
-            if (!packages.Remove(packageName)) return false;
+            if (string.IsNullOrEmpty(packageName)) return UniTask.FromResult(false);
+            if (!packages.TryGetValue(packageName, out var package)) return UniTask.FromResult(false);
             
-            packageNamesCache = null; // Invalidate cache
-            return true;
+            // Addressables doesn't support destroying packages, 
+            // In current impl, DestroyAsync is no-op/completed task.
+            // await package.DestroyAsync(); 
+
+            packages.Remove(packageName);
+            packageNamesCache = null;
+            return UniTask.FromResult(true);
         }
 
         public IReadOnlyList<string> GetAllPackageNames()
         {
             if (packageNamesCache == null)
             {
-                // This is a simplified ToList() to avoid LINQ dependency for clarity.
                 packageNamesCache = new List<string>(packages.Count);
                 foreach (var kvp in packages)
                 {
@@ -90,7 +152,7 @@ namespace CycloneGames.AssetManagement.Runtime
 
         public IPatchService CreatePatchService(string packageName)
         {
-            throw new NotSupportedException("Addressables does not support the patch workflow provided by this module.");
+            throw new NotSupportedException($"{DEBUG_FLAG} Addressables does not support the patch workflow provided by this module.");
         }
     }
 }

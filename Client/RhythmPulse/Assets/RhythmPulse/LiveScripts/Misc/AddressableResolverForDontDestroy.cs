@@ -50,16 +50,24 @@ namespace RhythmPulse.Misc
         [SerializeField]
         private List<AddressableResolverData> dontDestroyAddressablePaths = new List<AddressableResolverData>();
 
+        public bool Initialized { get; private set; }
+
+        void Awake()
+        {
+            Initialized = false;
+        }
+
         public async UniTask InitializeAsync(IAssetModule addressableModule)
         {
             var pkg = addressableModule.GetPackage("DefaultPackage");
 
-            foreach(AddressableResolverData pathData in dontDestroyAddressablePaths)
+            foreach (AddressableResolverData pathData in dontDestroyAddressablePaths)
             {
                 var prefab = pkg.LoadAssetAsync<GameObject>(pathData.AddressablePath);
                 await prefab.Task;
                 await InstantiateAsync(prefab.AssetObject);
             }
+            Initialized = true;
         }
     }
 

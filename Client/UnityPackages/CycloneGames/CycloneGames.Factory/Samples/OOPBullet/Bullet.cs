@@ -32,8 +32,8 @@ namespace CycloneGames.Factory.OOPBullet
             }
 
             _rigidbody.useGravity = false;
-            _rigidbody.drag = 0f;
-            _rigidbody.angularDrag = 0f;
+            _rigidbody.linearDamping = 0f;
+            _rigidbody.angularDamping = 0f;
             _rigidbody.mass = 0.1f;
             _rigidbody.isKinematic = false;
         }
@@ -49,7 +49,7 @@ namespace CycloneGames.Factory.OOPBullet
 
             if (_rigidbody != null)
             {
-                _rigidbody.velocity = bulletData.Velocity;
+                _rigidbody.linearVelocity = bulletData.Velocity;
                 _rigidbody.angularVelocity = Vector3.zero;
             }
             else
@@ -67,7 +67,7 @@ namespace CycloneGames.Factory.OOPBullet
 
             if (_rigidbody != null)
             {
-                _rigidbody.velocity = Vector3.zero;
+                _rigidbody.linearVelocity = Vector3.zero;
                 _rigidbody.angularVelocity = Vector3.zero;
             }
 
@@ -103,7 +103,7 @@ namespace CycloneGames.Factory.OOPBullet
 
             if (_rigidbody != null)
             {
-                _rigidbody.velocity = velocity;
+                _rigidbody.linearVelocity = velocity;
                 _rigidbody.angularVelocity = Vector3.zero;
             }
             else

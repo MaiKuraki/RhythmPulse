@@ -4,11 +4,11 @@ using CycloneGames.Logger;
 using CycloneGames.Service.Runtime;
 using CycloneGames.UIFramework.Runtime;
 using CycloneGames.Utility.Runtime;
+using Cysharp.Threading.Tasks;
 using RhythmPulse.APIGateway;
 using RhythmPulse.Audio;
 using RhythmPulse.Gameplay;
 using RhythmPulse.Misc;
-using RhythmPulse.UI;
 using UnityEngine;
 using VContainer;
 using VContainer.Unity;
@@ -36,10 +36,29 @@ namespace RhythmPulse
         {
             base.Configure(builder);
 
+            builder.RegisterComponentInNewPrefab(assetResolver, Lifetime.Singleton).UnderTransform(transform);
+
             builder.Register<IMainCameraService, MainCameraService>(Lifetime.Singleton);
             builder.Register<ISceneManagementAPIGateway, SceneManagementAPIGateway>(Lifetime.Singleton);
             builder.Register<IAudioLoadService, AudioLoadService>(Lifetime.Singleton);
             builder.Register<IGraphicsSettingService, GraphicsSettingService>(Lifetime.Singleton);
+            builder.Register<IAssetPathBuilderFactory, AssetPathBuilderFactory>(Lifetime.Singleton);
+            builder.Register<IUnityObjectSpawner, RhythmPulseObjectSpawner>(Lifetime.Singleton);
+            builder.Register<IUIService, UIService>(Lifetime.Singleton);
+
+            builder.RegisterBuildCallback(async resolver =>
+            {
+                var assetModule = resolver.Resolve<IAssetModule>("Addressables");
+                var assetResolver = resolver.Resolve<AddressableResolverForDontDestroy>();
+                await assetResolver.InitializeAsync(assetModule);
+                await UniTask.WaitUntil(() => assetResolver.Initialized);
+                var cameraService = resolver.Resolve<IMainCameraService>();
+                var assetPathBuilderFactory = resolver.Resolve<IAssetPathBuilderFactory>();
+                var objectSpawner = resolver.Resolve<IUnityObjectSpawner>();
+                var pkg = assetModule.GetPackage("DefaultPackage");
+                var uiService = resolver.Resolve<IUIService>();
+                uiService.Initialize(assetPathBuilderFactory, objectSpawner, cameraService, pkg);
+            });
 
             // Current registration: IGameplayMapListManager and IGameplayMapStorage are registered as Singleton in the root scope.
             //
@@ -63,12 +82,13 @@ namespace RhythmPulse
             // in-game performance, accepting the constant memory overhead. Re-evaluate if memory becomes a critical constraint.
             builder.Register<IGameplayMapStorage, GameplayMapStorage>(Lifetime.Singleton);
             builder.Register<IGameplayMapListManager, GameplayMapListManager>(Lifetime.Singleton);
+            //  Or if you dont want to create class AudioSourceFactory.
+            builder.Register<IFactory<GameAudioSource>>(container =>
+                new MonoPrefabFactory<GameAudioSource>(
+                    container.Resolve<IUnityObjectSpawner>(),
+                    container.Resolve<IAudioLoadService>().AudioSourcePrefab
+                ), Lifetime.Singleton);
 
-            builder.RegisterComponentInNewPrefab(assetResolver, Lifetime.Singleton).UnderTransform(transform);
-            builder.RegisterBuildCallback(resolver =>
-            {
-                resolver.Resolve<AddressableResolverForDontDestroy>();
-            });
             builder.RegisterEntryPoint<MapListGlobalInitializer>();
         }
 

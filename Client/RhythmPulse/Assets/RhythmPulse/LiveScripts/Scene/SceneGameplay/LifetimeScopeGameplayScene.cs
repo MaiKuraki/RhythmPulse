@@ -6,7 +6,7 @@ using RhythmPulse.Media;
 
 namespace RhythmPulse.Scene
 {
-    public class LifetimeScopeGameplayScene : SceneBaseLifetimeScope
+    public class LifetimeScopeGameplayScene : LifetimeScope
     {
         protected override void Configure(IContainerBuilder builder)
         {
