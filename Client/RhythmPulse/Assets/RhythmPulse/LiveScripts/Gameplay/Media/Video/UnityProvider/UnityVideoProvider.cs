@@ -161,11 +161,25 @@ namespace RhythmPulse.Media
                 player.audioOutputMode = VideoAudioOutputMode.None;
             }
 
-            player.Stop();
+            try
+            {
+                player.Stop();
+            }
+            catch
+            {
+                // VideoPlayer may be in invalid state, continue anyway
+            }
 
             // Events
-            player.loopPointReached -= OnVideoLoopPointReachedHandler;
-            player.loopPointReached += OnVideoLoopPointReachedHandler;
+            try
+            {
+                player.loopPointReached -= OnVideoLoopPointReachedHandler;
+                player.loopPointReached += OnVideoLoopPointReachedHandler;
+            }
+            catch
+            {
+                // VideoPlayer may be in invalid state, ignore
+            }
         }
 
         private void CreateAndAssignTargetTexture(int index, ref RenderTexture textureField, VideoPlayer targetPlayer)
@@ -213,7 +227,7 @@ namespace RhythmPulse.Media
             }
 
             // Check if already playing/prepared on current
-            if (_currentVideoPlayer.url == videoUrl && _currentVideoPlayer.isPrepared &&
+            if (_currentVideoPlayer != null && _currentVideoPlayer.url == videoUrl && _currentVideoPlayer.isPrepared &&
                 !(_currentVideoUrlBeingPreparedOnStandby == videoUrl && IsStandbyActivelyPreparing()))
             {
                 _currentUserOnPreparedCallback?.Invoke();
@@ -246,6 +260,13 @@ namespace RhythmPulse.Media
 
             try
             {
+                // Check if standby player is valid before starting preparation
+                if (_standbyVideoPlayer == null)
+                {
+                    CLogger.LogError($"{DEBUG_FLAG} Standby VideoPlayer is null. Cannot prepare video: {videoUrl}");
+                    return;
+                }
+
                 await LaunchMasterPrepareAsync(_standbyVideoPlayer, videoUrl, bLoop, capturedToken);
                 // Callback is invoked inside LaunchMasterPrepareAsync upon success
             }
@@ -271,21 +292,45 @@ namespace RhythmPulse.Media
 
         private async UniTask LaunchMasterPrepareAsync(VideoPlayer player, string url, bool loop, CancellationToken token)
         {
+            // Check if player is valid before starting
+            if (player == null)
+            {
+                CLogger.LogWarning($"{DEBUG_FLAG} VideoPlayer is null, cannot prepare '{url}'. Operation cancelled.");
+                return;
+            }
+
             bool success = false;
             int attempt = 0;
 
             while (attempt <= maxPrepareRetries && !success)
             {
                 token.ThrowIfCancellationRequested();
+                
+                // Check if player is still valid (may have been destroyed during scene transition)
+                if (player == null)
+                {
+                    CLogger.LogWarning($"{DEBUG_FLAG} VideoPlayer was destroyed during preparation. Operation cancelled.");
+                    break;
+                }
+
                 if (attempt > 0) await UniTask.Delay(prepareRetryDelayMs, cancellationToken: token);
 
                 var status = await TryPrepareAttemptAsync(player, url, loop, token);
 
                 if (status == PrepareAttemptStatus.Success)
                 {
-                    PerformSwap(player);
-                    success = true;
-                    _currentUserOnPreparedCallback?.Invoke();
+                    // Check player is still valid before swapping
+                    if (player != null)
+                    {
+                        PerformSwap(player);
+                        success = true;
+                        _currentUserOnPreparedCallback?.Invoke();
+                    }
+                    else
+                    {
+                        CLogger.LogWarning($"{DEBUG_FLAG} VideoPlayer was destroyed after successful preparation. Cannot swap.");
+                        break;
+                    }
                 }
                 else if (status == PrepareAttemptStatus.Error || status == PrepareAttemptStatus.Cancelled)
                 {
@@ -310,12 +355,17 @@ namespace RhythmPulse.Media
             // Local event handlers to avoid leaks and allocations
             VideoPlayer.EventHandler onPrepare = (source) =>
             {
-                if (source == player && source.url == url) completionSource.TrySetResult(true);
+                // Check if player is still valid and matches
+                if (player != null && source == player && source.url == url)
+                {
+                    completionSource.TrySetResult(true);
+                }
             };
 
             VideoPlayer.ErrorEventHandler onError = (source, msg) =>
             {
-                if (source == player)
+                // Check if player is still valid and matches
+                if (player != null && source == player)
                 {
                     CLogger.LogError($"{DEBUG_FLAG} Video Error: {msg}");
                     completionSource.TrySetResult(false);
@@ -324,8 +374,21 @@ namespace RhythmPulse.Media
 
             try
             {
+                // Check if player is still valid (may have been destroyed during scene transition)
+                if (player == null)
+                {
+                    CLogger.LogWarning($"{DEBUG_FLAG} VideoPlayer is null, cannot prepare. Operation cancelled.");
+                    return PrepareAttemptStatus.Cancelled;
+                }
+
                 // Platform specific delays
                 if (preparePreDelayMs > 0) await UniTask.Delay(preparePreDelayMs, cancellationToken: token);
+
+                // Check again after delay (player may have been destroyed)
+                if (player == null)
+                {
+                    return PrepareAttemptStatus.Cancelled;
+                }
 
                 player.Stop();
                 player.url = null; // Reset URL to force fresh state
@@ -342,6 +405,12 @@ namespace RhythmPulse.Media
                 if (internalStopToPrepareDelayMs > 0) await UniTask.Delay(internalStopToPrepareDelayMs, cancellationToken: token);
                 else await UniTask.Yield(PlayerLoopTiming.Update, token);
 
+                // Check again after delay
+                if (player == null)
+                {
+                    return PrepareAttemptStatus.Cancelled;
+                }
+
                 player.source = VideoSource.Url;
                 player.url = url;
                 player.isLooping = loop;
@@ -357,32 +426,51 @@ namespace RhythmPulse.Media
             catch (TimeoutException)
             {
                 // CLogger.LogWarning($"{DEBUG_FLAG} Prepare timeout for {url}");
-                player.Stop();
+                if (player != null) player.Stop();
                 return PrepareAttemptStatus.Timeout;
             }
             catch (OperationCanceledException)
             {
-                player.Stop();
+                if (player != null) player.Stop();
                 return PrepareAttemptStatus.Cancelled;
             }
             catch (Exception ex)
             {
                 CLogger.LogError($"{DEBUG_FLAG} Prepare exception: {ex}");
-                player.Stop();
+                if (player != null) player.Stop();
                 return PrepareAttemptStatus.Error;
             }
             finally
             {
-                player.prepareCompleted -= onPrepare;
-                player.errorReceived -= onError;
+                // Safely remove event handlers only if player still exists
+                if (player != null)
+                {
+                    try
+                    {
+                        player.prepareCompleted -= onPrepare;
+                        player.errorReceived -= onError;
+                    }
+                    catch
+                    {
+                        // Player may have been destroyed, ignore
+                    }
+                }
             }
         }
 
         private void PerformSwap(VideoPlayer newPlayer)
         {
-            if (_currentVideoPlayer.isPlaying)
+            // Check if current player is valid before accessing
+            if (_currentVideoPlayer != null && _currentVideoPlayer.isPlaying)
             {
-                _currentVideoPlayer.Pause();
+                try
+                {
+                    _currentVideoPlayer.Pause();
+                }
+                catch
+                {
+                    // VideoPlayer may have been destroyed, ignore
+                }
             }
 
             // Swap references
@@ -496,7 +584,14 @@ namespace RhythmPulse.Media
 
             if (stopStandby && _standbyVideoPlayer != null)
             {
-                _standbyVideoPlayer.Stop();
+                try
+                {
+                    _standbyVideoPlayer.Stop();
+                }
+                catch
+                {
+                    // VideoPlayer may have been destroyed, ignore
+                }
             }
         }
 

@@ -34,13 +34,30 @@ namespace RhythmPulse.Scene
             uiService.OpenUI(UIWindowName.GameplayHUDBeatsGame);
             return UniTask.CompletedTask;
         }
-        public UniTask OnExit(ISceneDataWriter writer, CancellationToken cancellationToken)
+        public async UniTask OnExit(ISceneDataWriter writer, CancellationToken cancellationToken)
         {
-            uiService.CloseUI(UIWindowName.GameplayHUDBeatsGame);
-            uiService.CloseUI(UIWindowName.UIWindowGameplayResult);
+            // Close UI windows asynchronously and wait for them to complete
+            // This prevents duplicate close operations during scene transitions
+            try
+            {
+                await uiService.CloseUIAsync(UIWindowName.GameplayHUDBeatsGame, cancellationToken);
+            }
+            catch (System.Exception ex)
+            {
+                UnityEngine.Debug.LogWarning($"[LifecycleGameplayScene] Error closing {UIWindowName.GameplayHUDBeatsGame}: {ex.Message}");
+            }
+
+            try
+            {
+                await uiService.CloseUIAsync(UIWindowName.UIWindowGameplayResult, cancellationToken);
+            }
+            catch (System.Exception ex)
+            {
+                UnityEngine.Debug.LogWarning($"[LifecycleGameplayScene] Error closing {UIWindowName.UIWindowGameplayResult}: {ex.Message}");
+            }
+
             cancelLoadGameplayMedias.Cancel();
             cancelLoadGameplayMedias.Dispose();
-            return UniTask.CompletedTask;
         }
 
         public UniTask OnFinalize(ISceneDataWriter writer, IProgress<IProgressDataStore> progress, CancellationToken cancellationToken)
