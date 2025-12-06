@@ -80,14 +80,19 @@ namespace RhythmPulse.AOT
                 var pkgVersion = await pkg.RequestPackageVersionAsync(cancellationToken: cancellationToken);
                 UnityEngine.Debug.Log($"[LifecycleSceneLaunch] Package version: {pkgVersion}");
 
+                // Try to update manifest (for hot-update/online games)
+                // For standalone games, this will gracefully handle "Content update not available"
                 var manifestUpdateSuccess = await pkg.UpdatePackageManifestAsync(packageVersion: pkgVersion, cancellationToken: cancellationToken);
-                if (!manifestUpdateSuccess)
+                if (manifestUpdateSuccess)
                 {
-                    UnityEngine.Debug.LogError($"[LifecycleSceneLaunch] Asset update manifest failed. Package version: {pkgVersion}");
-                    bPackageInitialized = true;
-                    return false;
+                    UnityEngine.Debug.Log($"[LifecycleSceneLaunch] Asset package initialized successfully. Package version: {pkgVersion}");
                 }
-                UnityEngine.Debug.Log($"[LifecycleSceneLaunch] YooAsset package initialized successfully. Package version: {pkgVersion}");
+                else
+                {
+                    // Update failed, but this might be expected for standalone games
+                    // Continue anyway as we can use local content
+                    UnityEngine.Debug.LogWarning($"[LifecycleSceneLaunch] Asset manifest update failed, but continuing with local content. Package version: {pkgVersion}");
+                }
 #endif
                 bPackageInitialized = true;
 
