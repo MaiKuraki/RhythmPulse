@@ -1,70 +1,50 @@
-using CycloneGames.Logger;
-
 namespace RhythmPulse.Media
 {
-    public class PlayingState : TimelineState
+    public sealed class PlayingState : TimelineState
     {
-        private const int AVSyncErrorTime = 50;
-        private const int AVSyncFrequency = 2; // 2 seconds
-        private float currentFrequency = 0;
+        private const int AVSyncThresholdMs = 50;
+        private const double AVSyncIntervalSeconds = 2.0;
+        
+        private double _timeSinceLastSync;
 
-        public PlayingState(Timeline timeline) : base(timeline)
-        {
-
-        }
+        public PlayingState(Timeline timeline) : base(timeline) { }
 
         public override void OnEnter()
         {
-            CLogger.LogInfo("[Timeline] Enter Playing State");
+            _timeSinceLastSync = 0;
 
-            if (_timeline.PlaybackTimeMSec < 2) // TODO: Maybe 2ms is not accurate enough for PlayFromStart
-            {
-                _timeline.OnStartedPlayAction?.Invoke();
-            }
+            if (Timeline.PlaybackTimeMSec < 2)
+                Timeline.RaiseStartedPlay();
             else
-            {
-                _timeline.OnResumedPlayAction?.Invoke();
-            }
+                Timeline.RaiseResumedPlay();
         }
 
-        public override void OnExit()
-        {
-            CLogger.LogInfo("[Timeline] Exit Playing State");
-        }
+        public override void OnExit() { }
 
         public override void OnUpdate()
         {
-            base.OnUpdate();
+            long audioPlaybackTimeMsec = Timeline.UnityMusicPlayer.GetPlaybackTimeMSec();
+            Timeline.SetPlaybackTimeMSec(audioPlaybackTimeMsec);
 
-            long audioPlaybackTimeMsec = _timeline.UnityMusicPlayer.GetPlaybackTimeMSec();
-            _timeline.SetPlaybackTimeMSec(audioPlaybackTimeMsec);
-
-            // Check AVOffset every 2 seconds
-            if (currentFrequency >= AVSyncFrequency)
+            _timeSinceLastSync += UnityEngine.Time.deltaTime;
+            if (_timeSinceLastSync >= AVSyncIntervalSeconds)
             {
-                AVSync(audioPlaybackTimeMsec);
-                currentFrequency = 0;
-            }
-            currentFrequency += UnityEngine.Time.deltaTime;
-        }
-
-        private void AVSync(long audioPlaybackTimeMSec)
-        {
-            if (ShouldAVSync())
-            {
-                long videoPlaybackTimeMSec = _timeline.UnityVideoPlayer.GetPlaybackTimeMSec();
-                if (UnityEngine.Mathf.Abs(audioPlaybackTimeMSec - videoPlaybackTimeMSec) > AVSyncErrorTime /* && !_timeline.VideoPlayer.IsSeeking */)
-                {
-                    //  TODO: 
-                    _timeline.UnityVideoPlayer.SeekTime(audioPlaybackTimeMSec);
-                    CLogger.LogWarning($"[Timeline] AVSync, audioTime:{audioPlaybackTimeMSec} videoTime: {videoPlaybackTimeMSec}");
-                }
+                SyncAudioVideo(audioPlaybackTimeMsec);
+                _timeSinceLastSync = 0;
             }
         }
 
-        private bool ShouldAVSync()
+        private void SyncAudioVideo(long audioPlaybackTimeMSec)
         {
-            return true;
+            if (Timeline.UnityVideoPlayer == null) return;
+
+            long videoPlaybackTimeMSec = Timeline.UnityVideoPlayer.GetPlaybackTimeMSec();
+            long diff = audioPlaybackTimeMSec - videoPlaybackTimeMSec;
+            
+            if (diff > AVSyncThresholdMs || diff < -AVSyncThresholdMs)
+            {
+                Timeline.UnityVideoPlayer.SeekTime(audioPlaybackTimeMSec);
+            }
         }
     }
 }

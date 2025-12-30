@@ -1,291 +1,338 @@
+using System.Collections.Generic;
+using CycloneGames.Utility.Runtime;
+using RhythmPulse.Audio;
 using UnityEditor;
 using UnityEngine;
-using System.Collections.Generic;
-using RhythmPulse.Audio;
-using CycloneGames.Utility.Runtime;
 
 [CustomEditor(typeof(AudioManager))]
-public class AudioManagerEditor : Editor
+public sealed class AudioManagerEditor : Editor
 {
-    // Foldout states for different sections 
-    private bool showLoadedClips = true;
-    private bool showAudioStates = true;
-    private bool showMemoryUsage = true;
+    private bool _showLoadedClips = true;
+    private bool _showAudioStates = true;
+    private bool _showMemoryUsage = true;
 
-    // Dictionary to store expanded state of each key (audio path)
-    private Dictionary<string, bool> keyExpandedStates = new Dictionary<string, bool>();
+    private readonly HashSet<string> _expandedKeys = new(32);
+    private readonly List<KeyValuePair<string, AudioClip>> _clipBuffer = new(32);
+    private readonly List<KeyValuePair<string, AudioManager.AudioLoadState>> _stateBuffer = new(32);
+    private readonly List<KeyValuePair<string, long>> _memoryBuffer = new(32);
+
+    private static GUIStyle s_BoxStyle;
+    private static GUIStyle s_PathStyle;
+    private static GUIStyle s_StatusLoaded;
+    private static GUIStyle s_StatusLoading;
+    private static GUIStyle s_StatusError;
+    private static GUIStyle s_MemoryStyle;
+    private static GUIStyle s_HeaderStyle;
+    private static GUIStyle s_TotalMemoryStyle;
+    private static GUIStyle s_FileNameStyle;
+    private static bool s_StylesInitialized;
+
+    private static readonly Color HeaderBgColor = new(0.2f, 0.2f, 0.2f, 0.3f);
+    private static readonly Color EntryBgColorA = new(0.18f, 0.18f, 0.18f, 0.3f);
+    private static readonly Color EntryBgColorB = new(0.12f, 0.12f, 0.12f, 0.15f);
+
+    private static void EnsureStyles()
+    {
+        if (s_StylesInitialized) return;
+
+        s_BoxStyle = new GUIStyle(EditorStyles.helpBox)
+        {
+            padding = new RectOffset(6, 6, 4, 4),
+            margin = new RectOffset(0, 0, 2, 2)
+        };
+
+        s_PathStyle = new GUIStyle(EditorStyles.miniLabel)
+        {
+            wordWrap = true,
+            fontSize = 10,
+            padding = new RectOffset(2, 2, 1, 1)
+        };
+
+        s_StatusLoaded = new GUIStyle(EditorStyles.miniLabel)
+        {
+            fontStyle = FontStyle.Bold,
+            alignment = TextAnchor.MiddleCenter,
+            fontSize = 11,
+            normal = { textColor = new Color(0.3f, 0.85f, 0.3f) }
+        };
+
+        s_StatusLoading = new GUIStyle(s_StatusLoaded)
+        {
+            normal = { textColor = new Color(0.95f, 0.75f, 0.2f) }
+        };
+
+        s_StatusError = new GUIStyle(s_StatusLoaded)
+        {
+            normal = { textColor = new Color(0.9f, 0.35f, 0.35f) }
+        };
+
+        s_MemoryStyle = new GUIStyle(EditorStyles.miniLabel)
+        {
+            alignment = TextAnchor.MiddleRight,
+            fontStyle = FontStyle.Bold,
+            fontSize = 10,
+            normal = { textColor = new Color(0.5f, 0.75f, 1f) }
+        };
+
+        s_HeaderStyle = new GUIStyle(EditorStyles.boldLabel)
+        {
+            fontSize = 13,
+            padding = new RectOffset(4, 4, 4, 4)
+        };
+
+        s_TotalMemoryStyle = new GUIStyle(EditorStyles.boldLabel)
+        {
+            fontSize = 14,
+            alignment = TextAnchor.MiddleRight,
+            normal = { textColor = new Color(1f, 0.85f, 0.4f) }
+        };
+
+        s_FileNameStyle = new GUIStyle(EditorStyles.label)
+        {
+            fontStyle = FontStyle.Normal,
+            fontSize = 11,
+            clipping = TextClipping.Clip
+        };
+
+        s_StylesInitialized = true;
+    }
 
     public override void OnInspectorGUI()
     {
-        // Force repaint to keep inspector updated after focus change 
-        Repaint();
-
-        // Draw default inspector fields 
+        EnsureStyles();
         DrawDefaultInspector();
 
-        AudioManager audioManager = (AudioManager)target;
+        var audioManager = (AudioManager)target;
 
-        EditorGUILayout.Space();
-        EditorGUILayout.LabelField("------ Audio Management State ------", EditorStyles.boldLabel);
-        EditorGUILayout.Space();
+        EditorGUILayout.Space(10);
+        DrawHeader(audioManager);
 
-        // Only show runtime data in Play Mode 
         if (!Application.isPlaying)
         {
-            EditorGUILayout.HelpBox("AudioManager runtime data is only available in Play Mode.", MessageType.Info);
+            EditorGUILayout.Space(4);
+            EditorGUILayout.HelpBox("Runtime data only available in Play Mode.", MessageType.Info);
             return;
         }
 
-        // Display total memory usage at the top 
+        EditorGUILayout.Space(6);
+
+        _showLoadedClips = EditorGUILayout.BeginFoldoutHeaderGroup(_showLoadedClips, $"Loaded Clips ({audioManager.EditorGetLoadedClips().Count})");
+        if (_showLoadedClips) DrawLoadedClipsSection(audioManager);
+        EditorGUILayout.EndFoldoutHeaderGroup();
+
+        EditorGUILayout.Space(2);
+
+        _showAudioStates = EditorGUILayout.BeginFoldoutHeaderGroup(_showAudioStates, $"All States ({audioManager.EditorGetAudioStates().Count})");
+        if (_showAudioStates) DrawStatesSection(audioManager);
+        EditorGUILayout.EndFoldoutHeaderGroup();
+
+        EditorGUILayout.Space(2);
+
+        _showMemoryUsage = EditorGUILayout.BeginFoldoutHeaderGroup(_showMemoryUsage, "Memory Usage (by size)");
+        if (_showMemoryUsage) DrawMemorySection(audioManager);
+        EditorGUILayout.EndFoldoutHeaderGroup();
+
+        if (Application.isPlaying) Repaint();
+    }
+
+    private void DrawHeader(AudioManager audioManager)
+    {
+        var rect = EditorGUILayout.BeginVertical(s_BoxStyle);
+        EditorGUI.DrawRect(rect, HeaderBgColor);
+
         EditorGUILayout.BeginHorizontal();
+        EditorGUILayout.LabelField("Audio Manager", s_HeaderStyle);
+        GUILayout.FlexibleSpace();
+        if (Application.isPlaying)
         {
-            EditorGUILayout.LabelField("Total Audio Memory Usage:", EditorStyles.boldLabel);
-            EditorGUILayout.LabelField(audioManager.TotalMemoryUsage.ToMemorySizeString(), EditorStyles.boldLabel);
+            EditorGUILayout.LabelField(audioManager.TotalMemoryUsage.ToMemorySizeString(), s_TotalMemoryStyle, GUILayout.Width(100));
         }
         EditorGUILayout.EndHorizontal();
-        EditorGUILayout.Space();
 
-        // Loaded Audio Clips foldout 
-        showLoadedClips = EditorGUILayout.Foldout(showLoadedClips, "Loaded Audio Clips", true);
-        if (showLoadedClips)
-        {
-            EditorGUI.indentLevel++;
-            DrawDictionaryData(audioManager.GetLoadedClips(), "Loaded", audioManager);
-            EditorGUI.indentLevel--;
-        }
-
-        EditorGUILayout.Space();
-        EditorGUILayout.LabelField("", GUI.skin.horizontalSlider);
-        EditorGUILayout.Space();
-
-        // Audio Loading States foldout 
-        showAudioStates = EditorGUILayout.Foldout(showAudioStates, "Audio Loading States", true);
-        if (showAudioStates)
-        {
-            EditorGUI.indentLevel++;
-            DrawDictionaryData(audioManager.GetAudioStates(), "State", audioManager);
-            EditorGUI.indentLevel--;
-        }
-
-        EditorGUILayout.Space();
-        EditorGUILayout.LabelField("", GUI.skin.horizontalSlider);
-        EditorGUILayout.Space();
-
-        // Memory Usage foldout 
-        showMemoryUsage = EditorGUILayout.Foldout(showMemoryUsage, "Detailed Memory Usage", true);
-        if (showMemoryUsage)
-        {
-            EditorGUI.indentLevel++;
-            DrawMemoryUsageData(audioManager.GetAudioMemoryUsage(), audioManager);
-            EditorGUI.indentLevel--;
-        }
+        EditorGUILayout.EndVertical();
     }
 
-    /// <summary>
-    /// Formats the status text with brackets and pads to fixed width for alignment.
-    /// </summary>
-    private string FormatStatusText(string status, int fixedWidth = 12)
+    private void DrawLoadedClipsSection(AudioManager audioManager)
     {
-        string text = $"[{status}]";
-        if (text.Length < fixedWidth)
+        var clips = audioManager.EditorGetLoadedClips();
+        var states = audioManager.EditorGetAudioStates();
+        var memory = audioManager.EditorGetAudioMemoryUsage();
+
+        _clipBuffer.Clear();
+        foreach (var kvp in clips) _clipBuffer.Add(kvp);
+
+        if (_clipBuffer.Count == 0)
         {
-            text = text.PadRight(fixedWidth);
+            DrawEmptyMessage("No clips loaded");
+            return;
         }
-        return text;
-    }
 
-    /// <summary>
-    /// Draws a key-value pair with the status displayed on the left side of the key.
-    /// </summary>
-    private void DrawKeyValuePair(string key, string value, Color valueColor, string memoryInfo = null)
-    {
-        EditorGUILayout.BeginVertical();
+        EditorGUILayout.BeginVertical(s_BoxStyle);
+        for (int i = 0; i < _clipBuffer.Count; i++)
         {
-            if (!keyExpandedStates.ContainsKey(key))
-            {
-                keyExpandedStates[key] = false;
-            }
-
-            string foldoutLabel = TruncateKey(key);
-            string statusText = FormatStatusText(value);
-
-            // Calculate status text width 
-            GUIStyle statusStyle = new GUIStyle(EditorStyles.label);
-            statusStyle.normal.textColor = valueColor;
-            Vector2 statusSize = statusStyle.CalcSize(new GUIContent(statusText));
-            float statusWidth = statusSize.x;
-
-            // Calculate indent width based on current indentLevel 
-            float indentWidth = EditorGUI.indentLevel * 15f;
-
-            EditorGUILayout.BeginHorizontal();
-            {
-                // Leave indent space before status label 
-                GUILayout.Space(indentWidth);
-
-                // Draw status label with exact width (no padding)
-                GUILayout.Label(statusText, statusStyle, GUILayout.Width(statusWidth));
-
-                // Create a flexible space that will automatically handle the width 
-                EditorGUILayout.BeginHorizontal(GUILayout.ExpandWidth(true));
-                {
-                    // Draw foldout with truncated key 
-                    keyExpandedStates[key] = EditorGUILayout.Foldout(keyExpandedStates[key], foldoutLabel, true);
-                }
-                EditorGUILayout.EndHorizontal();
-
-                // Add memory info if available 
-                if (!string.IsNullOrEmpty(memoryInfo))
-                {
-                    EditorGUILayout.LabelField(memoryInfo, GUILayout.Width(80));
-                }
-            }
-            EditorGUILayout.EndHorizontal();
-
-            if (keyExpandedStates[key])
-            {
-                EditorGUI.indentLevel++;
-
-                EditorGUILayout.BeginHorizontal();
-                {
-                    // Leave indent space + status text width for alignment 
-                    GUILayout.Space(indentWidth + statusWidth);
-
-                    // Vertical layout for full path label and selectable text 
-                    EditorGUILayout.BeginVertical();
-                    {
-                        EditorGUILayout.LabelField("Full Path:");
-                        EditorGUILayout.SelectableLabel(key, EditorStyles.textArea, GUILayout.Height(EditorGUIUtility.singleLineHeight * 2));
-                    }
-                    EditorGUILayout.EndVertical();
-                }
-                EditorGUILayout.EndHorizontal();
-
-                EditorGUI.indentLevel--;
-            }
+            var kvp = _clipBuffer[i];
+            states.TryGetValue(kvp.Key, out var state);
+            memory.TryGetValue(kvp.Key, out var mem);
+            DrawAudioEntry(kvp.Key, state, mem, i % 2 == 0);
         }
         EditorGUILayout.EndVertical();
-
-        EditorGUILayout.Space();
-    }
-    
-    /// <summary>
-    /// Truncates a key string to a maximum length, appending ellipsis if truncated.
-    /// </summary>
-    private string TruncateKey(string key)
-    {
-        const int maxLength = 30;
-        if (key.Length <= maxLength)
-            return key;
-
-        return key.Substring(0, maxLength) + "...";
     }
 
-    /// <summary>
-    /// Returns a color based on the audio state.
-    /// </summary>
-    private Color GetStateColor(AudioManager.AudioLoadState state)
+    private void DrawStatesSection(AudioManager audioManager)
     {
+        var states = audioManager.EditorGetAudioStates();
+        var memory = audioManager.EditorGetAudioMemoryUsage();
+
+        _stateBuffer.Clear();
+        foreach (var kvp in states) _stateBuffer.Add(kvp);
+
+        if (_stateBuffer.Count == 0)
+        {
+            DrawEmptyMessage("No audio tracked");
+            return;
+        }
+
+        EditorGUILayout.BeginVertical(s_BoxStyle);
+        for (int i = 0; i < _stateBuffer.Count; i++)
+        {
+            var kvp = _stateBuffer[i];
+            memory.TryGetValue(kvp.Key, out var mem);
+            DrawAudioEntry(kvp.Key, kvp.Value, mem, i % 2 == 0);
+        }
+        EditorGUILayout.EndVertical();
+    }
+
+    private void DrawMemorySection(AudioManager audioManager)
+    {
+        var memory = audioManager.EditorGetAudioMemoryUsage();
+        var states = audioManager.EditorGetAudioStates();
+
+        _memoryBuffer.Clear();
+        foreach (var kvp in memory) _memoryBuffer.Add(kvp);
+
+        if (_memoryBuffer.Count == 0)
+        {
+            DrawEmptyMessage("No memory tracked");
+            return;
+        }
+
+        _memoryBuffer.Sort((a, b) => b.Value.CompareTo(a.Value));
+
+        EditorGUILayout.BeginVertical(s_BoxStyle);
+        for (int i = 0; i < _memoryBuffer.Count; i++)
+        {
+            var kvp = _memoryBuffer[i];
+            states.TryGetValue(kvp.Key, out var state);
+            DrawAudioEntry(kvp.Key, state, kvp.Value, i % 2 == 0);
+        }
+        EditorGUILayout.EndVertical();
+    }
+
+    private void DrawEmptyMessage(string message)
+    {
+        EditorGUILayout.BeginVertical(s_BoxStyle);
+        EditorGUILayout.LabelField(message, EditorStyles.centeredGreyMiniLabel);
+        EditorGUILayout.EndVertical();
+    }
+
+    private void DrawAudioEntry(string path, AudioManager.AudioLoadState state, long memoryBytes, bool altRow)
+    {
+        bool isExpanded = _expandedKeys.Contains(path);
+
+        var entryRect = EditorGUILayout.BeginVertical();
+        EditorGUI.DrawRect(entryRect, altRow ? EntryBgColorA : EntryBgColorB);
+
+        // Row 1: Status icon | Filename | Memory (on separate line if expanded)
+        EditorGUILayout.BeginHorizontal();
+        {
+            // Status badge - fixed width with spacing
+            GUILayout.Space(4);
+            DrawStatusBadge(state);
+            GUILayout.Space(8);
+
+            // Filename - use remaining space with clipping
+            string filename = GetFileName(path);
+            
+            // Calculate available width for filename
+            float memoryWidth = memoryBytes > 0 ? 65f : 0f;
+            float statusWidth = 24f;
+            float spacing = 20f;
+            float availableWidth = EditorGUIUtility.currentViewWidth - statusWidth - memoryWidth - spacing - 40f;
+            
+            // Foldout with filename - offset down 2px to align with status circle
+            GUILayout.BeginVertical();
+            GUILayout.Space(2);
+            bool newExpanded = GUILayout.Toggle(isExpanded, "", EditorStyles.foldout, GUILayout.Width(12));
+            GUILayout.EndVertical();
+            EditorGUILayout.LabelField(filename, s_FileNameStyle, GUILayout.MaxWidth(Mathf.Max(100, availableWidth)));
+            
+            if (newExpanded != isExpanded)
+            {
+                if (newExpanded) _expandedKeys.Add(path);
+                else _expandedKeys.Remove(path);
+            }
+
+            // Memory - right aligned, fixed width
+            if (memoryBytes > 0)
+            {
+                GUILayout.FlexibleSpace();
+                EditorGUILayout.LabelField(memoryBytes.ToMemorySizeString(), s_MemoryStyle, GUILayout.Width(65));
+            }
+        }
+        EditorGUILayout.EndHorizontal();
+
+        // Expanded: show full path on new line
+        if (_expandedKeys.Contains(path))
+        {
+            EditorGUILayout.Space(2);
+            EditorGUI.indentLevel++;
+            EditorGUILayout.LabelField("Path:", EditorStyles.miniLabel);
+            EditorGUILayout.SelectableLabel(path, s_PathStyle, GUILayout.Height(EditorGUIUtility.singleLineHeight * 2));
+            EditorGUI.indentLevel--;
+        }
+
+        EditorGUILayout.EndVertical();
+        EditorGUILayout.Space(1);
+    }
+
+    private void DrawStatusBadge(AudioManager.AudioLoadState state)
+    {
+        GUIStyle style;
+        string label;
+
         switch (state)
         {
             case AudioManager.AudioLoadState.Loaded:
-                return Color.green;
+                style = s_StatusLoaded;
+                label = "●";
+                break;
             case AudioManager.AudioLoadState.Loading:
-                return Color.yellow;
-            case AudioManager.AudioLoadState.NotLoaded:
-                return Color.red;
+                style = s_StatusLoading;
+                label = "◐";
+                break;
             case AudioManager.AudioLoadState.Unloading:
-                return Color.yellow;
+                style = s_StatusLoading;
+                label = "◑";
+                break;
             default:
-                return Color.white;
+                style = s_StatusError;
+                label = "○";
+                break;
         }
+
+        GUILayout.Label(label, style, GUILayout.Width(16), GUILayout.Height(16));
     }
 
-    /// <summary>
-    /// Draws dictionary data with appropriate formatting.
-    /// </summary>
-    private void DrawDictionaryData<T>(Dictionary<string, T> data, string label, AudioManager audioManager)
+    private static string GetFileName(string path)
     {
-        foreach (var kvp in new List<KeyValuePair<string, T>>(data))
-        {
-            string valueText = "null";
-            Color valueColor = Color.white;
-            string memoryInfo = null;
+        if (string.IsNullOrEmpty(path)) return "(empty)";
 
-            if (kvp.Value == null)
-            {
-                valueText = "null";
-                valueColor = Color.red;
-            }
-            else if (typeof(T) == typeof(AudioClip))
-            {
-                var clip = kvp.Value as AudioClip;
-                string clipName = clip != null ? clip.name : "Null AudioClip";
+        int lastSlash = path.LastIndexOf('/');
+        if (lastSlash < 0) lastSlash = path.LastIndexOf('\\');
 
-                // Get corresponding audio state 
-                var states = audioManager.GetAudioStates();
-                AudioManager.AudioLoadState state = AudioManager.AudioLoadState.NotLoaded;
-                if (states.TryGetValue(kvp.Key, out var s))
-                {
-                    state = s;
-                }
+        if (lastSlash >= 0 && lastSlash < path.Length - 1)
+            return path.Substring(lastSlash + 1);
 
-                valueText = state.ToString();
-                valueColor = GetStateColor(state);
-
-                // Add memory info if loaded 
-                if (state == AudioManager.AudioLoadState.Loaded)
-                {
-                    audioManager.GetAudioMemoryUsage().TryGetValue(kvp.Key, out long memory);
-                    memoryInfo = memory.ToMemorySizeString();
-                }
-            }
-            else if (typeof(T) == typeof(AudioManager.AudioLoadState))
-            {
-                var state = (AudioManager.AudioLoadState)(object)kvp.Value;
-                valueText = state.ToString();
-                valueColor = GetStateColor(state);
-
-                // Add memory info if loaded 
-                if (state == AudioManager.AudioLoadState.Loaded)
-                {
-                    audioManager.GetAudioMemoryUsage().TryGetValue(kvp.Key, out long memory);
-                    memoryInfo = memory.ToMemorySizeString();
-                }
-            }
-            else
-            {
-                valueText = kvp.Value.ToString();
-                valueColor = Color.white;
-            }
-
-            DrawKeyValuePair(kvp.Key, valueText, valueColor, memoryInfo);
-        }
-    }
-
-    /// <summary>
-    /// Draws memory usage data in a detailed view.
-    /// </summary>
-    private void DrawMemoryUsageData(Dictionary<string, long> memoryUsage, AudioManager audioManager)
-    {
-        // Sort by memory usage (descending)
-        var sortedUsage = new List<KeyValuePair<string, long>>(memoryUsage);
-        sortedUsage.Sort((a, b) => b.Value.CompareTo(a.Value));
-
-        foreach (var kvp in sortedUsage)
-        {
-            string memoryText = kvp.Value.ToMemorySizeString();
-            string stateText = "Unknown";
-            Color stateColor = Color.white;
-
-            // Get the state for coloring 
-            if (audioManager.GetAudioStates().TryGetValue(kvp.Key, out var state))
-            {
-                stateText = state.ToString();
-                stateColor = GetStateColor(state);
-            }
-
-            DrawKeyValuePair(kvp.Key, stateText, stateColor, memoryText);
-        }
+        return path;
     }
 }

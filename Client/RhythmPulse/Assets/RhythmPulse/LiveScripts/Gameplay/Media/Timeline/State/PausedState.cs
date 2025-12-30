@@ -1,21 +1,14 @@
-﻿using CycloneGames.Logger;
-
-namespace RhythmPulse.Media
-{    
-    public class PausedState : TimelineState
+﻿namespace RhythmPulse.Media
+{
+    public sealed class PausedState : TimelineState
     {
         public PausedState(Timeline timeline) : base(timeline) { }
 
         public override void OnEnter()
         {
-            CLogger.LogInfo("[Timeline] Enter Paused State");
-            
-            _timeline.OnPausedPlayAction?.Invoke();
+            Timeline.RaisePausedPlay();
         }
 
-        public override void OnExit()
-        {
-            CLogger.LogInfo("[Timeline] Exit Paused State");
-        }
+        public override void OnExit() { }
     }
 }

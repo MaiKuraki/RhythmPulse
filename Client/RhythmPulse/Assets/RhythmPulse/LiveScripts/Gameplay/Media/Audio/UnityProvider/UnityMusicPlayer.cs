@@ -1,81 +1,103 @@
+using System;
 using CycloneGames.Factory.Runtime;
 using RhythmPulse.Audio;
 
 namespace RhythmPulse.Media
 {
-    public class UnityMusicPlayer : IUnityMusicPlayer
+    public sealed class UnityMusicPlayer : IUnityMusicPlayer, IDisposable
     {
-        private const string DEBUG_FLAG = "[GameplayMusicPlayer] ";
-        private IUnityObjectSpawner spawner;
-        private IAudioLoadService audioLoadService;
-        private IFactory<GameAudioSource> audioSourceFactory;
-        private IMemoryPool<GameAudioData, GameAudioSource> GameplayMusicPlayerSpawner;
+        private readonly IUnityObjectSpawner _spawner;
+        private readonly IAudioLoadService _audioLoadService;
+        private readonly IFactory<GameAudioSource> _audioSourceFactory;
+        private readonly IMemoryPool<GameAudioData, GameAudioSource> _musicPlayerPool;
 
-        private GameAudioSource MusicPlayer;
-        public bool IsAnyAudioInitialized { get; private set; } = false;
+        private GameAudioSource _musicPlayer;
+        private bool _isDisposed;
 
-        public UnityMusicPlayer(IUnityObjectSpawner spawner, IAudioLoadService audioLoadService, IFactory<GameAudioSource> audioSourceFactory)
+        public bool IsAnyAudioInitialized { get; private set; }
+
+        public UnityMusicPlayer(
+            IUnityObjectSpawner spawner, 
+            IAudioLoadService audioLoadService, 
+            IFactory<GameAudioSource> audioSourceFactory)
         {
-            this.spawner = spawner;
-            this.audioLoadService = audioLoadService;
-            this.audioSourceFactory = audioSourceFactory;
-
-            GameplayMusicPlayerSpawner = new ObjectPool<GameAudioData, GameAudioSource>(audioSourceFactory, 5);
-            IsAnyAudioInitialized = false;
+            _spawner = spawner;
+            _audioLoadService = audioLoadService;
+            _audioSourceFactory = audioSourceFactory;
+            _musicPlayerPool = new ObjectPool<GameAudioData, GameAudioSource>(audioSourceFactory, 5);
         }
 
         public void InitializeMusicPlayer(in string InAudioKey, bool bLoop = false)
         {
-            if (MusicPlayer != null)
+            if (_musicPlayer != null)
             {
-                MusicPlayer.Dispose();
+                _musicPlayer.Dispose();
+                _musicPlayer = null;
             }
-            MusicPlayer = GameplayMusicPlayerSpawner.Spawn(new GameAudioData() { Key = InAudioKey });
-            MusicPlayer.SetLoop(bLoop);
+
+            _musicPlayer = _musicPlayerPool.Spawn(new GameAudioData { Key = InAudioKey });
+            _musicPlayer.SetLoop(bLoop);
             IsAnyAudioInitialized = true;
         }
 
         public void Play()
         {
-            if (!IsAnyAudioInitialized) return;
-            MusicPlayer.Play();
+            if (!IsAnyAudioInitialized || _musicPlayer == null) return;
+            _musicPlayer.Play();
         }
 
         public void Stop()
         {
-            if (!IsAnyAudioInitialized) return;
-            MusicPlayer.Stop();
-            GameplayMusicPlayerSpawner.Despawn(MusicPlayer);
-            MusicPlayer = null;
+            if (!IsAnyAudioInitialized || _musicPlayer == null) return;
+            
+            _musicPlayer.Stop();
+            _musicPlayerPool.Despawn(_musicPlayer);
+            _musicPlayer = null;
             IsAnyAudioInitialized = false;
         }
 
         public void Pause()
         {
-            if (!IsAnyAudioInitialized) return;
-            MusicPlayer.Pause();
+            if (!IsAnyAudioInitialized || _musicPlayer == null) return;
+            _musicPlayer.Pause();
         }
 
         public void Resume()
         {
-            if (!IsAnyAudioInitialized) return;
-            MusicPlayer.Resume();
+            if (!IsAnyAudioInitialized || _musicPlayer == null) return;
+            _musicPlayer.Resume();
         }
 
         public long GetPlaybackTimeMSec()
         {
-            return MusicPlayer ? MusicPlayer.GetPlaybackTimeMSec() : 0;
+            if (_musicPlayer == null) return 0;
+            return _musicPlayer.GetPlaybackTimeMSec();
         }
 
         public void SeekTime(long milliSeconds)
         {
-            if (!IsAnyAudioInitialized) return;
-            MusicPlayer.SeekTime(milliSeconds);
+            if (!IsAnyAudioInitialized || _musicPlayer == null) return;
+            _musicPlayer.SeekTime(milliSeconds);
         }
 
         public long GetMediaDurationMSec()
         {
-            return MusicPlayer ? MusicPlayer.GetAudioClipLengthMSec() : 0;
+            if (_musicPlayer == null) return 0;
+            return _musicPlayer.GetAudioClipLengthMSec();
+        }
+
+        public void Dispose()
+        {
+            if (_isDisposed) return;
+            _isDisposed = true;
+
+            if (_musicPlayer != null)
+            {
+                _musicPlayer.Dispose();
+                _musicPlayer = null;
+            }
+
+            IsAnyAudioInitialized = false;
         }
     }
 }

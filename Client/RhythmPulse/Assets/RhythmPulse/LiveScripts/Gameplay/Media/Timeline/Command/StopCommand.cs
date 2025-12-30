@@ -1,21 +1,21 @@
 ﻿namespace RhythmPulse.Media
 {
-    public class StopCommand : ITimelineCommand
+    public sealed class StopCommand : ITimelineCommand
     {
-        private Timeline _timeline;
+        private readonly Timeline _timeline;
+
         public StopCommand(Timeline timeline)
         {
             _timeline = timeline;
         }
+
         public void Execute()
         {
-            if (_timeline.State != _timeline.StoppedState)
-            {
-                _timeline?.UnityMusicPlayer?.Stop();
-                // _timeline.AudioPlayer.SFXPauseEvent?.Invoke();
-                _timeline?.UnityVideoPlayer?.Stop();
-                _timeline.ChangeState(_timeline.StoppedState);
-            }
+            if (_timeline.State == _timeline.StoppedState) return;
+
+            _timeline.UnityMusicPlayer?.Stop();
+            _timeline.UnityVideoPlayer?.Stop();
+            _timeline.ChangeState(_timeline.StoppedState);
         }
     }
 }

@@ -7,53 +7,41 @@ using UnityEngine.Video;
 
 namespace RhythmPulse.Media
 {
-    /// <summary>
-    /// Implementation of IUnityVideoPlayer using Unity VideoPlayer.
-    /// </summary>
     [RequireComponent(typeof(VideoPlayer))]
-    public class UnityVideoProvider : MonoBehaviour, IUnityVideoPlayer
+    public sealed class UnityVideoProvider : MonoBehaviour, IUnityVideoPlayer
     {
-        private const string DEBUG_FLAG = "[UnityVideoProvider]";
-
         [Header("Video Settings")]
-        [Tooltip("Target resolution for the RenderTextures. On low-end devices, this may be automatically downscaled.")]
-        public Vector2Int textureResolution = new Vector2Int(1920, 1080);
-        public RenderTextureFormat textureFormat = RenderTextureFormat.ARGB32;
-        public int depthBuffer = 0;
-        public FilterMode filterMode = FilterMode.Bilinear;
-        public VideoTimeUpdateMode timeUpdateMode = VideoTimeUpdateMode.DSPTime;
-
-        [Tooltip("On low-end devices (mobile), drop frames to maintain sync.")]
-        public bool skipOnDrop = true;
-
-        [Tooltip("If true, automatically reduces texture resolution on devices with low system memory (< 4GB).")]
-        public bool autoDownscaleOnLowEnd = true;
+        [SerializeField] private Vector2Int textureResolution = new Vector2Int(1920, 1080);
+        [SerializeField] private RenderTextureFormat textureFormat = RenderTextureFormat.ARGB32;
+        [SerializeField] private int depthBuffer = 0;
+        [SerializeField] private FilterMode filterMode = FilterMode.Bilinear;
+        [SerializeField] private VideoTimeUpdateMode timeUpdateMode = VideoTimeUpdateMode.DSPTime;
+        [SerializeField] private bool skipOnDrop = true;
+        [SerializeField] private bool autoDownscaleOnLowEnd = true;
 
         [Header("Audio Settings")]
-        [Tooltip("If true, video audio will be directed to an AudioSource (if attached) or Direct.")]
-        public bool enableAudio = false;
-        [Range(0f, 1f)]
-        public float defaultVolume = 1.0f;
+        [SerializeField] private bool enableAudio = false;
+        [SerializeField, Range(0f, 1f)] private float defaultVolume = 1.0f;
 
         [Header("Seek Settings")]
-        public bool cancelStandbyPrepareOnSeekSameUrl = true;
-        public int seekTimeoutMs = 2000;
+        [SerializeField] private bool cancelStandbyPrepareOnSeekSameUrl = true;
+        [SerializeField] private int seekTimeoutMs = 2000;
 
         [Header("Prepare Settings")]
-        // Delays to mitigate freezing on mobile platforms during preparation
-        public int preparePreDelayMs = 100;
-        public int internalStopToPrepareDelayMs = 100;
-        public int preparePostDelayMs = 50;
-        public int prepareTimeoutMs = 8000; // Increased for web/network streams
+        [SerializeField] private int preparePreDelayMs = 100;
+        [SerializeField] private int internalStopToPrepareDelayMs = 100;
+        [SerializeField] private int preparePostDelayMs = 50;
+        [SerializeField] private int prepareTimeoutMs = 8000;
 
         [Header("Retry Settings")]
-        public int maxPrepareRetries = 2;
-        public int prepareRetryDelayMs = 500;
+        [SerializeField] private int maxPrepareRetries = 2;
+        [SerializeField] private int prepareRetryDelayMs = 500;
 
-        private VideoPlayer[] _videoPlayers = new VideoPlayer[2];
+        // Double-buffer video players
+        private VideoPlayer[] _videoPlayers;
         private VideoPlayer _currentVideoPlayer;
         private VideoPlayer _standbyVideoPlayer;
-        private RenderTexture[] _renderTextures = new RenderTexture[2];
+        private RenderTexture[] _renderTextures;
 
         private RenderTexture _currentVideoTexture;
         private RenderTexture _previousFrameTexture;
@@ -61,24 +49,32 @@ namespace RhythmPulse.Media
         public RenderTexture CurrentVideoTexture => _currentVideoTexture;
         public RenderTexture PreviousFrameTexture => _previousFrameTexture;
 
-        // Cancellation Handling
+        // Cancellation handling
         private CancellationTokenSource _masterPrepareCts;
+        private CancellationTokenSource _seekCts;
         private Action _currentUserOnPreparedCallback;
         private string _currentVideoUrlBeingPreparedOnStandby;
-        private CancellationToken _activeAsyncOperationToken = CancellationToken.None;
-        private CancellationTokenSource _seekCts;
+        private CancellationToken _activeAsyncOperationToken;
 
-        // Helper for low-end detection
-        private bool _isLowEndDevice = false;
-        // Backup original resolution to support toggling low-end mode
+        // Cached event handlers to avoid lambda allocation
+        private VideoPlayer.EventHandler _onPrepareCompleted;
+        private VideoPlayer.ErrorEventHandler _onErrorReceived;
+        private UniTaskCompletionSource<bool> _prepareCompletionSource;
+        private string _preparingUrl;
+
+        // State
         private Vector2Int _baseTextureResolution;
-
-        // Cached duration to avoid native calls
-        private long _cachedDurationMs = 0;
+        private long _cachedDurationMs;
+        private bool _isLowEndDevice;
 
         private void Awake()
         {
             _baseTextureResolution = textureResolution;
+            
+            // Cache event handlers once (zero-GC)
+            _onPrepareCompleted = OnPrepareCompletedHandler;
+            _onErrorReceived = OnErrorReceivedHandler;
+            
             CheckLowEndDevice();
             InitializePlayers();
             AdjustDelayForPlatform();
@@ -86,46 +82,37 @@ namespace RhythmPulse.Media
 
         private void CheckLowEndDevice()
         {
-            // Simple heuristic: System Memory < 4GB or typical mobile GPU limits could be used.
-            // Here we assume < 4GB RAM implies a lower-end device.
             if (SystemInfo.systemMemorySize > 0 && SystemInfo.systemMemorySize < 4096)
             {
                 _isLowEndDevice = true;
             }
 
-            // Apply settings
             if (_isLowEndDevice && autoDownscaleOnLowEnd)
             {
-                textureResolution = _baseTextureResolution / 2;
-                CLogger.LogInfo($"{DEBUG_FLAG} Low-end device detected & AutoDownscale enabled. Resolution set to {textureResolution}");
+                textureResolution = new Vector2Int(_baseTextureResolution.x / 2, _baseTextureResolution.y / 2);
             }
             else
             {
-                // Ensure we restore or keep original if condition not met
                 textureResolution = _baseTextureResolution;
             }
         }
 
         private void InitializePlayers()
         {
-            _videoPlayers = GetComponents<VideoPlayer>();
+            var existingPlayers = GetComponents<VideoPlayer>();
+            int existingCount = existingPlayers.Length;
 
-            // Ensure we have exactly 2 players
-            if (_videoPlayers.Length < 2)
-            {
-                int missing = 2 - _videoPlayers.Length;
-                var currentList = new System.Collections.Generic.List<VideoPlayer>(_videoPlayers);
-                for (int i = 0; i < missing; i++)
-                {
-                    currentList.Add(gameObject.AddComponent<VideoPlayer>());
-                }
-                _videoPlayers = currentList.ToArray();
-            }
+            // Pre-allocate fixed array (zero GC after init)
+            _videoPlayers = new VideoPlayer[2];
+            _renderTextures = new RenderTexture[2];
+
+            // Use existing or add new players
+            _videoPlayers[0] = existingCount > 0 ? existingPlayers[0] : gameObject.AddComponent<VideoPlayer>();
+            _videoPlayers[1] = existingCount > 1 ? existingPlayers[1] : gameObject.AddComponent<VideoPlayer>();
 
             _currentVideoPlayer = _videoPlayers[0];
             _standbyVideoPlayer = _videoPlayers[1];
 
-            // Create textures
             CreateAndAssignTargetTexture(0, ref _renderTextures[0], _currentVideoPlayer);
             CreateAndAssignTargetTexture(1, ref _renderTextures[1], _standbyVideoPlayer);
 
@@ -145,41 +132,23 @@ namespace RhythmPulse.Media
             player.playOnAwake = false;
             player.renderMode = VideoRenderMode.RenderTexture;
             player.targetTexture = targetTexture;
-            player.waitForFirstFrame = false; // Important for async handling
+            player.waitForFirstFrame = false;
             player.isLooping = false;
 
-            // Audio Configuration
             if (enableAudio)
             {
                 player.audioOutputMode = VideoAudioOutputMode.Direct;
                 player.SetDirectAudioVolume(0, defaultVolume);
-                // Note: If you need AudioSource routing, change to VideoAudioOutputMode.AudioSource 
-                // and assign player.SetTargetAudioSource(0, yourSource);
             }
             else
             {
                 player.audioOutputMode = VideoAudioOutputMode.None;
             }
 
-            try
-            {
-                player.Stop();
-            }
-            catch
-            {
-                // VideoPlayer may be in invalid state, continue anyway
-            }
-
-            // Events
-            try
-            {
-                player.loopPointReached -= OnVideoLoopPointReachedHandler;
-                player.loopPointReached += OnVideoLoopPointReachedHandler;
-            }
-            catch
-            {
-                // VideoPlayer may be in invalid state, ignore
-            }
+            SafeStopPlayer(player);
+            
+            player.loopPointReached -= OnVideoLoopPointReachedHandler;
+            player.loopPointReached += OnVideoLoopPointReachedHandler;
         }
 
         private void CreateAndAssignTargetTexture(int index, ref RenderTexture textureField, VideoPlayer targetPlayer)
@@ -189,115 +158,86 @@ namespace RhythmPulse.Media
             textureField = new RenderTexture(textureResolution.x, textureResolution.y, depthBuffer, textureFormat)
             {
                 filterMode = filterMode,
-                name = $"UnityVideoRT_{index}",
-                autoGenerateMips = false, // Disable mips for video to save memory/perf
+                name = index == 0 ? "UnityVideoRT_0" : "UnityVideoRT_1",
+                autoGenerateMips = false,
                 useMipMap = false
             };
 
             if (!textureField.Create())
             {
-                CLogger.LogError($"{DEBUG_FLAG} Failed to create RenderTexture {index}.");
+                CLogger.LogError("[UnityVideoProvider] Failed to create RenderTexture");
                 return;
             }
 
-            if (targetPlayer != null)
-            {
-                targetPlayer.targetTexture = textureField;
-            }
+            if (targetPlayer != null) targetPlayer.targetTexture = textureField;
         }
 
         public void InitializeVideoPlayer(in string videoUrl, bool bLoop = false, Action OnPrepared = null)
         {
+            _currentUserOnPreparedCallback = OnPrepared;
             InitializeVideoPlayerAsync(videoUrl, bLoop).Forget(e =>
             {
                 if (e is not OperationCanceledException)
-                {
-                    CLogger.LogError($"{DEBUG_FLAG} InitializeVideoPlayer failed: {e}");
-                }
+                    CLogger.LogError("[UnityVideoProvider] InitializeVideoPlayer failed: " + e.Message);
             });
         }
 
-        // Unified Async Entry Point
         public async UniTask InitializeVideoPlayerAsync(string videoUrl, bool bLoop = false, CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrEmpty(videoUrl))
             {
-                CLogger.LogError($"{DEBUG_FLAG} Video URL is empty.");
+                CLogger.LogError("[UnityVideoProvider] Video URL is empty");
                 return;
             }
 
-            // Check if already playing/prepared on current
-            if (_currentVideoPlayer != null && _currentVideoPlayer.url == videoUrl && _currentVideoPlayer.isPrepared &&
+            // Already prepared on current player
+            if (_currentVideoPlayer != null && 
+                _currentVideoPlayer.url == videoUrl && 
+                _currentVideoPlayer.isPrepared &&
                 !(_currentVideoUrlBeingPreparedOnStandby == videoUrl && IsStandbyActivelyPreparing()))
             {
                 _currentUserOnPreparedCallback?.Invoke();
                 return;
             }
 
-            // Check if already preparing on standby
-            if (IsStandbyActivelyPreparing() && _currentVideoUrlBeingPreparedOnStandby == videoUrl)
-            {
-                // If calling Async, we usually await the existing task, but here we just join the state.
-                // For simplicity, we let the new call take over or piggyback. 
-                // But to ensure strict contract, we'll cancel old and start new for full control.
-            }
+            CancelCurrentMasterPreparation(true);
 
-            CancelCurrentMasterPreparation(true, "New Request");
-
-            // Setup new context
             _masterPrepareCts = new CancellationTokenSource();
             _currentVideoUrlBeingPreparedOnStandby = videoUrl;
 
-            // Create linked token (Destroy + Global Cancel + Param Token)
             var linkedSource = CancellationTokenSource.CreateLinkedTokenSource(
                 _masterPrepareCts.Token,
                 this.GetCancellationTokenOnDestroy(),
                 cancellationToken
             );
 
-            var capturedToken = linkedSource.Token; // Capture token before disposal risk
+            var capturedToken = linkedSource.Token;
             _activeAsyncOperationToken = capturedToken;
 
             try
             {
-                // Check if standby player is valid before starting preparation
                 if (_standbyVideoPlayer == null)
                 {
-                    CLogger.LogError($"{DEBUG_FLAG} Standby VideoPlayer is null. Cannot prepare video: {videoUrl}");
+                    CLogger.LogError("[UnityVideoProvider] Standby VideoPlayer is null");
                     return;
                 }
 
                 await LaunchMasterPrepareAsync(_standbyVideoPlayer, videoUrl, bLoop, capturedToken);
-                // Callback is invoked inside LaunchMasterPrepareAsync upon success
             }
             finally
             {
                 linkedSource.Dispose();
-                // Use local variable capturedToken instead of linkedSource.Token to avoid ObjectDisposedException
-                if (_activeAsyncOperationToken == capturedToken)
+                if (_activeAsyncOperationToken.Equals(capturedToken))
                 {
-                    _activeAsyncOperationToken = CancellationToken.None;
+                    _activeAsyncOperationToken = default;
                     _currentVideoUrlBeingPreparedOnStandby = null;
                 }
             }
         }
 
-        // Original Callback-style overload (mapped to Async)
-        void IUnityVideoPlayer.InitializeVideoPlayer(in string videoUrl, bool bLoop, Action OnPrepared)
-        {
-            // We store the callback to be invoked by the async process
-            _currentUserOnPreparedCallback = OnPrepared;
-            InitializeVideoPlayerAsync(videoUrl, bLoop).Forget();
-        }
-
         private async UniTask LaunchMasterPrepareAsync(VideoPlayer player, string url, bool loop, CancellationToken token)
         {
-            // Check if player is valid before starting
-            if (player == null)
-            {
-                CLogger.LogWarning($"{DEBUG_FLAG} VideoPlayer is null, cannot prepare '{url}'. Operation cancelled.");
-                return;
-            }
+            if (player == null) return;
 
             bool success = false;
             int attempt = 0;
@@ -305,44 +245,33 @@ namespace RhythmPulse.Media
             while (attempt <= maxPrepareRetries && !success)
             {
                 token.ThrowIfCancellationRequested();
-                
-                // Check if player is still valid (may have been destroyed during scene transition)
-                if (player == null)
-                {
-                    CLogger.LogWarning($"{DEBUG_FLAG} VideoPlayer was destroyed during preparation. Operation cancelled.");
-                    break;
-                }
+                if (player == null) break;
 
-                if (attempt > 0) await UniTask.Delay(prepareRetryDelayMs, cancellationToken: token);
+                if (attempt > 0)
+                    await UniTask.Delay(prepareRetryDelayMs, cancellationToken: token);
 
                 var status = await TryPrepareAttemptAsync(player, url, loop, token);
 
                 if (status == PrepareAttemptStatus.Success)
                 {
-                    // Check player is still valid before swapping
                     if (player != null)
                     {
                         PerformSwap(player);
                         success = true;
                         _currentUserOnPreparedCallback?.Invoke();
                     }
-                    else
-                    {
-                        CLogger.LogWarning($"{DEBUG_FLAG} VideoPlayer was destroyed after successful preparation. Cannot swap.");
-                        break;
-                    }
+                    break;
                 }
                 else if (status == PrepareAttemptStatus.Error || status == PrepareAttemptStatus.Cancelled)
                 {
                     break;
                 }
-                // Timeout -> Retry
                 attempt++;
             }
 
             if (!success && !token.IsCancellationRequested)
             {
-                CLogger.LogError($"{DEBUG_FLAG} Failed to prepare '{url}' after retries.");
+                CLogger.LogError("[UnityVideoProvider] Failed to prepare video after retries");
             }
         }
 
@@ -350,143 +279,100 @@ namespace RhythmPulse.Media
 
         private async UniTask<PrepareAttemptStatus> TryPrepareAttemptAsync(VideoPlayer player, string url, bool loop, CancellationToken token)
         {
-            var completionSource = new UniTaskCompletionSource<bool>();
-
-            // Local event handlers to avoid leaks and allocations
-            VideoPlayer.EventHandler onPrepare = (source) =>
-            {
-                // Check if player is still valid and matches
-                if (player != null && source == player && source.url == url)
-                {
-                    completionSource.TrySetResult(true);
-                }
-            };
-
-            VideoPlayer.ErrorEventHandler onError = (source, msg) =>
-            {
-                // Check if player is still valid and matches
-                if (player != null && source == player)
-                {
-                    CLogger.LogError($"{DEBUG_FLAG} Video Error: {msg}");
-                    completionSource.TrySetResult(false);
-                }
-            };
+            _prepareCompletionSource = new UniTaskCompletionSource<bool>();
+            _preparingUrl = url;
 
             try
             {
-                // Check if player is still valid (may have been destroyed during scene transition)
-                if (player == null)
-                {
-                    CLogger.LogWarning($"{DEBUG_FLAG} VideoPlayer is null, cannot prepare. Operation cancelled.");
-                    return PrepareAttemptStatus.Cancelled;
-                }
+                if (player == null) return PrepareAttemptStatus.Cancelled;
 
-                // Platform specific delays
-                if (preparePreDelayMs > 0) await UniTask.Delay(preparePreDelayMs, cancellationToken: token);
+                if (preparePreDelayMs > 0)
+                    await UniTask.Delay(preparePreDelayMs, cancellationToken: token);
 
-                // Check again after delay (player may have been destroyed)
-                if (player == null)
-                {
-                    return PrepareAttemptStatus.Cancelled;
-                }
+                if (player == null) return PrepareAttemptStatus.Cancelled;
 
-                player.Stop();
-                player.url = null; // Reset URL to force fresh state
+                SafeStopPlayer(player);
+                player.url = null;
 
-                // Ensure Texture is valid
                 if (player.targetTexture == null || !player.targetTexture.IsCreated())
                 {
-                    // Should ideally recreate, but we'll assume InitializePlayers handled it.
-                    // Log and fail safely.
-                    CLogger.LogError($"{DEBUG_FLAG} TargetTexture missing/released. Cannot prepare.");
+                    CLogger.LogError("[UnityVideoProvider] TargetTexture missing");
                     return PrepareAttemptStatus.Error;
                 }
 
-                if (internalStopToPrepareDelayMs > 0) await UniTask.Delay(internalStopToPrepareDelayMs, cancellationToken: token);
-                else await UniTask.Yield(PlayerLoopTiming.Update, token);
+                if (internalStopToPrepareDelayMs > 0)
+                    await UniTask.Delay(internalStopToPrepareDelayMs, cancellationToken: token);
+                else
+                    await UniTask.Yield(PlayerLoopTiming.Update, token);
 
-                // Check again after delay
-                if (player == null)
-                {
-                    return PrepareAttemptStatus.Cancelled;
-                }
+                if (player == null) return PrepareAttemptStatus.Cancelled;
 
                 player.source = VideoSource.Url;
                 player.url = url;
                 player.isLooping = loop;
-                player.prepareCompleted += onPrepare;
-                player.errorReceived += onError;
+                
+                // Use cached handlers (zero allocation)
+                player.prepareCompleted += _onPrepareCompleted;
+                player.errorReceived += _onErrorReceived;
 
                 player.Prepare();
 
-                // Wait with timeout
-                bool result = await completionSource.Task.Timeout(TimeSpan.FromMilliseconds(prepareTimeoutMs));
+                bool result = await _prepareCompletionSource.Task.Timeout(TimeSpan.FromMilliseconds(prepareTimeoutMs));
                 return result ? PrepareAttemptStatus.Success : PrepareAttemptStatus.Error;
             }
             catch (TimeoutException)
             {
-                // CLogger.LogWarning($"{DEBUG_FLAG} Prepare timeout for {url}");
-                if (player != null) player.Stop();
+                SafeStopPlayer(player);
                 return PrepareAttemptStatus.Timeout;
             }
             catch (OperationCanceledException)
             {
-                if (player != null) player.Stop();
+                SafeStopPlayer(player);
                 return PrepareAttemptStatus.Cancelled;
             }
             catch (Exception ex)
             {
-                CLogger.LogError($"{DEBUG_FLAG} Prepare exception: {ex}");
-                if (player != null) player.Stop();
+                CLogger.LogError("[UnityVideoProvider] Prepare exception: " + ex.Message);
+                SafeStopPlayer(player);
                 return PrepareAttemptStatus.Error;
             }
             finally
             {
-                // Safely remove event handlers only if player still exists
                 if (player != null)
                 {
-                    try
-                    {
-                        player.prepareCompleted -= onPrepare;
-                        player.errorReceived -= onError;
-                    }
-                    catch
-                    {
-                        // Player may have been destroyed, ignore
-                    }
+                    player.prepareCompleted -= _onPrepareCompleted;
+                    player.errorReceived -= _onErrorReceived;
                 }
+                _preparingUrl = null;
             }
+        }
+
+        // Cached event handlers (zero allocation)
+        private void OnPrepareCompletedHandler(VideoPlayer source)
+        {
+            if (source != null && source.url == _preparingUrl)
+                _prepareCompletionSource?.TrySetResult(true);
+        }
+
+        private void OnErrorReceivedHandler(VideoPlayer source, string msg)
+        {
+            CLogger.LogError("[UnityVideoProvider] Video Error: " + msg);
+            _prepareCompletionSource?.TrySetResult(false);
         }
 
         private void PerformSwap(VideoPlayer newPlayer)
         {
-            // Check if current player is valid before accessing
             if (_currentVideoPlayer != null && _currentVideoPlayer.isPlaying)
-            {
-                try
-                {
-                    _currentVideoPlayer.Pause();
-                }
-                catch
-                {
-                    // VideoPlayer may have been destroyed, ignore
-                }
-            }
+                SafePausePlayer(_currentVideoPlayer);
 
-            // Swap references
             var oldPlayer = _currentVideoPlayer;
             _currentVideoPlayer = newPlayer;
             _standbyVideoPlayer = oldPlayer;
 
-            // Cache duration for the new player
             if (_currentVideoPlayer != null && _currentVideoPlayer.isPrepared)
-            {
                 _cachedDurationMs = (long)(_currentVideoPlayer.length * 1000);
-            }
             else
-            {
                 _cachedDurationMs = 0;
-            }
 
             if (_currentVideoPlayer.targetTexture == _renderTextures[0])
             {
@@ -508,10 +394,10 @@ namespace RhythmPulse.Media
 
         public void Stop()
         {
-            CancelCurrentMasterPreparation(true, "Stop");
-            _seekCts?.Cancel();
-            _currentVideoPlayer?.Stop();
-            _standbyVideoPlayer?.Stop();
+            CancelCurrentMasterPreparation(true);
+            CancelSeek();
+            SafeStopPlayer(_currentVideoPlayer);
+            SafeStopPlayer(_standbyVideoPlayer);
         }
 
         public void Pause()
@@ -530,9 +416,7 @@ namespace RhythmPulse.Media
         {
             defaultVolume = Mathf.Clamp01(volume);
             if (enableAudio && _currentVideoPlayer != null)
-            {
                 _currentVideoPlayer.SetDirectAudioVolume(0, defaultVolume);
-            }
         }
 
         public long GetPlaybackTimeMSec()
@@ -541,63 +425,73 @@ namespace RhythmPulse.Media
             return (long)(_currentVideoPlayer.time * 1000.0);
         }
 
-        public void SeekTime(long milliSeconds)
+        public long GetMediaDurationMSec()
         {
-            if (_currentVideoPlayer == null || !_currentVideoPlayer.isPrepared || !_currentVideoPlayer.canSetTime) return;
-
-            // Check standby conflict
-            if (cancelStandbyPrepareOnSeekSameUrl && IsStandbyActivelyPreparing() && _currentVideoUrlBeingPreparedOnStandby == _currentVideoPlayer.url)
-            {
-                CancelCurrentMasterPreparation(true, "Seek Conflict");
-            }
-
-            _seekCts?.Cancel();
-            _seekCts?.Dispose();
-            _seekCts = new CancellationTokenSource();
-            var token = CancellationTokenSource.CreateLinkedTokenSource(_seekCts.Token, this.GetCancellationTokenOnDestroy()).Token;
-
-            SeekInternalAsync(milliSeconds, token).Forget();
+            if (_currentVideoPlayer == null || !_currentVideoPlayer.isPrepared) return 0;
+            return _cachedDurationMs;
         }
 
-        private async UniTask SeekInternalAsync(long ms, CancellationToken token)
+        public void SeekTime(long milliSeconds)
+        {
+            if (_currentVideoPlayer == null || !_currentVideoPlayer.isPrepared || !_currentVideoPlayer.canSetTime)
+                return;
+
+            if (cancelStandbyPrepareOnSeekSameUrl && 
+                IsStandbyActivelyPreparing() && 
+                _currentVideoUrlBeingPreparedOnStandby == _currentVideoPlayer.url)
+            {
+                CancelCurrentMasterPreparation(true);
+            }
+
+            CancelSeek();
+            _seekCts = new CancellationTokenSource();
+            
+            var linkedSource = CancellationTokenSource.CreateLinkedTokenSource(
+                _seekCts.Token, 
+                this.GetCancellationTokenOnDestroy()
+            );
+
+            SeekInternalAsync(milliSeconds, linkedSource).Forget();
+        }
+
+        private async UniTaskVoid SeekInternalAsync(long ms, CancellationTokenSource linkedSource)
         {
             try
             {
-                double time = ms / 1000.0;
-                _currentVideoPlayer.time = time;
-                // Wait for seek completion implicitly or via event if strict sync needed.
-                // For high perf/responsiveness, setting .time is usually enough, but on some platforms explicit Seek is better.
-                // Unity VideoPlayer handles .time set as a Seek.
+                _currentVideoPlayer.time = ms / 1000.0;
+                await UniTask.Yield();
             }
             catch (Exception ex)
             {
-                CLogger.LogError($"{DEBUG_FLAG} Seek error: {ex}");
+                if (ex is not OperationCanceledException)
+                    CLogger.LogError("[UnityVideoProvider] Seek error: " + ex.Message);
             }
-            await UniTask.Yield(); // suppress warning
+            finally
+            {
+                linkedSource.Dispose();
+            }
         }
 
-        private void CancelCurrentMasterPreparation(bool stopStandby, string reason)
+        private void CancelCurrentMasterPreparation(bool stopStandby)
         {
             _masterPrepareCts?.Cancel();
             _masterPrepareCts?.Dispose();
             _masterPrepareCts = null;
 
-            if (stopStandby && _standbyVideoPlayer != null)
-            {
-                try
-                {
-                    _standbyVideoPlayer.Stop();
-                }
-                catch
-                {
-                    // VideoPlayer may have been destroyed, ignore
-                }
-            }
+            if (stopStandby)
+                SafeStopPlayer(_standbyVideoPlayer);
+        }
+
+        private void CancelSeek()
+        {
+            _seekCts?.Cancel();
+            _seekCts?.Dispose();
+            _seekCts = null;
         }
 
         private bool IsStandbyActivelyPreparing()
         {
-            return _activeAsyncOperationToken != CancellationToken.None && !_activeAsyncOperationToken.IsCancellationRequested;
+            return _activeAsyncOperationToken != default && !_activeAsyncOperationToken.IsCancellationRequested;
         }
 
         private void AdjustDelayForPlatform()
@@ -608,9 +502,20 @@ namespace RhythmPulse.Media
             preparePostDelayMs = 0;
 #endif
 #if UNITY_WEBGL
-            // WebGL specific adjustments
-            prepareTimeoutMs = 15000; // Network loading can be slower
+            prepareTimeoutMs = 15000;
 #endif
+        }
+
+        private void SafeStopPlayer(VideoPlayer player)
+        {
+            if (player == null) return;
+            try { player.Stop(); } catch { }
+        }
+
+        private void SafePausePlayer(VideoPlayer player)
+        {
+            if (player == null) return;
+            try { player.Pause(); } catch { }
         }
 
         private void ReleaseRenderTexture(ref RenderTexture rt, VideoPlayer player)
@@ -624,42 +529,26 @@ namespace RhythmPulse.Media
             }
         }
 
-        private void OnVideoLoopPointReachedHandler(VideoPlayer source)
-        {
-            // Handle looping logic if needed, or events
-        }
+        private void OnVideoLoopPointReachedHandler(VideoPlayer source) { }
 
         private void OnDestroy()
         {
-            CancelCurrentMasterPreparation(false, "Destroy");
-            _seekCts?.Cancel();
-            _seekCts?.Dispose();
+            CancelCurrentMasterPreparation(false);
+            CancelSeek();
 
-            ReleaseRenderTexture(ref _renderTextures[0], _videoPlayers != null && _videoPlayers.Length > 0 ? _videoPlayers[0] : null);
-            ReleaseRenderTexture(ref _renderTextures[1], _videoPlayers != null && _videoPlayers.Length > 1 ? _videoPlayers[1] : null);
-        }
-
-        public long GetMediaDurationMSec()
-        {
-            if (_currentVideoPlayer == null || !_currentVideoPlayer.isPrepared)
+            if (_videoPlayers != null)
             {
-                return 0;
+                ReleaseRenderTexture(ref _renderTextures[0], _videoPlayers.Length > 0 ? _videoPlayers[0] : null);
+                ReleaseRenderTexture(ref _renderTextures[1], _videoPlayers.Length > 1 ? _videoPlayers[1] : null);
             }
-            return _cachedDurationMs;
         }
 
 #if UNITY_EDITOR
         public void EditorRecreateAllManagedTextures()
         {
-            if (Application.isPlaying)
-            {
-                InitializePlayers();
-            }
+            if (Application.isPlaying) InitializePlayers();
         }
 
-        /// <summary>
-        /// Gets whether the current primary video player is actively playing.
-        /// </summary>
         public bool IsCurrentVideoPlaying => _currentVideoPlayer != null && _currentVideoPlayer.isPrepared && _currentVideoPlayer.isPlaying;
 #endif
     }

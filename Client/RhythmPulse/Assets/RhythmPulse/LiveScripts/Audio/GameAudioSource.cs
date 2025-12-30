@@ -1,168 +1,142 @@
-using CycloneGames.Logger;
+using System;
+using CycloneGames.Factory.Runtime;
 using UnityEngine;
 using VContainer;
-using CycloneGames.Factory.Runtime;
-using System;
 
 namespace RhythmPulse.Audio
 {
     public struct GameAudioData
     {
-        public string Key { get; set; }
+        public string Key;
     }
 
     [RequireComponent(typeof(AudioSource))]
-    public class GameAudioSource : MonoBehaviour, IPoolable<GameAudioData, IMemoryPool>, IDisposable, ITickable
+    public sealed class GameAudioSource : MonoBehaviour, IPoolable<GameAudioData, IMemoryPool>, IDisposable
     {
-        private const string DEBUG_FLAG = "[GameAudio]";
         private IMemoryPool _pool;
-        private GameAudioData _data = default;
-        private IAudioLoadService audioLoadService;
-        private AudioSource audioSource;
-        private AudioClip audioClip = null;
-        private long instanceAudioClipLength = 0;
-		private bool isBeingDestroyed = false;
+        private GameAudioData _data;
+        private IAudioLoadService _audioLoadService;
+        private AudioSource _audioSource;
+        private AudioClip _audioClip;
+        private long _audioDurationMs;
+        private bool _isBeingDestroyed;
 
         [Inject]
         public void Construct(IAudioLoadService audioLoadService)
         {
-            this.audioLoadService = audioLoadService;
+            _audioLoadService = audioLoadService;
         }
 
-        void Awake()
+        private void Awake()
         {
-            audioSource = GetComponent<AudioSource>();
+            _audioSource = GetComponent<AudioSource>();
         }
 
-		void OnDestroy()
+        private void OnDestroy()
         {
-			isBeingDestroyed = true;
+            _isBeingDestroyed = true;
             Dispose();
-        }
-
-        public GameAudioSource(IAudioLoadService audioLoadService)
-        {
-            this.audioLoadService = audioLoadService;
         }
 
         public void SetLoop(bool loop)
         {
-            audioSource.loop = loop;
+            if (_audioSource != null)
+                _audioSource.loop = loop;
         }
 
         public void Play()
         {
-            if (_data.Equals(default(GameAudioData))) return;
+            if (string.IsNullOrEmpty(_data.Key)) return;
+            if (_audioLoadService == null) return;
 
-            if (audioLoadService == null)
-            {
-                CLogger.LogWarning($"{DEBUG_FLAG} audioLoadService is null in Play() for key: {_data.Key}");
+            if (!_audioLoadService.TryGetLoadedClip(_data.Key, out _audioClip) || _audioClip == null)
                 return;
-            }
 
-            if (!audioLoadService.GetLoadedClips().TryGetValue(_data.Key, out audioClip))
+            if (_audioSource == null)
             {
-                CLogger.LogWarning($"{DEBUG_FLAG} Audio clip not found for key: {_data.Key}");
-                return;
-            }
-            if (audioClip == null)
-            {
-                // CycloneGames.Logger.CLogger.LogError($"{DEBUG_FLAG} Loaded audio clip is null for key: {_data.Key}.");
-                return;
-            }
-            if (audioSource == null)
-            {
-                audioSource = GetComponent<AudioSource>();
-                if (audioSource == null)
-                {
-                    // CycloneGames.Logger.CLogger.LogError($"{DEBUG_FLAG} AudioSource component is null.");
-                    return;
-                }
+                _audioSource = GetComponent<AudioSource>();
+                if (_audioSource == null) return;
             }
 
-            audioSource.clip = audioClip;
-            instanceAudioClipLength = (long)(audioClip.length * 1000f);
-            audioSource.Play();
+            _audioSource.clip = _audioClip;
+            _audioDurationMs = (long)(_audioClip.length * 1000f);
+            _audioSource.Play();
         }
 
         public void Stop()
         {
-            audioSource?.Stop();
-            instanceAudioClipLength = 0;
+            if (_audioSource != null)
+                _audioSource.Stop();
+            _audioDurationMs = 0;
         }
 
         public void Pause()
         {
-            audioSource.Pause();
+            if (_audioSource != null)
+                _audioSource.Pause();
         }
 
         public void Resume()
         {
-            audioSource.UnPause();
+            if (_audioSource != null)
+                _audioSource.UnPause();
         }
 
         public long GetPlaybackTimeMSec()
         {
-            return (long)(audioSource.time * 1000f);
+            if (_audioSource == null) return 0;
+            return (long)(_audioSource.time * 1000f);
         }
 
         public long GetAudioClipLengthMSec()
         {
-            return instanceAudioClipLength;
+            return _audioDurationMs;
         }
 
         public void SeekTime(long milliSeconds)
         {
-            audioSource.time = milliSeconds / 1000f;
+            if (_audioSource != null)
+                _audioSource.time = milliSeconds / 1000f;
         }
 
         public void OnDespawned()
         {
-            if (audioSource != null)
+            if (_audioSource != null)
             {
-                audioSource.Stop();
-                audioSource.clip = null;
+                _audioSource.Stop();
+                _audioSource.clip = null;
             }
 
             _data = default;
             _pool = null;
-            this.gameObject.SetActive(false);
+            gameObject.SetActive(false);
         }
 
         public void OnSpawned(GameAudioData data, IMemoryPool pool)
         {
-            this._data = data;
-            this._pool = pool;
-            if (audioSource == null)
-            {
-                audioSource = GetComponent<AudioSource>();
-                if (audioSource == null)
-                {
-                    CLogger.LogWarning($"{DEBUG_FLAG} OnSpawned: missing AudioSource component on {name}. Activating anyway to keep pool stable.");
-                }
-            }
-            this.gameObject.SetActive(true);
+            _data = data;
+            _pool = pool;
+
+            if (_audioSource == null)
+                _audioSource = GetComponent<AudioSource>();
+
+            gameObject.SetActive(true);
         }
 
-		public void Dispose()
+        public void Dispose()
         {
-            if (audioSource != null)
+            if (_audioSource != null)
             {
-                audioSource.Stop();
-                audioSource.clip = null;
+                _audioSource.Stop();
+                _audioSource.clip = null;
             }
-            audioClip = null;
-            instanceAudioClipLength = 0;
-			// Despawn only when not in OnDestroy to avoid teardown races on mobile
-			if (!isBeingDestroyed)
-			{
-				_pool?.Despawn(this);
-			}
-        }
 
-        public void Tick()
-        {
+            _audioClip = null;
+            _audioDurationMs = 0;
 
+            // Avoid pool operations during destruction to prevent teardown races
+            if (!_isBeingDestroyed)
+                _pool?.Despawn(this);
         }
     }
 }

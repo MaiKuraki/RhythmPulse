@@ -1,4 +1,4 @@
-﻿namespace RhythmPulse .Media
+﻿namespace RhythmPulse.Media
 {
     public interface ITimelineCommand
     {

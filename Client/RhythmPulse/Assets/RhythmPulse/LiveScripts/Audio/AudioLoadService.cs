@@ -1,89 +1,79 @@
-using Cysharp.Threading.Tasks;
-using CycloneGames.Logger;
-using UnityEngine;
 using System;
-using System.Collections.Generic;
+using Cysharp.Threading.Tasks;
+using UnityEngine;
 
 namespace RhythmPulse.Audio
 {
     public interface IAudioLoadService
     {
-        UniTask<UnityEngine.AudioClip> LoadAudioAsync(string path);
+        UniTask<AudioClip> LoadAudioAsync(string path);
         UniTask UnloadAudio(string path);
         UniTask UnloadAllAudio();
         void ForceUnloadAll();
         GameAudioSource AudioSourcePrefab { get; }
-        Dictionary<string, AudioClip> GetLoadedClips();
+        bool TryGetLoadedClip(string key, out AudioClip clip);
     }
 
-
-    public class AudioLoadService : IAudioLoadService, IDisposable
+    public sealed class AudioLoadService : IAudioLoadService, IDisposable
     {
-        private const string DEBUG_FLAG = "[AudioLoadService]";
-        private AudioManager audioManagerInstance;
-        bool isInitialized = false;
+        private AudioManager _audioManager;
+        private bool _isInitialized;
+        private bool _isDisposed;
 
-        public GameAudioSource AudioSourcePrefab
-        {
-            get
-            {
-                return audioManagerInstance?.AudioSourcePrefab;
-            }
-        }
+        public GameAudioSource AudioSourcePrefab => _audioManager?.AudioSourcePrefab;
 
         public AudioLoadService()
         {
             Initialize();
         }
 
-        /// <summary>
-        /// To initialize this service, we need to find the AudioManager instance in the scene.
-        /// </summary>
         private void Initialize()
         {
-            audioManagerInstance = UnityEngine.GameObject.FindFirstObjectByType<AudioManager>();
-            if (audioManagerInstance == null)
+            _audioManager = UnityEngine.Object.FindFirstObjectByType<AudioManager>();
+            if (_audioManager == null)
             {
-                CLogger.LogError($"{DEBUG_FLAG} No AudioManager instance found in the scene, please put an AudioManager prefab in the scene.");
+                Debug.LogError("[AudioLoadService] No AudioManager instance found in the scene");
                 return;
             }
-
-            isInitialized = true;
+            _isInitialized = true;
         }
 
         public async UniTask<AudioClip> LoadAudioAsync(string path)
         {
-            if (!isInitialized || audioManagerInstance == null)
-            {
-                // CycloneGames.Logger.CLogger.LogError($"{DEBUG_FLAG} Service not initialized or AudioManager not available.");
-                return null;
-            }
-            return await audioManagerInstance.LoadAudioAsync(path);
+            if (!_isInitialized || _audioManager == null) return null;
+            return await _audioManager.LoadAudioAsync(path);
         }
 
         public async UniTask UnloadAudio(string path)
         {
-            await audioManagerInstance.UnloadAudio(path);
+            if (_audioManager != null)
+                await _audioManager.UnloadAudio(path);
         }
 
         public async UniTask UnloadAllAudio()
         {
-            await audioManagerInstance.UnloadAllAudio();
+            if (_audioManager != null)
+                await _audioManager.UnloadAllAudio();
         }
 
         public void ForceUnloadAll()
         {
-            audioManagerInstance.ForceUnloadAll();
+            _audioManager?.ForceUnloadAll();
+        }
+
+        public bool TryGetLoadedClip(string key, out AudioClip clip)
+        {
+            clip = null;
+            if (_audioManager == null) return false;
+            return _audioManager.TryGetLoadedClip(key, out clip);
         }
 
         public void Dispose()
         {
-            isInitialized = false;
-        }
-
-        public Dictionary<string, AudioClip> GetLoadedClips()
-        {
-            return audioManagerInstance?.GetLoadedClips();
+            if (_isDisposed) return;
+            _isDisposed = true;
+            _isInitialized = false;
+            _audioManager = null;
         }
     }
 }
