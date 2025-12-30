@@ -9,12 +9,11 @@ using UnityEngine;
 namespace FancyScrollView
 {
     /// <summary>
-    /// <see cref="FancyGridView{TItemData, TContext}"/> のセルを実装するための抽象基底クラス.
-    /// <see cref="FancyCell{TItemData, TContext}.Context"/> が不要な場合は
-    /// 代わりに <see cref="FancyGridViewCell{TItemData}"/> を使用します.
+    /// Abstract base class for implementing a cell in <see cref="FancyGridView{TItemData, TContext}"/>.
+    /// Use <see cref="FancyGridViewCell{TItemData}"/> if <see cref="Context"/> is not needed.
     /// </summary>
-    /// <typeparam name="TItemData">アイテムのデータ型.</typeparam>
-    /// <typeparam name="TContext"><see cref="FancyCell{TItemData, TContext}.Context"/> の型.</typeparam>
+    /// <typeparam name="TItemData">The type of item data.</typeparam>
+    /// <typeparam name="TContext">The type of the context.</typeparam>
     public abstract class FancyGridViewCell<TItemData, TContext> : FancyScrollRectCell<TItemData, TContext>
         where TContext : class, IFancyGridViewContext, new()
     {
@@ -28,16 +27,21 @@ namespace FancyScrollView
             var indexInGroup = Index % groupCount;
             var positionInGroup = (cellSize + spacing) * (indexInGroup - (groupCount - 1) * 0.5f);
 
-            transform.localPosition = Context.ScrollDirection == ScrollDirection.Horizontal
-                ? new Vector2(-localPosition, -positionInGroup)
-                : new Vector2(positionInGroup, localPosition);
+            if (Context.ScrollDirection == ScrollDirection.Horizontal)
+            {
+                transform.localPosition = new Vector2(-localPosition, -positionInGroup);
+            }
+            else
+            {
+                transform.localPosition = new Vector2(positionInGroup, localPosition);
+            }
         }
     }
 
     /// <summary>
-    /// <see cref="FancyGridView{TItemData}"/> のセルを実装するための抽象基底クラス.
+    /// Abstract base class for implementing a cell in <see cref="FancyGridView{TItemData}"/>.
     /// </summary>
-    /// <typeparam name="TItemData">アイテムのデータ型.</typeparam>
+    /// <typeparam name="TItemData">The type of item data.</typeparam>
     /// <seealso cref="FancyGridViewCell{TItemData, TContext}"/>
     public abstract class FancyGridViewCell<TItemData> : FancyGridViewCell<TItemData, FancyGridViewContext>
     {

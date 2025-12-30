@@ -9,64 +9,70 @@ using UnityEngine;
 namespace FancyScrollView
 {
     /// <summary>
-    /// <see cref="FancyScrollView{TItemData, TContext}"/> のセルを実装するための抽象基底クラス.
-    /// <see cref="FancyCell{TItemData, TContext}.Context"/> が不要な場合は
-    /// 代わりに <see cref="FancyCell{TItemData}"/> を使用します.
+    /// Abstract base class for implementing a cell in <see cref="FancyScrollView{TItemData, TContext}"/>.
+    /// Use <see cref="FancyCell{TItemData}"/> if <see cref="Context"/> is not needed.
     /// </summary>
-    /// <typeparam name="TItemData">アイテムのデータ型.</typeparam>
-    /// <typeparam name="TContext"><see cref="Context"/> の型.</typeparam>
+    /// <typeparam name="TItemData">The type of item data.</typeparam>
+    /// <typeparam name="TContext">The type of the context.</typeparam>
     public abstract class FancyCell<TItemData, TContext> : MonoBehaviour where TContext : class, new()
     {
+        private GameObject _cachedGameObject;
+        
         /// <summary>
-        /// このセルで表示しているデータのインデックス.
+        /// Cached reference to the GameObject to avoid repeated native calls.
+        /// </summary>
+        protected GameObject CachedGameObject => _cachedGameObject ??= gameObject;
+
+        /// <summary>
+        /// The index of the data displayed in this cell.
         /// </summary>
         public int Index { get; set; } = -1;
 
         /// <summary>
-        /// このセルの可視状態.
+        /// The visibility state of this cell.
         /// </summary>
-        public virtual bool IsVisible => gameObject.activeSelf;
+        public virtual bool IsVisible => CachedGameObject.activeSelf;
 
         /// <summary>
-        /// <see cref="FancyScrollView{TItemData, TContext}.Context"/> の参照.
-        /// セルとスクロールビュー間で同じインスタンスが共有されます. 情報の受け渡しや状態の保持に使用します.
+        /// Reference to the <see cref="Context"/>.
+        /// Shared instance between cells and the scroll view.
         /// </summary>
         protected TContext Context { get; private set; }
 
         /// <summary>
-        /// <see cref="Context"/> をセットします.
+        /// Sets the context.
         /// </summary>
-        /// <param name="context">コンテキスト.</param>
+        /// <param name="context">The context.</param>
         public virtual void SetContext(TContext context) => Context = context;
 
         /// <summary>
-        /// 初期化を行います.
+        /// Initializes the cell.
         /// </summary>
         public virtual void Initialize() { }
 
         /// <summary>
-        /// このセルの可視状態を設定します.
+        /// Sets the visibility of this cell.
         /// </summary>
-        /// <param name="visible">可視状態なら <c>true</c>, 非可視状態なら <c>false</c>.</param>
-        public virtual void SetVisible(bool visible) => gameObject.SetActive(visible);
+        /// <param name="visible">True if visible, otherwise false.</param>
+        public virtual void SetVisible(bool visible) => CachedGameObject.SetActive(visible);
 
         /// <summary>
-        /// アイテムデータに基づいてこのセルの表示内容を更新します.
+        /// Updates the content of this cell based on the item data.
         /// </summary>
-        /// <param name="itemData">アイテムデータ.</param>
+        /// <param name="itemData">The item data.</param>
         public abstract void UpdateContent(TItemData itemData);
 
         /// <summary>
-        /// <c>0.0f</c> ~ <c>1.0f</c> の値に基づいてこのセルのスクロール位置を更新します.
+        /// Updates the scroll position of this cell based on the value between 0.0f and 1.0f.
         /// </summary>
-        /// <param name="position">ビューポート範囲の正規化されたスクロール位置.</param>
+        /// <param name="position">Normalized scroll position in the viewport.</param>
         public abstract void UpdatePosition(float position);
     }
 
     /// <summary>
-    /// <see cref="FancyScrollView{TItemData}"/> のセルを実装するための抽象基底クラス.
+    /// Abstract base class for implementing a cell in <see cref="FancyScrollView{TItemData}"/>.
     /// </summary>
-    /// <typeparam name="TItemData">アイテムのデータ型.</typeparam>
+    /// <typeparam name="TItemData">The type of item data.</typeparam>
     /// <seealso cref="FancyCell{TItemData, TContext}"/>
     public abstract class FancyCell<TItemData> : FancyCell<TItemData, NullContext>
     {

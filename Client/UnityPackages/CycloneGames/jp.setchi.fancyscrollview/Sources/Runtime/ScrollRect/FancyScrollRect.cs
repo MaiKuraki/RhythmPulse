@@ -12,71 +12,70 @@ using EasingCore;
 namespace FancyScrollView
 {
     /// <summary>
-    /// ScrollRect スタイルのスクロールビューを実装するための抽象基底クラス.
-    /// 無限スクロールおよびスナップには対応していません.
-    /// <see cref="FancyScrollView{TItemData, TContext}.Context"/> が不要な場合は
-    /// 代わりに <see cref="FancyScrollRect{TItemData}"/> を使用します.
+    /// Abstract base class for implementing a ScrollRect-style scroll view.
+    /// Does not support infinite scrolling or snapping.
+    /// Use <see cref="FancyScrollRect{TItemData}"/> if <see cref="FancyScrollView{TItemData, TContext}.Context"/> is not needed.
     /// </summary>
-    /// <typeparam name="TItemData">アイテムのデータ型.</typeparam>
-    /// <typeparam name="TContext"><see cref="FancyScrollView{TItemData, TContext}.Context"/> の型.</typeparam>
+    /// <typeparam name="TItemData">The type of item data.</typeparam>
+    /// <typeparam name="TContext">The type of <see cref="FancyScrollView{TItemData, TContext}.Context"/>.</typeparam>
     [RequireComponent(typeof(Scroller))]
     public abstract class FancyScrollRect<TItemData, TContext> : FancyScrollView<TItemData, TContext>
         where TContext : class, IFancyScrollRectContext, new()
     {
         /// <summary>
-        /// スクロール中にセルが再利用されるまでの余白のセル数.
+        /// The number of margin cells to keep before recycling.
         /// </summary>
         /// <remarks>
-        /// <c>0</c> を指定するとセルが完全に隠れた直後に再利用されます.
-        /// <c>1</c> 以上を指定すると, そのセル数だけ余分にスクロールしてから再利用されます.
+        /// If 0, cells are recycled immediately after going out of view.
+        /// If 1 or more, that many cells are kept as margin before recycling.
         /// </remarks>
         [SerializeField] protected float reuseCellMarginCount = 0f;
 
         /// <summary>
-        /// コンテンツ先頭の余白.
+        /// Padding at the head of the content.
         /// </summary>
         [SerializeField] protected float paddingHead = 0f;
 
         /// <summary>
-        /// コンテンツ末尾の余白.
+        /// Padding at the tail of the content.
         /// </summary>
         [SerializeField] protected float paddingTail = 0f;
 
         /// <summary>
-        /// スクロール軸方向のセル同士の余白.
+        /// Spacing between cells.
         /// </summary>
         [SerializeField] protected float spacing = 0f;
 
         /// <summary>
-        /// セルのサイズ.
+        /// The size of the cell.
         /// </summary>
         protected abstract float CellSize { get; }
 
         /// <summary>
-        /// スクロール可能かどうか.
+        /// Whether scrolling is possible.
         /// </summary>
         /// <remarks>
-        /// アイテム数が十分少なくビューポート内に全てのセルが収まっている場合は <c>false</c>, それ以外は <c>true</c> になります.
+        /// True if the content is larger than the viewport, otherwise false.
         /// </remarks>
         protected virtual bool Scrollable => MaxScrollPosition > 0f;
 
-        Scroller cachedScroller;
+        private Scroller cachedScroller;
 
         /// <summary>
-        /// スクロール位置を制御する <see cref="FancyScrollView.Scroller"/> のインスタンス.
+        /// The <see cref="FancyScrollView.Scroller"/> instance.
         /// </summary>
         /// <remarks>
-        /// <see cref="Scroller"/> のスクロール位置を変更する際は必ず <see cref="ToScrollerPosition(float)"/> を使用して変換した位置を使用してください.
+        /// Always use <see cref="ToScrollerPosition(float)"/> when changing the Scroller's position.
         /// </remarks>
-        protected Scroller Scroller => cachedScroller ?? (cachedScroller = GetComponent<Scroller>());
+        protected Scroller Scroller => cachedScroller ??= GetComponent<Scroller>();
 
-        float ScrollLength => 1f / Mathf.Max(cellInterval, 1e-2f) - 1f;
+        private float ScrollLength => 1f / Mathf.Max(cellInterval, 1e-2f) - 1f;
 
-        float ViewportLength => ScrollLength - reuseCellMarginCount * 2f;
+        private float ViewportLength => ScrollLength - reuseCellMarginCount * 2f;
 
-        float PaddingHeadLength => (paddingHead - spacing * 0.5f) / (CellSize + spacing);
+        private float PaddingHeadLength => (paddingHead - spacing * 0.5f) / (CellSize + spacing);
 
-        float MaxScrollPosition => ItemsSource.Count
+        private float MaxScrollPosition => ItemsSource.Count
             - ScrollLength
             + reuseCellMarginCount * 2f
             + (paddingHead + paddingTail - spacing) / (CellSize + spacing);
@@ -87,23 +86,25 @@ namespace FancyScrollView
             base.Initialize();
 
             Context.ScrollDirection = Scroller.ScrollDirection;
-            Context.CalculateScrollSize = () =>
-            {
-                var interval = CellSize + spacing;
-                var reuseMargin = interval * reuseCellMarginCount;
-                var scrollSize = Scroller.ViewportSize + interval + reuseMargin * 2f;
-                return (scrollSize, reuseMargin);
-            };
+            Context.CalculateScrollSize = CalculateScrollSize;
 
             AdjustCellIntervalAndScrollOffset();
             Scroller.OnValueChanged(OnScrollerValueChanged);
         }
 
+        private (float ScrollSize, float ReuseMargin) CalculateScrollSize()
+        {
+            var interval = CellSize + spacing;
+            var reuseMargin = interval * reuseCellMarginCount;
+            var scrollSize = Scroller.ViewportSize + interval + reuseMargin * 2f;
+            return (scrollSize, reuseMargin);
+        }
+
         /// <summary>
-        /// <see cref="Scroller"/> のスクロール位置が変更された際の処理.
+        /// Called when the Scroller's position changes.
         /// </summary>
-        /// <param name="p"><see cref="Scroller"/> のスクロール位置.</param>
-        void OnScrollerValueChanged(float p)
+        /// <param name="p">The Scroller's position.</param>
+        private void OnScrollerValueChanged(float p)
         {
             base.UpdatePosition(ToFancyScrollViewPosition(Scrollable ? p : 0f));
 
@@ -121,10 +122,10 @@ namespace FancyScrollView
         }
 
         /// <summary>
-        /// スクロール範囲を超えてスクロールされた量に基づいて, スクロールバーのサイズを縮小します.
+        /// Shrinks the scrollbar based on the over-scroll amount.
         /// </summary>
-        /// <param name="offset">スクロール範囲を超えてスクロールされた量.</param>
-        void ShrinkScrollbar(float offset)
+        /// <param name="offset">The over-scroll amount.</param>
+        private void ShrinkScrollbar(float offset)
         {
             var scale = 1f - ToFancyScrollViewPosition(offset) / (ViewportLength - PaddingHeadLength);
             UpdateScrollbarSize((ViewportLength - PaddingHeadLength) * scale);
@@ -147,7 +148,7 @@ namespace FancyScrollView
         }
 
         /// <summary>
-        /// <see cref="Scroller"/> の各種状態を更新します.
+        /// Refreshes the Scroller state.
         /// </summary>
         protected void RefreshScroller()
         {
@@ -173,53 +174,52 @@ namespace FancyScrollView
         }
 
         /// <summary>
-        /// スクロール位置を更新します.
+        /// Updates the scroll position.
         /// </summary>
-        /// <param name="position">スクロール位置.</param>
+        /// <param name="position">The scroll position.</param>
         protected new void UpdatePosition(float position)
         {
             Scroller.Position = ToScrollerPosition(position, 0.5f);
         }
 
         /// <summary>
-        /// 指定したアイテムの位置までジャンプします.
+        /// Jumps to the specified item index.
         /// </summary>
-        /// <param name="itemIndex">アイテムのインデックス.</param>
-        /// <param name="alignment">ビューポート内におけるセル位置の基準. 0f(先頭) ~ 1f(末尾).</param>
+        /// <param name="itemIndex">The item index.</param>
+        /// <param name="alignment">Alignment within the viewport. 0f (head) to 1f (tail).</param>
         protected virtual void JumpTo(int itemIndex, float alignment = 0.5f)
         {
             Scroller.Position = ToScrollerPosition(itemIndex, alignment);
         }
 
         /// <summary>
-        /// 指定したアイテムの位置まで移動します.
+        /// Scrolls to the specified item index.
         /// </summary>
-        /// <param name="index">アイテムのインデックス.</param>
-        /// <param name="duration">移動にかける秒数.</param>
-        /// <param name="alignment">ビューポート内におけるセル位置の基準. 0f(先頭) ~ 1f(末尾).</param>
-        /// <param name="onComplete">移動が完了した際に呼び出されるコールバック.</param>
+        /// <param name="index">The item index.</param>
+        /// <param name="duration">Duration of the scroll.</param>
+        /// <param name="alignment">Alignment within the viewport. 0f (head) to 1f (tail).</param>
+        /// <param name="onComplete">Callback when scroll completes.</param>
         protected virtual void ScrollTo(int index, float duration, float alignment = 0.5f, Action onComplete = null)
         {
             Scroller.ScrollTo(ToScrollerPosition(index, alignment), duration, onComplete);
         }
 
         /// <summary>
-        /// 指定したアイテムの位置まで移動します.
+        /// Scrolls to the specified item index with easing.
         /// </summary>
-        /// <param name="index">アイテムのインデックス.</param>
-        /// <param name="duration">移動にかける秒数.</param>
-        /// <param name="easing">移動に使用するイージング.</param>
-        /// <param name="alignment">ビューポート内におけるセル位置の基準. 0f(先頭) ~ 1f(末尾).</param>
-        /// <param name="onComplete">移動が完了した際に呼び出されるコールバック.</param>
+        /// <param name="index">The item index.</param>
+        /// <param name="duration">Duration of the scroll.</param>
+        /// <param name="easing">Easing function.</param>
+        /// <param name="alignment">Alignment within the viewport. 0f (head) to 1f (tail).</param>
+        /// <param name="onComplete">Callback when scroll completes.</param>
         protected virtual void ScrollTo(int index, float duration, Ease easing, float alignment = 0.5f, Action onComplete = null)
         {
             Scroller.ScrollTo(ToScrollerPosition(index, alignment), duration, easing, onComplete);
         }
 
         /// <summary>
-        /// ビューポートとコンテンツの長さに基づいてスクロールバーのサイズを更新します.
+        /// Updates the scrollbar size.
         /// </summary>
-        /// <param name="viewportLength">ビューポートのサイズ.</param>
         protected void UpdateScrollbarSize(float viewportLength)
         {
             var contentLength = Mathf.Max(ItemsSource.Count + (paddingHead + paddingTail - spacing) / (CellSize + spacing), 1);
@@ -227,31 +227,24 @@ namespace FancyScrollView
         }
 
         /// <summary>
-        /// <see cref="Scroller"/> が扱うスクロール位置を <see cref="FancyScrollRect{TItemData, TContext}"/> が扱うスクロール位置に変換します.
+        /// Converts FancyScrollRect position to Scroller position.
         /// </summary>
-        /// <param name="position"><see cref="Scroller"/> が扱うスクロール位置.</param>
-        /// <returns><see cref="FancyScrollRect{TItemData, TContext}"/> が扱うスクロール位置.</returns>
         protected float ToFancyScrollViewPosition(float position)
         {
             return position / Mathf.Max(ItemsSource.Count - 1, 1) * MaxScrollPosition - PaddingHeadLength;
         }
 
         /// <summary>
-        /// <see cref="FancyScrollRect{TItemData, TContext}"/> が扱うスクロール位置を <see cref="Scroller"/> が扱うスクロール位置に変換します.
+        /// Converts Scroller position to FancyScrollRect position.
         /// </summary>
-        /// <param name="position"><see cref="FancyScrollRect{TItemData, TContext}"/> が扱うスクロール位置.</param>
-        /// <returns><see cref="Scroller"/> が扱うスクロール位置.</returns>
         protected float ToScrollerPosition(float position)
         {
             return (position + PaddingHeadLength) / MaxScrollPosition * Mathf.Max(ItemsSource.Count - 1, 1);
         }
 
         /// <summary>
-        /// <see cref="FancyScrollRect{TItemData, TContext}"/> が扱うスクロール位置を <see cref="Scroller"/> が扱うスクロール位置に変換します.
+        /// Converts Scroller position to FancyScrollRect position with alignment.
         /// </summary>
-        /// <param name="position"><see cref="FancyScrollRect{TItemData, TContext}"/> が扱うスクロール位置.</param>
-        /// <param name="alignment">ビューポート内におけるセル位置の基準. 0f(先頭) ~ 1f(末尾).</param>
-        /// <returns><see cref="Scroller"/> が扱うスクロール位置.</returns>
         protected float ToScrollerPosition(float position, float alignment = 0.5f)
         {
             var offset = alignment * (ScrollLength - (1f + reuseCellMarginCount * 2f))
@@ -260,9 +253,7 @@ namespace FancyScrollView
         }
 
         /// <summary>
-        /// 指定された設定を実現するための
-        /// <see cref="FancyScrollView{TItemData,TContext}.cellInterval"/> と
-        /// <see cref="FancyScrollView{TItemData,TContext}.scrollOffset"/> を計算して適用します.
+        /// Adjusts cell interval and scroll offset.
         /// </summary>
         protected void AdjustCellIntervalAndScrollOffset()
         {
@@ -296,10 +287,9 @@ namespace FancyScrollView
     }
 
     /// <summary>
-    /// ScrollRect スタイルのスクロールビューを実装するための抽象基底クラス.
-    /// 無限スクロールおよびスナップには対応していません.
+    /// Abstract base class for implementing a ScrollRect-style scroll view.
     /// </summary>
-    /// <typeparam name="TItemData">アイテムのデータ型.</typeparam>
+    /// <typeparam name="TItemData">The type of item data.</typeparam>
     /// <seealso cref="FancyScrollRect{TItemData, TContext}"/>
     public abstract class FancyScrollRect<TItemData> : FancyScrollRect<TItemData, FancyScrollRectContext> { }
 }

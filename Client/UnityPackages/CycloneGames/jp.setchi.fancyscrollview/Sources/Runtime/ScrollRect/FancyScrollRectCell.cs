@@ -9,12 +9,11 @@ using UnityEngine;
 namespace FancyScrollView
 {
     /// <summary>
-    /// <see cref="FancyScrollRect{TItemData, TContext}"/> のセルを実装するための抽象基底クラス.
-    /// <see cref="FancyCell{TItemData, TContext}.Context"/> が不要な場合は
-    /// 代わりに <see cref="FancyScrollRectCell{TItemData}"/> を使用します.
+    /// Abstract base class for implementing a cell in <see cref="FancyScrollRect{TItemData, TContext}"/>.
+    /// Use <see cref="FancyScrollRectCell{TItemData}"/> if <see cref="Context"/> is not needed.
     /// </summary>
-    /// <typeparam name="TItemData">アイテムのデータ型.</typeparam>
-    /// <typeparam name="TContext"><see cref="FancyCell{TItemData, TContext}.Context"/> の型.</typeparam>
+    /// <typeparam name="TItemData">The type of item data.</typeparam>
+    /// <typeparam name="TContext">The type of the context.</typeparam>
     public abstract class FancyScrollRectCell<TItemData, TContext> : FancyCell<TItemData, TContext>
         where TContext : class, IFancyScrollRectContext, new()
     {
@@ -32,26 +31,27 @@ namespace FancyScrollView
         }
 
         /// <summary>
-        /// このセルの位置を更新します.
+        /// Updates the cell position.
         /// </summary>
-        /// <param name="normalizedPosition">
-        /// ビューポートの範囲で正規化されたスクロール位置.
-        /// <see cref="FancyScrollRect{TItemData, TContext}.reuseCellMarginCount"/> の値に基づいて
-        ///  <c>0.0</c> ~ <c>1.0</c> の範囲を超えた値が渡されることがあります.
-        /// </param>
-        /// <param name="localPosition">ローカル位置.</param>
+        /// <param name="normalizedPosition">Normalized scroll position within the viewport.</param>
+        /// <param name="localPosition">Local position.</param>
         protected virtual void UpdatePosition(float normalizedPosition, float localPosition)
         {
-            transform.localPosition = Context.ScrollDirection == ScrollDirection.Horizontal
-                ? new Vector2(-localPosition, 0)
-                : new Vector2(0, localPosition);
+            if (Context.ScrollDirection == ScrollDirection.Horizontal)
+            {
+                transform.localPosition = new Vector2(-localPosition, 0);
+            }
+            else
+            {
+                transform.localPosition = new Vector2(0, localPosition);
+            }
         }
     }
 
     /// <summary>
-    /// <see cref="FancyScrollRect{TItemData}"/> のセルを実装するための抽象基底クラス.
+    /// Abstract base class for implementing a cell in <see cref="FancyScrollRect{TItemData}"/>.
     /// </summary>
-    /// <typeparam name="TItemData">アイテムのデータ型.</typeparam>
+    /// <typeparam name="TItemData">The type of item data.</typeparam>
     /// <seealso cref="FancyScrollRectCell{TItemData, TContext}"/>
     public abstract class FancyScrollRectCell<TItemData> : FancyScrollRectCell<TItemData, FancyScrollRectContext>
     {

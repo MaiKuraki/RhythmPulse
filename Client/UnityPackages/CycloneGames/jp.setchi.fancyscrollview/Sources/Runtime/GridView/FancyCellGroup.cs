@@ -5,33 +5,37 @@
  */
 
 using UnityEngine;
-using System.Linq;
 
 namespace FancyScrollView
 {
     /// <summary>
-    /// 複数の <see cref="FancyCell{TItemData, TContext}"/> を持つセルグループ実装するための抽象基底クラス.
+    /// Abstract base class for implementing a cell group containing multiple <see cref="FancyCell{TItemData, TContext}"/>.
     /// </summary>
-    /// <typeparam name="TItemData">アイテムのデータ型.</typeparam>
-    /// <typeparam name="TContext"><see cref="FancyCell{TItemData, TContext}.Context"/> の型.</typeparam>
+    /// <typeparam name="TItemData">The type of item data.</typeparam>
+    /// <typeparam name="TContext">The type of the context.</typeparam>
     public abstract class FancyCellGroup<TItemData, TContext> : FancyCell<TItemData[], TContext>
         where TContext : class, IFancyCellGroupContext, new()
     {
         /// <summary>
-        /// このグループで表示するセルの配列.
+        /// Array of cells displayed in this group.
         /// </summary>
         protected virtual FancyCell<TItemData, TContext>[] Cells { get; private set; }
 
         /// <summary>
-        /// このグループで表示するセルの配列をインスタンス化します.
+        /// Instantiates the array of cells.
         /// </summary>
-        /// <returns>このグループで表示するセルの配列.</returns>
         protected virtual FancyCell<TItemData, TContext>[] InstantiateCells()
         {
-            return Enumerable.Range(0, Context.GetGroupCount())
-                .Select(_ => Instantiate(Context.CellTemplate, transform))
-                .Select(x => x.GetComponent<FancyCell<TItemData, TContext>>())
-                .ToArray();
+            var count = Context.GetGroupCount();
+            var cells = new FancyCell<TItemData, TContext>[count];
+
+            for (var i = 0; i < count; i++)
+            {
+                var cellObj = Instantiate(Context.CellTemplate, transform);
+                cells[i] = cellObj.GetComponent<FancyCell<TItemData, TContext>>();
+            }
+
+            return cells;
         }
 
         /// <inheritdoc/>

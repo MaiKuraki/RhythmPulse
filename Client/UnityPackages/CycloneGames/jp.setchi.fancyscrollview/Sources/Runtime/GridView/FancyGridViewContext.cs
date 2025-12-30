@@ -10,7 +10,7 @@ using UnityEngine;
 namespace FancyScrollView
 {
     /// <summary>
-    /// <see cref="FancyGridView{TItemData, TContext}"/> のコンテキスト基底クラス.
+    /// Context class for <see cref="FancyGridView{TItemData, TContext}"/>.
     /// </summary>
     public class FancyGridViewContext : IFancyGridViewContext
     {

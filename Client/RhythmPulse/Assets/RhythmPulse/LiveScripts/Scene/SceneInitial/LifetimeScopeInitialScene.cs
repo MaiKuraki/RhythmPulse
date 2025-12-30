@@ -26,8 +26,8 @@ namespace RhythmPulse.Scene
         }
         public void Start()
         {
-            graphicsSettingService.ChangeRenderResolution(1080);
-            graphicsSettingService.ChangeApplicationFrameRate(60);
+            graphicsSettingService.SetRenderResolution(1080);
+            graphicsSettingService.SetTargetFrameRate(60);
         }
     }
 }

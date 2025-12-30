@@ -10,7 +10,7 @@ using UnityEngine;
 namespace FancyScrollView
 {
     /// <summary>
-    /// <see cref="FancyCellGroup{TItemData, TContext}"/> のコンテキストインターフェース.
+    /// Context interface for <see cref="FancyCellGroup{TItemData, TContext}"/>.
     /// </summary>
     public interface IFancyCellGroupContext
     {

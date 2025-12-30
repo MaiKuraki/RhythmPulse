@@ -7,8 +7,6 @@
 using UnityEditor;
 using UnityEditor.AnimatedValues;
 
-// For manteinance, every new [SerializeField] variable in Scroller must be declared here
-
 namespace FancyScrollView
 {
     [CustomEditor(typeof(Scroller))]
