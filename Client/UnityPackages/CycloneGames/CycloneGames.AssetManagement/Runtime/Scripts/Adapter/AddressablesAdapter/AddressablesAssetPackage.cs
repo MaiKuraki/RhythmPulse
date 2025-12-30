@@ -2,11 +2,14 @@
 using Cysharp.Threading.Tasks;
 using System;
 using System.IO;
+using System.Text;
 using System.Threading;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.AddressableAssets;
 using UnityEngine.ResourceManagement.AsyncOperations;
+using Unio;
+using Unity.Collections;
 
 namespace CycloneGames.AssetManagement.Runtime
 {
@@ -176,7 +179,9 @@ namespace CycloneGames.AssetManagement.Runtime
                 var versionData = new VersionDataJson { contentVersion = version };
                 string jsonContent = JsonUtility.ToJson(versionData, true);
 
-                await System.Threading.Tasks.Task.Run(() => File.WriteAllText(versionFilePath, jsonContent), cancellationToken);
+                byte[] bytes = Encoding.UTF8.GetBytes(jsonContent);
+                using var nativeBytes = new NativeArray<byte>(bytes, Allocator.Temp);
+                await NativeFile.WriteAllBytesAsync(versionFilePath, nativeBytes);
                 Debug.Log($"[AddressablesAssetPackage] Saved version to persistent data: {version}");
             }
             catch (Exception ex)
@@ -274,7 +279,8 @@ namespace CycloneGames.AssetManagement.Runtime
             // On other platforms, use direct file I/O
             if (File.Exists(filePath))
             {
-                return await System.Threading.Tasks.Task.Run(() => File.ReadAllText(filePath), cancellationToken);
+                using var nativeBytes = await NativeFile.ReadAllBytesAsync(filePath, SynchronizationStrategy.BlockOnThreadPool, cancellationToken);
+                return Encoding.UTF8.GetString(nativeBytes.AsSpan());
             }
             return string.Empty;
 #endif
@@ -333,11 +339,11 @@ namespace CycloneGames.AssetManagement.Runtime
             // This corresponds to Addressables.UpdateCatalogs.
             // For standalone games without remote catalogs, we should skip this operation
             // to avoid triggering Unity's internal error logging.
-            
+
             // Check if we have a remote catalog before attempting to update
             // This prevents unnecessary errors for standalone games
             bool hasRemoteCatalog = HasRemoteCatalog();
-            
+
             if (!hasRemoteCatalog)
             {
                 // No remote catalog available (standalone game scenario)
@@ -345,15 +351,15 @@ namespace CycloneGames.AssetManagement.Runtime
                 Debug.Log($"[AddressablesAssetPackage] No remote catalog detected (standalone game). Skipping catalog update. Using local content.");
                 return true; // Return true to indicate we can continue with local content
             }
-            
+
             // We have a remote catalog, attempt to update it
             try
             {
                 var handle = Addressables.UpdateCatalogs();
                 await handle.WithCancellation(cancellationToken);
-                
+
                 bool success = handle.Status == AsyncOperationStatus.Succeeded;
-                
+
                 // Check if the failure is due to "Content update not available" (edge case)
                 if (!success && handle.OperationException != null)
                 {
@@ -366,7 +372,7 @@ namespace CycloneGames.AssetManagement.Runtime
                         return true; // Return true to indicate we can continue with local content
                     }
                 }
-                
+
                 Addressables.Release(handle);
                 return success;
             }
@@ -379,7 +385,7 @@ namespace CycloneGames.AssetManagement.Runtime
                     Debug.Log($"[AddressablesAssetPackage] Remote catalog not available. Using local content.");
                     return true; // Return true to indicate we can continue with local content
                 }
-                
+
                 Debug.LogWarning($"[AddressablesAssetPackage] Failed to update catalogs: {ex.Message}");
                 return false;
             }
@@ -450,6 +456,16 @@ namespace CycloneGames.AssetManagement.Runtime
             var wrapped = AddressableAllAssetsHandle<TAsset>.Create(id, handle, cancellationToken);
             if (HandleTracker.Enabled) HandleTracker.Register(id, packageName, $"AllAssets {typeof(TAsset).Name} : {location}");
             return wrapped;
+        }
+
+        public IRawFileHandle LoadRawFileSync(string location)
+        {
+            throw new NotSupportedException("Addressables does not support synchronous RawFile loading. Use LoadRawFileAsync instead.");
+        }
+
+        public IRawFileHandle LoadRawFileAsync(string location, CancellationToken cancellationToken = default)
+        {
+            throw new NotSupportedException("Addressables provider does not currently support RawFile loading. Use LoadAssetAsync<TextAsset> for text files.");
         }
 
         [Obsolete("Synchronous instantiation is deprecated and can cause performance issues. Use InstantiateAsync instead.", true)]

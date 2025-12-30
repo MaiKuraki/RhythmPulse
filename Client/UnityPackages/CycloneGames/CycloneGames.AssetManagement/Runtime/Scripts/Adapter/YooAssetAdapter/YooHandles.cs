@@ -9,24 +9,87 @@ using YooAsset;
 
 namespace CycloneGames.AssetManagement.Runtime
 {
-    internal static class HandlePool<T> where T : class, new()
+    /// <summary>
+    /// Adaptive thread-safe object pool with automatic expansion and shrinking.
+    /// - Soft limit: Preferred pool size maintained during normal operation
+    /// - Hard limit: Maximum allowed pool size, beyond which objects are discarded
+    /// - Auto-shrink: Periodically reduces pool size when usage is low
+    /// </summary>
+    internal static class AdaptiveHandlePool<T> where T : class, new()
     {
-        private static readonly Stack<T> _pool = new Stack<T>(32);
+        private const int SOFT_LIMIT = 64;
+        private const int HARD_LIMIT = 512;
+        private const int SHRINK_THRESHOLD_MS = 30000;
+        private const int SHRINK_BATCH_SIZE = 16;
+
+        private static readonly Stack<T> _pool = new Stack<T>(SOFT_LIMIT);
+        private static readonly object _poolLock = new object();
+        private static long _lastAccessTicks;
+        private static int _highWaterMark;
 
         public static T Get()
         {
-            lock (_pool)
+            lock (_poolLock)
             {
-                return _pool.Count > 0 ? _pool.Pop() : new T();
+                _lastAccessTicks = DateTime.UtcNow.Ticks;
+                if (_pool.Count > 0)
+                {
+                    return _pool.Pop();
+                }
             }
+            return new T();
         }
 
         public static void Release(T item)
         {
             if (item == null) return;
-            lock (_pool)
+            lock (_poolLock)
             {
-                _pool.Push(item);
+                _lastAccessTicks = DateTime.UtcNow.Ticks;
+                int count = _pool.Count;
+
+                if (count < HARD_LIMIT)
+                {
+                    _pool.Push(item);
+                    if (count + 1 > _highWaterMark)
+                    {
+                        _highWaterMark = count + 1;
+                    }
+                }
+                // Beyond hard limit: discard to prevent memory bloat
+
+                TryShrinkIfIdle(count);
+            }
+        }
+
+        private static void TryShrinkIfIdle(int currentCount)
+        {
+            if (currentCount <= SOFT_LIMIT) return;
+
+            long idleMs = (DateTime.UtcNow.Ticks - _lastAccessTicks) / TimeSpan.TicksPerMillisecond;
+            if (idleMs < SHRINK_THRESHOLD_MS) return;
+
+            int toRemove = Math.Min(SHRINK_BATCH_SIZE, currentCount - SOFT_LIMIT);
+            for (int i = 0; i < toRemove && _pool.Count > SOFT_LIMIT; i++)
+            {
+                _pool.Pop();
+            }
+        }
+
+        public static (int current, int highWaterMark) GetStats()
+        {
+            lock (_poolLock)
+            {
+                return (_pool.Count, _highWaterMark);
+            }
+        }
+
+        public static void Clear()
+        {
+            lock (_poolLock)
+            {
+                _pool.Clear();
+                _highWaterMark = 0;
             }
         }
     }
@@ -36,12 +99,13 @@ namespace CycloneGames.AssetManagement.Runtime
         private int _id;
         internal AssetHandle Raw;
         private UniTask _task;
+        private int _disposed;
 
-        // Private constructor to force pooling usage (optional, but keeping public for simplicity unless enforced)
         public YooAssetHandle() { }
 
         internal void Initialize(int id, AssetHandle raw, CancellationToken cancellationToken)
         {
+            _disposed = 0;
             _id = id;
             Raw = raw;
             _task = raw.ToUniTask(cancellationToken: cancellationToken);
@@ -49,7 +113,7 @@ namespace CycloneGames.AssetManagement.Runtime
 
         public static YooAssetHandle<TAsset> Create(int id, AssetHandle raw, CancellationToken cancellationToken)
         {
-            var h = HandlePool<YooAssetHandle<TAsset>>.Get();
+            var h = AdaptiveHandlePool<YooAssetHandle<TAsset>>.Get();
             h.Initialize(id, raw, cancellationToken);
             return h;
         }
@@ -65,11 +129,13 @@ namespace CycloneGames.AssetManagement.Runtime
 
         public void Dispose()
         {
+            if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+
             Raw?.Dispose();
             Raw = null;
             if (HandleTracker.Enabled) HandleTracker.Unregister(_id);
             _task = default;
-            HandlePool<YooAssetHandle<TAsset>>.Release(this);
+            AdaptiveHandlePool<YooAssetHandle<TAsset>>.Release(this);
         }
     }
 
@@ -102,25 +168,27 @@ namespace CycloneGames.AssetManagement.Runtime
             }
             System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
         }
-        
+
         private int _id;
         internal AllAssetsHandle Raw;
         private readonly ReadOnlyListAdapter _listAdapter = new ReadOnlyListAdapter();
         private UniTask _task;
+        private int _disposed;
 
         public YooAllAssetsHandle() { }
 
         internal void Initialize(int id, AllAssetsHandle raw, CancellationToken cancellationToken)
         {
+            _disposed = 0;
             _id = id;
             Raw = raw;
             _task = raw.ToUniTask(cancellationToken: cancellationToken);
-            _listAdapter.Clear(); // Reset adapter
+            _listAdapter.Clear();
         }
 
         public static YooAllAssetsHandle<TAsset> Create(int id, AllAssetsHandle raw, CancellationToken cancellationToken)
         {
-            var h = HandlePool<YooAllAssetsHandle<TAsset>>.Get();
+            var h = AdaptiveHandlePool<YooAllAssetsHandle<TAsset>>.Get();
             h.Initialize(id, raw, cancellationToken);
             return h;
         }
@@ -149,12 +217,14 @@ namespace CycloneGames.AssetManagement.Runtime
 
         public void Dispose()
         {
+            if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+
             Raw?.Dispose();
             Raw = null;
             _listAdapter.Clear();
             if (HandleTracker.Enabled) HandleTracker.Unregister(_id);
             _task = default;
-            HandlePool<YooAllAssetsHandle<TAsset>>.Release(this);
+            AdaptiveHandlePool<YooAllAssetsHandle<TAsset>>.Release(this);
         }
     }
 
@@ -162,18 +232,20 @@ namespace CycloneGames.AssetManagement.Runtime
     {
         private int _id;
         internal InstantiateOperation Raw;
-        
+        private int _disposed;
+
         public YooInstantiateHandle() { }
 
         internal void Initialize(int id, InstantiateOperation raw)
         {
+            _disposed = 0;
             _id = id;
             Raw = raw;
         }
 
         public static YooInstantiateHandle Create(int id, InstantiateOperation raw)
         {
-            var h = HandlePool<YooInstantiateHandle>.Get();
+            var h = AdaptiveHandlePool<YooInstantiateHandle>.Get();
             h.Initialize(id, raw);
             return h;
         }
@@ -188,28 +260,32 @@ namespace CycloneGames.AssetManagement.Runtime
 
         public void Dispose()
         {
+            if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+
             Raw = null; // InstantiateOperation doesn't need Dispose, but we clear ref.
             if (HandleTracker.Enabled) HandleTracker.Unregister(_id);
-            HandlePool<YooInstantiateHandle>.Release(this);
+            AdaptiveHandlePool<YooInstantiateHandle>.Release(this);
         }
     }
 
     public sealed class YooSceneHandle : ISceneHandle
     {
         private int _id;
-        public SceneHandle Raw;
-        
+        public YooAsset.SceneHandle Raw;
+        private int _disposed;
+
         public YooSceneHandle() { }
 
-        internal void Initialize(int id, SceneHandle raw)
+        internal void Initialize(int id, YooAsset.SceneHandle raw)
         {
+            _disposed = 0;
             _id = id;
             Raw = raw;
         }
 
-        public static YooSceneHandle Create(int id, SceneHandle raw)
+        public static YooSceneHandle Create(int id, YooAsset.SceneHandle raw)
         {
-            var h = HandlePool<YooSceneHandle>.Get();
+            var h = AdaptiveHandlePool<YooSceneHandle>.Get();
             h.Initialize(id, raw);
             return h;
         }
@@ -225,10 +301,68 @@ namespace CycloneGames.AssetManagement.Runtime
 
         public void Dispose()
         {
+            if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+
             Raw?.UnloadAsync();
             Raw = null;
             if (HandleTracker.Enabled) HandleTracker.Unregister(_id);
-            HandlePool<YooSceneHandle>.Release(this);
+            AdaptiveHandlePool<YooSceneHandle>.Release(this);
+        }
+    }
+
+    public sealed class YooRawFileHandle : IRawFileHandle
+    {
+        private int _id;
+        private RawFileHandle _raw;
+        private UniTask _task;
+        private int _disposed;
+
+        public YooRawFileHandle() { }
+
+        internal void Initialize(int id, RawFileHandle raw, CancellationToken cancellationToken)
+        {
+            _disposed = 0;
+            _id = id;
+            _raw = raw;
+            _task = raw.ToUniTask(cancellationToken: cancellationToken);
+        }
+
+        public static YooRawFileHandle Create(int id, RawFileHandle raw, CancellationToken cancellationToken)
+        {
+            var h = AdaptiveHandlePool<YooRawFileHandle>.Get();
+            h.Initialize(id, raw, cancellationToken);
+            return h;
+        }
+
+        public bool IsDone => _raw == null || _raw.IsDone;
+        public float Progress => _raw?.Progress ?? 0f;
+        public string Error => _raw?.LastError ?? string.Empty;
+        public UniTask Task => _task;
+        public void WaitForAsyncComplete() => _raw?.WaitForAsyncComplete();
+
+        public string FilePath => _raw?.GetRawFilePath() ?? string.Empty;
+
+        public string ReadText()
+        {
+            if (_raw == null || !_raw.IsDone) return string.Empty;
+            return _raw.GetRawFileText();
+        }
+
+        public byte[] ReadBytes()
+        {
+            if (_raw == null || !_raw.IsDone) return null;
+            return _raw.GetRawFileData();
+        }
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+
+            _raw?.Dispose();
+            _raw = null;
+            if (HandleTracker.Enabled) HandleTracker.Unregister(_id);
+            _task = default;
+            AdaptiveHandlePool<YooRawFileHandle>.Release(this);
         }
     }
 
@@ -237,7 +371,7 @@ namespace CycloneGames.AssetManagement.Runtime
         private ResourceDownloaderOperation _op;
 
         public YooDownloader() { }
-        
+
         internal void Initialize(ResourceDownloaderOperation op)
         {
             _op = op;
@@ -245,7 +379,7 @@ namespace CycloneGames.AssetManagement.Runtime
 
         public static YooDownloader Create(ResourceDownloaderOperation op)
         {
-            var d = HandlePool<YooDownloader>.Get();
+            var d = AdaptiveHandlePool<YooDownloader>.Get();
             d.Initialize(op);
             return d;
         }
