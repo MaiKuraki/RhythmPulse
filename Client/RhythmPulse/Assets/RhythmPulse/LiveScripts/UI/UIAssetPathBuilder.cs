@@ -9,9 +9,9 @@ namespace RhythmPulse.UI
     public struct UIAssetPathBuilder : IAssetPathBuilder
     {
         // The prefix for UI asset paths 
-        private const string Prefix = "Assets/RhythmPulse/LiveContent/ScriptableObjects/UI/Window/";
+        private const string Prefix = "Assets/RhythmPulse/LiveContent/Prefabs/UI/Window/";
         // The suffix for UI asset paths 
-        private const string Suffix = ".asset";
+        private const string Suffix = "_Config.asset";
 
         /// <summary> 
         /// Builds the full asset path for a UI window based on its name. 
