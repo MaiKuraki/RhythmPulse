@@ -25,13 +25,8 @@ MonoBehaviour:
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0
-  - m_GUID: 540998a23f7c77945a29845a63569817
-    m_Address: Assets/RhythmPulse/_CHEAT/DebugSystem.prefab
-    m_ReadOnly: 0
-    m_SerializedLabels: []
-    FlaggedDuringContentUpdateRestriction: 0
-  - m_GUID: 6fa4023fe1e1d7247836d89454905fd1
-    m_Address: Assets/RhythmPulse/LiveContent/ScriptableObjects/UI
+  - m_GUID: 759a02b53002c9841bf2bfcc9f2265ba
+    m_Address: Assets/RhythmPulse/_CHEAT/Prefabs
     m_ReadOnly: 0
     m_SerializedLabels: []
     FlaggedDuringContentUpdateRestriction: 0

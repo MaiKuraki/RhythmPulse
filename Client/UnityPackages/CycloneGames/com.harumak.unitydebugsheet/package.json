@@ -1,0 +1,15 @@
+{
+  "name": "com.harumak.unitydebugsheet",
+  "displayName": "Unity Debug Sheet",
+  "version": "1.5.4",
+  "unity": "2020.3",
+  "license": "MIT",
+  "dependencies": {},
+  "author": {
+    "name": "Haruki Yano",
+    "url": "https://github.com/Haruma-K"
+  },
+  "type": "tool",
+  "description": "Hierarchical debug menu system for Unity that makes it easy to create intuitive and organized debug menus.",
+  "_fingerprint": "6ff583b8def9f39b5f205cfeb318c45993383ead"
+}
