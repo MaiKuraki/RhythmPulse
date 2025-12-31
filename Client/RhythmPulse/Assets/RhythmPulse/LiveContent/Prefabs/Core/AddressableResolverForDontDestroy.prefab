@@ -45,14 +45,19 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   dontDestroyAddressablePaths:
-  - DisplayName: DebugGroup
-    AddressablePath: Assets/RhythmPulse/_CHEAT/DebugSystem.prefab
   - DisplayName: EventSystem
     AddressablePath: Assets/RhythmPulse/LiveContent/Prefabs/Core/EventSystem.prefab
-  - DisplayName: AudioManager
-    AddressablePath: Assets/RhythmPulse/LiveContent/Prefabs/Audio/AudioManager.prefab
-  - DisplayName: UI
-    AddressablePath: Assets/RhythmPulse/LiveContent/Prefabs/UI/UIFramework.prefab
   - DisplayName: MainCamera
     AddressablePath: Assets/RhythmPulse/LiveContent/Prefabs/Core/MainCamera.prefab
-  isSingleton: 1
+  - DisplayName: AudioManager
+    AddressablePath: Assets/RhythmPulse/LiveContent/Prefabs/Audio/AudioManager.prefab
+  - DisplayName: UIFramework
+    AddressablePath: Assets/RhythmPulse/LiveContent/Prefabs/UI/UIFramework.prefab
+  - DisplayName: FPSCounter
+    AddressablePath: Assets/RhythmPulse/_CHEAT/Prefabs/FPSCounter.prefab
+  - DisplayName: IngameDebugConsole
+    AddressablePath: Assets/RhythmPulse/_CHEAT/Prefabs/IngameDebugConsole.prefab
+  - DisplayName: DebugSheetCanvas
+    AddressablePath: Assets/RhythmPulse/_CHEAT/Prefabs/DebugSheetCanvas.prefab
+  - DisplayName: DebugSheetManager
+    AddressablePath: Assets/RhythmPulse/_CHEAT/Prefabs/DebugSheetManager.prefab

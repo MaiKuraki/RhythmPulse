@@ -48,16 +48,7 @@ namespace RhythmPulse
 
             builder.RegisterBuildCallback(async resolver =>
             {
-                var assetModule = resolver.Resolve<IAssetModule>("Addressables");
                 var assetResolver = resolver.Resolve<AddressableResolverForDontDestroy>();
-                await assetResolver.InitializeAsync(assetModule);
-                await UniTask.WaitUntil(() => assetResolver.Initialized);
-                var cameraService = resolver.Resolve<IMainCameraService>();
-                var assetPathBuilderFactory = resolver.Resolve<IAssetPathBuilderFactory>();
-                var objectSpawner = resolver.Resolve<IUnityObjectSpawner>();
-                var pkg = assetModule.GetPackage("DefaultPackage");
-                var uiService = resolver.Resolve<IUIService>();
-                uiService.Initialize(assetPathBuilderFactory, objectSpawner, cameraService, pkg);
             });
 
             // Current registration: IGameplayMapListManager and IGameplayMapStorage are registered as Singleton in the root scope.

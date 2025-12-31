@@ -1,11 +1,8 @@
 using System.Collections.Generic;
-using Addler.Runtime.Core.LifetimeBinding;
 using CycloneGames.AssetManagement.Runtime;
 using CycloneGames.Logger;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
-using UnityEngine.AddressableAssets;
-using UnityEngine.ResourceManagement.AsyncOperations;
 
 namespace RhythmPulse.Misc
 {
@@ -47,32 +44,66 @@ namespace RhythmPulse.Misc
     /// </remarks>
     public class AddressableResolverForDontDestroy : MonoBehaviour
     {
+        private const string DEBUG_FLAG = "[AssetResolver]";
+
         [SerializeField]
-        private List<AddressableResolverData> dontDestroyAddressablePaths = new List<AddressableResolverData>();
+        private List<AssetResolverData> dontDestroyAddressablePaths = new List<AssetResolverData>();
 
-        public bool Initialized { get; private set; }
+        // Track loaded handles to prevent memory leaks
+        private List<IAssetHandle<GameObject>> _loadedHandles = new List<IAssetHandle<GameObject>>();
 
-        void Awake()
+        public bool Initialized { get; private set; } = false;
+
+        public async UniTask InitializeAsync(IAssetModule assetModule)
         {
-            Initialized = false;
+            var pkg = assetModule.GetPackage("DefaultPackage");
+
+            foreach (AssetResolverData pathData in dontDestroyAddressablePaths)
+            {
+                // Load the asset using the generic interface
+                var handle = pkg.LoadAssetAsync<GameObject>(pathData.AddressablePath);
+                _loadedHandles.Add(handle); // Track the handle
+
+                await handle.Task;
+
+                if (string.IsNullOrEmpty(handle.Error) && handle.AssetObject != null)
+                {
+                    // Instantiate the GameObject
+                    var prefab = handle.AssetObject as GameObject;
+                    if (prefab != null)
+                    {
+                        var instance = Instantiate(prefab);
+                        DontDestroyOnLoad(instance);
+                        CLogger.LogInfo($"{DEBUG_FLAG} Instantiate: {prefab.name}");
+                    }
+                    else
+                    {
+                        CLogger.LogError($"{DEBUG_FLAG} Loaded asset is not a GameObject: {pathData.AddressablePath}");
+                    }
+                }
+                else
+                {
+                    CLogger.LogError($"{DEBUG_FLAG} Failed to load asset: {pathData.AddressablePath}");
+                }
+            }
+
+            Initialized = true;
         }
 
-        public async UniTask InitializeAsync(IAssetModule addressableModule)
+        private void OnDestroy()
         {
-            var pkg = addressableModule.GetPackage("DefaultPackage");
-
-            foreach (AddressableResolverData pathData in dontDestroyAddressablePaths)
+            // Release all handles when this resolver is destroyed
+            foreach (var handle in _loadedHandles)
             {
-                var prefab = pkg.LoadAssetAsync<GameObject>(pathData.AddressablePath);
-                await prefab.Task;
-                await InstantiateAsync(prefab.AssetObject);
+                handle?.Dispose();
             }
-            Initialized = true;
+            _loadedHandles.Clear();
+            CLogger.LogInfo($"{DEBUG_FLAG} All handles disposed.");
         }
     }
 
     [System.Serializable]
-    public class AddressableResolverData
+    public class AssetResolverData
     {
         public string DisplayName;
         public string AddressablePath;

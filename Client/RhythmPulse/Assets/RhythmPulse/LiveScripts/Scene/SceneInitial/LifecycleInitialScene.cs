@@ -16,8 +16,8 @@ namespace RhythmPulse.Scene
     {
         [Inject] IUIService uiService;
         [Inject] IAssetPathBuilderFactory assetPathBuilderFactory;
-        [Inject] IUnityObjectSpawner unityObjectSpawner;
-        [Inject] IMainCameraService mainCameraService;
+        [Inject] IUnityObjectSpawner objectSpawner;
+        [Inject] IMainCameraService cameraService;
         [Inject][Key("Addressables")] IAssetModule assetModule;
         [Inject] AddressableResolverForDontDestroy assetResolver;
         public UniTask OnEditorFirstPreInitialize(ISceneDataWriter writer, CancellationToken cancellationToken)
@@ -29,6 +29,8 @@ namespace RhythmPulse.Scene
         {
             var pkg = assetModule.GetPackage("DefaultPackage");
             await assetResolver.InitializeAsync(assetModule);
+            uiService.Initialize(assetPathBuilderFactory, objectSpawner, cameraService, pkg);
+            
             await GlobalSceneNavigator.Instance.Push(SceneDefinitions.Splash);
         }
 

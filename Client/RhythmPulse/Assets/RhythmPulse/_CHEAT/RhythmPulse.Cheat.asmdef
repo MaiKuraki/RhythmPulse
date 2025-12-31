@@ -4,6 +4,7 @@
     "references": [
         "IngameDebugConsole.Runtime",
         "UnityDebugSheet",
+        "UnityDebugSheet.Unity",
         "UnityDebugSheet.IngameDebugConsole",
         "CycloneGames.Cheat"
     ],
