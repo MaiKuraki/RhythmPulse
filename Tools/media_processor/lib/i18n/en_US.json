@@ -8,6 +8,7 @@
   "supportedFormats": "Supported formats: %s",
   "operation": "Operation",
   "output4K": "Output 4K Video Resolution",
+  "videoFormat": "Video Format:",
   "state": "State",
   "generateFullMedia": "Generate Full Media",
   "cancelAllTasks": "Cancel All Tasks",
@@ -40,5 +41,8 @@
   "previewVideoSplitFailed": "Preview video split failed, return code: %s",
   "previewAudioSplitFailed": "Preview audio split failed, return code: %s",
   "generatingPreview": "Generating preview...",
-  "invalidTimeRange": "Invalid time range (end must be after start)"
+  "invalidTimeRange": "Invalid time range (end must be after start)",
+  "configuration": "Configuration",
+  "actions": "Actions",
+  "ok": "OK"
 }
