@@ -1,44 +1,64 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
-/// Zero-allocation log controller for high-frequency FFmpeg output.
-/// Uses direct list access and frame-synced scrolling.
+/// Log controller using a ring buffer to avoid O(n) removeAt(0).
+/// Frame-synced auto-scroll to prevent layout thrashing.
 class LogController extends ChangeNotifier {
-  final List<String> _logs = [];
-  final ScrollController scrollController = ScrollController();
   static const int _maxLogSize = 5000;
-  bool _scrollPending = false;
 
-  int get length => _logs.length;
-  String operator [](int index) => _logs[index];
-  
-  // For iteration without allocation - prefer length + operator[]
-  List<String> get logs => _logs;
+  // Ring buffer: once full, _start advances and old entries are overwritten
+  final List<String?> _buffer = List.filled(_maxLogSize, null);
+  int _start = 0;
+  int _length = 0;
+
+  final ScrollController scrollController = ScrollController();
+  bool _scrollPending = false;
+  bool _disposed = false;
+
+  int get length => _length;
+
+  String operator [](int index) {
+    assert(index >= 0 && index < _length);
+    return _buffer[(_start + index) % _maxLogSize]!;
+  }
+
+  List<String> get logs => List.generate(_length, (i) => this[i]);
 
   void addLog(String line) {
-    _logs.add(line);
-    if (_logs.length > _maxLogSize) {
-      _logs.removeAt(0);
+    if (_disposed) return;
+    if (_length < _maxLogSize) {
+      _buffer[_length] = line;
+      _length++;
+    } else {
+      _buffer[_start] = line;
+      _start = (_start + 1) % _maxLogSize;
     }
     notifyListeners();
     _scheduleScroll();
   }
 
   void clear() {
-    _logs.clear();
+    _start = 0;
+    _length = 0;
     notifyListeners();
   }
 
   void _scheduleScroll() {
     if (_scrollPending || !scrollController.hasClients) return;
     _scrollPending = true;
-    // Batch scroll to end of frame for efficiency
     SchedulerBinding.instance.addPostFrameCallback((_) {
       _scrollPending = false;
-      if (scrollController.hasClients) {
+      if (!_disposed && scrollController.hasClients) {
         scrollController.jumpTo(scrollController.position.maxScrollExtent);
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    scrollController.dispose();
+    super.dispose();
   }
 }
 
@@ -103,9 +123,9 @@ class LogView extends StatelessWidget {
                     return ListView.builder(
                       padding: const EdgeInsets.all(16),
                       controller: controller.scrollController,
-                      itemCount: controller.logs.length,
+                      itemCount: controller.length,
                       itemBuilder: (context, index) {
-                        final log = controller.logs[index];
+                        final log = controller[index];
                         Color logColor = const Color(0xFFCCCCCC); // Default text color
                         
                         // Simple syntax highlighting

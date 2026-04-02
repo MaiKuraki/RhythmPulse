@@ -1,5 +1,5 @@
 /// Lightweight cancellation token for async operation control.
-/// Memory-safe: listeners are cleared after cancel to prevent leaks.
+/// Listeners are cleared after cancel to prevent leaks.
 class CancellationToken {
   bool _isCancelled = false;
   List<void Function()>? _listeners = [];
@@ -10,7 +10,7 @@ class CancellationToken {
     if (_isCancelled) return;
     _isCancelled = true;
     final listeners = _listeners;
-    _listeners = null; // Release reference to allow GC
+    _listeners = null;
     if (listeners != null) {
       for (final listener in listeners) {
         listener();
@@ -26,7 +26,10 @@ class CancellationToken {
     }
   }
 
-  /// Resets token for reuse (avoids allocation of new token)
+  void removeListener(void Function() listener) {
+    _listeners?.remove(listener);
+  }
+
   void reset() {
     _isCancelled = false;
     _listeners = [];

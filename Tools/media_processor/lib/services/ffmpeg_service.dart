@@ -50,28 +50,31 @@ class FfmpegProcessManager {
   }
 }
 
-/// Simple mutex lock for thread safety
+// Dart single-isolate mutex using Completer chain to guarantee FIFO ordering
 class Lock {
-  Completer<void>? _completer;
+  Future<void> _last = Future.value();
 
-  Future<T> synchronized<T>(T Function() action) async {
-    while (_completer != null) {
-      await _completer!.future;
-    }
-    _completer = Completer<void>();
-    try {
-      return action();
-    } finally {
-      final c = _completer;
-      _completer = null;
-      c?.complete();
-    }
+  Future<T> synchronized<T>(T Function() action) {
+    final prev = _last;
+    final completer = Completer<void>();
+    _last = completer.future;
+    return prev.then((_) {
+      try {
+        return action();
+      } finally {
+        completer.complete();
+      }
+    });
   }
 }
 
 /// Service providing FFmpeg operations with optimized logging and error handling
 class FfmpegService {
   static String? _cachedBinDir;
+  static HardwareEncoder? _cachedEncoder;
+  static int? _cachedThreadCount;
+
+  static final RegExp _progressRegex = RegExp(r'time=(\d+):(\d+):(\d+\.\d+)');
 
   static void init(String appRoot) {
      _cachedBinDir = path.join(appRoot, 'data', 'ffmpeg-release-full-shared', 'bin');
@@ -82,7 +85,7 @@ class FfmpegService {
     return path.join(Directory.current.path, 'data', 'ffmpeg-release-full-shared', 'bin');
   }
 
-  /// Retrieves media metadata using the bundled ffprobe
+  /// Retrieves all media metadata in a single ffprobe invocation
   static Future<MediaInfo?> getMediaInfo(String inputPath) async {
     try {
       final ffprobePath = getBundledFfprobePath();
@@ -90,76 +93,37 @@ class FfmpegService {
         throw Exception('Bundled ffprobe not found or not accessible');
       }
 
-      final hasVideo = await _hasVideoStream(inputPath);
-      final hasAudio = await _hasAudioStream(inputPath);
-
-      if (!hasVideo && !hasAudio) return null;
-
-      int videoBitrate = 0;
-      int width = 0;
-      int height = 0;
-      int audioBitrate = 0;
-
-      if (hasVideo) {
-        final videoArgs = [
-          '-v', 'error',
-          '-select_streams', 'v:0',
-          '-show_entries', 'stream=bit_rate,width,height',
-          '-of', 'json',
-          inputPath,
-        ];
-
-        final result = await Process.run(ffprobePath, videoArgs);
-        if (result.exitCode == 0) {
-          final jsonMap = json.decode(result.stdout as String);
-          final streams = jsonMap['streams'] as List<dynamic>?;
-          if (streams?.isNotEmpty == true) {
-            final stream = streams!.first;
-            videoBitrate = int.tryParse(stream['bit_rate']?.toString() ?? '') ?? 0;
-            width = stream['width'] ?? 0;
-            height = stream['height'] ?? 0;
-          }
-        }
-      }
-
-      if (hasAudio) {
-        final audioArgs = [
-          '-v', 'error',
-          '-select_streams', 'a:0',
-          '-show_entries', 'stream=bit_rate',
-          '-of', 'json',
-          inputPath,
-        ];
-
-        final result = await Process.run(ffprobePath, audioArgs);
-        if (result.exitCode == 0) {
-          final jsonMap = json.decode(result.stdout as String);
-          final streams = jsonMap['streams'] as List<dynamic>?;
-          if (streams?.isNotEmpty == true) {
-            final stream = streams!.first;
-            audioBitrate = int.tryParse(stream['bit_rate']?.toString() ?? '') ?? 0;
-          }
-        }
-      }
-
-      double durationSec = 0.0;
-
-      // Get Duration
-      final formatArgs = [
+      final args = [
         '-v', 'error',
+        '-show_entries', 'stream=codec_type,bit_rate,width,height',
         '-show_entries', 'format=duration',
         '-of', 'json',
         inputPath,
       ];
-      
-      final formatResult = await Process.run(ffprobePath, formatArgs);
-      if (formatResult.exitCode == 0) {
-        final jsonMap = json.decode(formatResult.stdout as String);
-        final format = jsonMap['format'];
-        if (format != null) {
-           durationSec = double.tryParse(format['duration']?.toString() ?? '') ?? 0.0;
+
+      final result = await Process.run(ffprobePath, args);
+      if (result.exitCode != 0) return null;
+
+      final jsonMap = json.decode(result.stdout as String);
+      final streams = jsonMap['streams'] as List<dynamic>? ?? [];
+      final format = jsonMap['format'] as Map<String, dynamic>?;
+
+      int videoBitrate = 0, width = 0, height = 0, audioBitrate = 0;
+
+      for (final stream in streams) {
+        final codecType = stream['codec_type']?.toString();
+        if (codecType == 'video' && width == 0) {
+          videoBitrate = int.tryParse(stream['bit_rate']?.toString() ?? '') ?? 0;
+          width = stream['width'] ?? 0;
+          height = stream['height'] ?? 0;
+        } else if (codecType == 'audio' && audioBitrate == 0) {
+          audioBitrate = int.tryParse(stream['bit_rate']?.toString() ?? '') ?? 0;
         }
       }
+
+      if (width == 0 && height == 0 && audioBitrate == 0) return null;
+
+      final durationSec = double.tryParse(format?['duration']?.toString() ?? '') ?? 0.0;
 
       return MediaInfo(
         videoBitrate: videoBitrate,
@@ -232,18 +196,19 @@ class FfmpegService {
       pid = process.pid;
       await FfmpegProcessManager().addProcess(pid);
 
-      process.stdout
+      // Drain streams fully before checking exitCode
+      final stdoutDone = process.stdout
           .transform(utf8.decoder)
           .transform(const LineSplitter())
-          .listen(onLog);
+          .listen(onLog)
+          .asFuture<void>();
 
-      process.stderr
+      final stderrDone = process.stderr
           .transform(utf8.decoder)
           .transform(const LineSplitter())
-          .listen(onLog);
+          .listen(onLog)
+          .asFuture<void>();
 
-      // Handle cancellation
-      // If already cancelled, kill immediately
       if (cancelToken?.isCancelled == true) {
         process.kill();
         await FfmpegProcessManager().killProcess(pid);
@@ -257,8 +222,10 @@ class FfmpegService {
       });
 
       final exitCode = await process.exitCode;
-      
-      // If cancelled during execution, return specific message
+
+      // Wait for all stream output to be delivered
+      await Future.wait([stdoutDone, stderrDone]).catchError((_) {});
+
       if (cancelToken?.isCancelled == true) {
          return const FfmpegResult(false, 'Task Cancelled');
       }
@@ -273,7 +240,16 @@ class FfmpegService {
     }
   }
 
-  /// Generates full media (Audio + Video splitting/processing)
+  /// Parses FFmpeg time= output into seconds, returns null if no match
+  static double? _parseProgressTime(String msg) {
+    final timeMatch = _progressRegex.firstMatch(msg);
+    if (timeMatch == null) return null;
+    final h = int.parse(timeMatch.group(1)!);
+    final m = int.parse(timeMatch.group(2)!);
+    final s = double.parse(timeMatch.group(3)!);
+    return h * 3600 + m * 60 + s;
+  }
+
   /// Generates full media (Audio + Video splitting/processing)
   static Future<void> generateFullMedia({
     required String inputPath,
@@ -293,21 +269,14 @@ class FfmpegService {
 
     void log(String msg) {
        onLog(msg);
-       // Parse progress
        if (totalDuration > 0 && onProgress != null) {
-         final timeMatch = RegExp(r'time=(\d+):(\d+):(\d+\.\d+)').firstMatch(msg);
-         if (timeMatch != null) {
-           final h = int.parse(timeMatch.group(1)!);
-           final m = int.parse(timeMatch.group(2)!);
-           final s = double.parse(timeMatch.group(3)!);
-           final current = h * 3600 + m * 60 + s;
-           final progress = (current / totalDuration).clamp(0.0, 1.0);
-           onProgress(progress);
+         final current = _parseProgressTime(msg);
+         if (current != null) {
+           onProgress((current / totalDuration).clamp(0.0, 1.0));
          }
        }
     }
     
-    // Helper to check cancellation before starting expensive steps
     bool isCancelled() {
       if (cancelToken?.isCancelled == true) {
         log('🛑 Task Cancelled by user.');
@@ -326,7 +295,6 @@ class FfmpegService {
 
       if (isCancelled()) return;
 
-      final mediaInfo = await getMediaInfo(inputPath);
       final mediaType = await detectMediaType(inputPath);
       final isHDR = await _hasHdr(inputPath);
 
@@ -440,12 +408,8 @@ class FfmpegService {
 
   // --- Helpers ---
 
-  /// Optimal thread count: use physical cores, capped for efficiency
   static int _getOptimalThreadCount() {
-    final cores = Platform.numberOfProcessors;
-    // Use 75% of cores for encoding, leave headroom for system/UI
-    final optimal = (cores * 0.75).ceil();
-    return optimal.clamp(2, 16);
+    return _cachedThreadCount ??= (Platform.numberOfProcessors * 0.75).ceil().clamp(2, 16);
   }
 
   /// VP8 encoder for WebM - constrained quality mode (CRF + bitrate cap)
@@ -639,15 +603,10 @@ class FfmpegService {
        void log(String msg) {
           onLog(msg);
           if (onProgress != null && durationVal > 0) {
-              final timeMatch = RegExp(r'time=(\d+):(\d+):(\d+\.\d+)').firstMatch(msg);
-             if (timeMatch != null) {
-               final h = int.parse(timeMatch.group(1)!);
-               final m = int.parse(timeMatch.group(2)!);
-               final s = double.parse(timeMatch.group(3)!);
-               final current = h * 3600 + m * 60 + s;
-               final progress = (current / durationVal).clamp(0.0, 1.0);
-               onProgress(progress);
-             }
+            final current = _parseProgressTime(msg);
+            if (current != null) {
+              onProgress((current / durationVal).clamp(0.0, 1.0));
+            }
           }
        }
 
@@ -684,55 +643,39 @@ class FfmpegService {
        return "Preview Generation Completed";
   }
 
-  static Future<bool> _hasVideoStream(String path) async {
-    final res = await Process.run(getBundledFfprobePath(), [
-      '-v', 'error', '-select_streams', 'v', 
-      '-show_entries', 'stream=codec_type', '-of', 'csv=p=0', path
-    ]);
-    return res.exitCode == 0 && res.stdout.toString().trim().isNotEmpty;
-  }
-  
-  static Future<bool> _hasAudioStream(String path) async {
-    final res = await Process.run(getBundledFfprobePath(), [
-      '-v', 'error', '-select_streams', 'a', 
-      '-show_entries', 'stream=codec_type', '-of', 'csv=p=0', path
-    ]);
-    return res.exitCode == 0 && res.stdout.toString().trim().isNotEmpty;
-  }
-
-  static Future<bool> _hasHdr(String path) async {
+  static Future<bool> _hasHdr(String inputPath) async {
      final res = await Process.run(getBundledFfprobePath(), [
       '-v', 'error', '-select_streams', 'v:0',
       '-show_entries', 'stream=color_primaries,color_transfer', 
-      '-of', 'json', path
+      '-of', 'json', inputPath
     ]);
     if (res.exitCode != 0) return false;
     final body = res.stdout.toString();
     return body.contains('bt2020') || body.contains('smpte2084');
   }
 
-  /// Detects available hardware encoder with priority: NVENC > QSV > AMF > Software
+  /// Detects best hardware encoder with caching (hardware doesn't change at runtime)
   static Future<HardwareEncoder> _detectBestEncoder() async {
-    if (!Platform.isWindows) return HardwareEncoder.software;
+    if (_cachedEncoder != null) return _cachedEncoder!;
+
+    if (!Platform.isWindows) {
+      _cachedEncoder = HardwareEncoder.software;
+      return _cachedEncoder!;
+    }
 
     final ffmpegPath = getBundledFfmpegPath();
     
-    // Test NVENC (NVIDIA)
     if (await _testEncoder(ffmpegPath, 'h264_nvenc')) {
-      return HardwareEncoder.nvenc;
-    }
-    
-    // Test QSV (Intel)
-    if (await _testEncoder(ffmpegPath, 'h264_qsv')) {
-      return HardwareEncoder.qsv;
-    }
-    
-    // Test AMF (AMD)
-    if (await _testEncoder(ffmpegPath, 'h264_amf')) {
-      return HardwareEncoder.amf;
+      _cachedEncoder = HardwareEncoder.nvenc;
+    } else if (await _testEncoder(ffmpegPath, 'h264_qsv')) {
+      _cachedEncoder = HardwareEncoder.qsv;
+    } else if (await _testEncoder(ffmpegPath, 'h264_amf')) {
+      _cachedEncoder = HardwareEncoder.amf;
+    } else {
+      _cachedEncoder = HardwareEncoder.software;
     }
 
-    return HardwareEncoder.software;
+    return _cachedEncoder!;
   }
 
   /// Tests if a specific encoder is available and functional
@@ -751,8 +694,8 @@ class FfmpegService {
     }
   }
 
-  static Future<bool> _verifyBinary(String path) async {
-    return File(path).exists();
+  static Future<bool> _verifyBinary(String binaryPath) async {
+    return File(binaryPath).exists();
   }
 
   static String getBundledFfmpegPath() {

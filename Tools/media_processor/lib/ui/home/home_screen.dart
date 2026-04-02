@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -44,6 +43,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    _logController.dispose();
     _startTimeController.dispose();
     _endTimeController.dispose();
     _cancelCurrentTask();
@@ -88,7 +88,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _cancelCurrentTask() async {
     if (_taskStatus == TaskStatus.running) {
       _logController.addLog('\n${'taskCanceled'.i18n()}');
-      setState(() => _taskStatus = TaskStatus.canceled);
+      if (mounted) setState(() => _taskStatus = TaskStatus.canceled);
       
       _cancellationToken?.cancel();
       await FfmpegProcessManager().killAll();
@@ -298,17 +298,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildPreviewOptions() {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeInOut,
-      height: _showPreviewOptions ? 180 : 0,
-       padding: _showPreviewOptions ? const EdgeInsets.all(16) : EdgeInsets.zero,
-      decoration: BoxDecoration(
-        color: Colors.deepPurple.shade50,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.deepPurple.shade100),
-      ),
-      child: _showPreviewOptions ? Column(
+    if (!_showPreviewOptions) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
         children: [
           Row(
             children: [
@@ -349,7 +342,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           )
         ],
-      ) : null,
+      ),
     );
   }
 
