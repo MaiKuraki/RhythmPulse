@@ -11,6 +11,7 @@ import '../../services/ffmpeg_service.dart';
 import '../../utils/cancellation_token.dart';
 import '../widgets/control_panel.dart';
 import '../widgets/log_view.dart';
+import '../widgets/video_preview.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -22,16 +23,17 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   // State
   String? _selectedFilePath;
+  MediaType _detectedMediaType = MediaType.unknown;
   TaskStatus _taskStatus = TaskStatus.idle;
   bool _showPreviewOptions = false;
   bool _videoOutputApply4K = false;
   VideoFormat _videoFormat = VideoFormat.mp4;
   double _progress = 0.0;
+  int _previewStartMs = 0;
+  int _previewEndMs = 0;
   
   // Controllers
   final LogController _logController = LogController();
-  final TextEditingController _startTimeController = TextEditingController();
-  final TextEditingController _endTimeController = TextEditingController();
   
   // Async management
   CancellationToken? _cancellationToken;
@@ -44,8 +46,6 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _logController.dispose();
-    _startTimeController.dispose();
-    _endTimeController.dispose();
     _cancelCurrentTask();
     super.dispose();
   }
@@ -63,12 +63,16 @@ class _HomeScreenState extends State<HomeScreen> {
       );
       
       if (result != null && result.files.single.path != null) {
-        final path = result.files.single.path!;
+        final filePath = result.files.single.path!;
+        final mediaType = await FfmpegService.detectMediaType(filePath);
         setState(() {
-          _selectedFilePath = path;
+          _selectedFilePath = filePath;
+          _detectedMediaType = mediaType;
           _taskStatus = TaskStatus.idle;
+          _previewStartMs = 0;
+          _previewEndMs = 0;
         });
-        _logController.addLog('${'selectedFile'.i18n()}\n$path');
+        _logController.addLog('${'selectedFile'.i18n()}\n$filePath');
       }
     } catch (e) {
       _logController.addLog('fileSelectionFailed'.i18n(['$e']));
@@ -170,11 +174,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _generatePreview() async {
      if (_selectedFilePath == null) return;
-     
-     final startMs = int.tryParse(_startTimeController.text) ?? 0;
-     final endMs = int.tryParse(_endTimeController.text) ?? 0;
 
-     if (startMs < 0 || endMs <= startMs) {
+     if (_previewStartMs < 0 || _previewEndMs <= _previewStartMs) {
        _logController.addLog('invalidTimeRange'.i18n());
        setState(() => _taskStatus = TaskStatus.failed);
        return;
@@ -191,12 +192,11 @@ class _HomeScreenState extends State<HomeScreen> {
        final inputFile = File(_selectedFilePath!);
        final dir = inputFile.parent.path.replaceAll('\\', '/');
        final baseName = path.basenameWithoutExtension(_selectedFilePath!);
-       
-        final mediaType = await FfmpegService.detectMediaType(_selectedFilePath!);
-        final isVideo = mediaType == MediaType.video;
 
-        final outputVideoPath = isVideo 
-            ? '$dir/${baseName}_preview.${_videoFormat == VideoFormat.webm ? 'webm' : 'mp4'}' 
+        final isVideo = _detectedMediaType == MediaType.video;
+
+        final outputVideoPath = isVideo
+            ? '$dir/${baseName}_preview.${_videoFormat == VideoFormat.webm ? 'webm' : 'mp4'}'
             : null;
         final outputAudioPath = '$dir/${baseName}_preview.ogg';
 
@@ -204,14 +204,14 @@ class _HomeScreenState extends State<HomeScreen> {
           inputPath: _selectedFilePath!,
           outputVideoPath: outputVideoPath,
           outputAudioPath: outputAudioPath,
-          startMs: startMs,
-          endMs: endMs,
+          startMs: _previewStartMs,
+          endMs: _previewEndMs,
           videoFormat: _videoFormat,
           onLog: (line) => _logController.addLog(line),
           onProgress: (p) => setState(() => _progress = p),
           cancelToken: _cancellationToken,
         );
-        
+
         if (_taskStatus != TaskStatus.canceled) {
            if (_cancellationToken?.isCancelled == true) {
                setState(() => _taskStatus = TaskStatus.canceled);
@@ -297,51 +297,89 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildPreviewOptions() {
-    if (!_showPreviewOptions) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _startTimeController,
-                  keyboardType: TextInputType.number,
-                  decoration: InputDecoration(
-                    labelText: 'startTimeMs'.i18n(),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+  Widget _buildStatusCard() {
+    final isProcessing = _taskStatus == TaskStatus.running;
+
+    String statusText;
+    Color statusColor;
+    IconData? statusIcon;
+
+    switch (_taskStatus) {
+      case TaskStatus.running:
+        statusText = 'taskStatusRunning'.i18n();
+        statusColor = Colors.blue;
+        break;
+      case TaskStatus.success:
+        statusText = 'taskStatusSuccess'.i18n();
+        statusColor = Colors.green;
+        statusIcon = Icons.check_circle;
+        break;
+      case TaskStatus.failed:
+        statusText = 'taskStatusFailed'.i18n();
+        statusColor = Colors.red;
+        statusIcon = Icons.error;
+        break;
+      case TaskStatus.canceled:
+        statusText = 'taskStatusCanceled'.i18n();
+        statusColor = Colors.orange;
+        statusIcon = Icons.warning;
+        break;
+      case TaskStatus.idle:
+        statusText = 'taskStatusIdle'.i18n();
+        statusColor = Colors.grey;
+        break;
+    }
+
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                if (isProcessing)
+                  SizedBox(
+                    width: 20, height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      value: _progress > 0 ? _progress : null,
+                    ),
+                  )
+                else
+                  Icon(statusIcon ?? Icons.circle, size: 20, color: statusColor),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    isProcessing
+                        ? '${'processingPleaseWait'.i18n()} ${(_progress * 100).toStringAsFixed(1)}%'
+                        : statusText,
+                    style: TextStyle(fontWeight: FontWeight.bold, color: statusColor),
                   ),
                 ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: TextField(
-                  controller: _endTimeController,
-                  keyboardType: TextInputType.number,
-                   decoration: InputDecoration(
-                    labelText: 'endTimeMs'.i18n(),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                if (isProcessing)
+                  TextButton.icon(
+                    icon: const Icon(Icons.stop_circle_outlined, size: 18),
+                    label: Text('cancelAllTasks'.i18n()),
+                    onPressed: _cancelCurrentTask,
+                    style: TextButton.styleFrom(foregroundColor: Colors.red),
                   ),
-                ),
-              )
-            ],
-          ),
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              icon: const Icon(Icons.play_arrow),
-              label: Text('generatePreview'.i18n()),
-              onPressed: _taskStatus == TaskStatus.running ? null : _generatePreview,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.deepPurple,
-                foregroundColor: Colors.white,
-              ),
+              ],
             ),
-          )
-        ],
+            if (isProcessing) ...[
+              const SizedBox(height: 12),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: _progress > 0 ? _progress : null,
+                  minHeight: 6,
+                  backgroundColor: Colors.grey.shade200,
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -440,22 +478,32 @@ class _HomeScreenState extends State<HomeScreen> {
                   _buildFileSelector(),
                   const SizedBox(height: 24),
                   ControlPanel(
-                    taskStatus: _taskStatus,
                     isFileSelected: _selectedFilePath != null,
+                    isProcessing: _taskStatus == TaskStatus.running,
                     showPreviewOptions: _showPreviewOptions,
                     apply4k: _videoOutputApply4K,
                     videoFormat: _videoFormat,
-                    progress: _progress,
                     onGenerateFull: _generateFullMedia,
                     onTogglePreview: () => setState(() => _showPreviewOptions = !_showPreviewOptions),
-                    onCancel: _cancelCurrentTask,
                     on4kChanged: (val) => setState(() => _videoOutputApply4K = val),
                     onFormatChanged: (val) => setState(() => _videoFormat = val),
-                    previewOptionsChild: _buildPreviewOptions(),
                   ),
+                  if (_showPreviewOptions && _selectedFilePath != null) ...[
+                    const SizedBox(height: 24),
+                    VideoPreviewPanel(
+                      filePath: _selectedFilePath!,
+                      isVideo: _detectedMediaType == MediaType.video,
+                      onStartMsChanged: (ms) => setState(() => _previewStartMs = ms),
+                      onEndMsChanged: (ms) => setState(() => _previewEndMs = ms),
+                      onGeneratePreview: _generatePreview,
+                      enabled: _taskStatus != TaskStatus.running,
+                    ),
+                  ],
                   const SizedBox(height: 24),
                   
-                  // Terminal connected below
+                  // Status & Log section — always visible together
+                  _buildStatusCard(),
+                  const SizedBox(height: 12),
                   SizedBox(
                     height: 320, // Fixed height for terminal in scrolling view
                     child: LogView(controller: _logController)

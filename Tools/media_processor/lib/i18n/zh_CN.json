@@ -44,5 +44,15 @@
   "invalidTimeRange": "无效时间范围（结束时间必须晚于开始时间）",
   "configuration": "配置",
   "actions": "操作",
-  "ok": "确定"
+  "ok": "确定",
+  "mediaPreview": "媒体预览",
+  "playSelection": "播放选段",
+  "clipRange": "剪辑范围",
+  "rangeStart": "开始",
+  "rangeEnd": "结束",
+  "rangeDuration": "时长",
+  "loopSelection": "循环播放选段",
+  "stopLoop": "停止循环",
+  "setCurrent": "设为当前位置",
+  "waveformLoading": "正在生成波形..."
 }

@@ -44,5 +44,15 @@
   "invalidTimeRange": "Invalid time range (end must be after start)",
   "configuration": "Configuration",
   "actions": "Actions",
-  "ok": "OK"
+  "ok": "OK",
+  "mediaPreview": "Media Preview",
+  "playSelection": "Play Selection",
+  "clipRange": "Clip Range",
+  "rangeStart": "Start",
+  "rangeEnd": "End",
+  "rangeDuration": "Duration",
+  "loopSelection": "Loop Selection",
+  "stopLoop": "Stop Loop",
+  "setCurrent": "Set to current position",
+  "waveformLoading": "Generating waveform..."
 }

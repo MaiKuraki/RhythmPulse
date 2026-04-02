@@ -76,6 +76,23 @@ class FfmpegService {
 
   static final RegExp _progressRegex = RegExp(r'time=(\d+):(\d+):(\d+\.\d+)');
 
+  /// Lines matching any of these patterns are suppressed from user-facing logs.
+  static final RegExp _noisyLineRegex = RegExp(
+    r'(^\s*(Metadata|Stream\s+#|Input\s+#|Output\s+#|Stream mapping|'
+    r'handler_name|vendor_id|encoder\s+:|creation_time|major_brand|'
+    r'minor_version|compatible_brands|Duration:|Press \[q\]|'
+    r'\[out#|At least one output file|title\s+:))|'
+    r'(^\s*$)',
+    caseSensitive: false,
+  );
+
+  /// Returns true if the line contains useful information for the user.
+  static bool _isUsefulLogLine(String line) {
+    if (line.isEmpty) return false;
+    if (_noisyLineRegex.hasMatch(line)) return false;
+    return true;
+  }
+
   static void init(String appRoot) {
      _cachedBinDir = path.join(appRoot, 'data', 'ffmpeg-release-full-shared', 'bin');
   }
@@ -224,7 +241,7 @@ class FfmpegService {
       final exitCode = await process.exitCode;
 
       // Wait for all stream output to be delivered
-      await Future.wait([stdoutDone, stderrDone]).catchError((_) {});
+      await Future.wait([stdoutDone, stderrDone]).catchError((_) => <void>[]);
 
       if (cancelToken?.isCancelled == true) {
          return const FfmpegResult(false, 'Task Cancelled');
@@ -268,13 +285,14 @@ class FfmpegService {
     final totalDuration = mediaInfo?.durationSec ?? 0.0;
 
     void log(String msg) {
-       onLog(msg);
+       // Only forward progress updates and useful lines to user
        if (totalDuration > 0 && onProgress != null) {
          final current = _parseProgressTime(msg);
          if (current != null) {
            onProgress((current / totalDuration).clamp(0.0, 1.0));
          }
        }
+       if (_isUsefulLogLine(msg)) onLog(msg);
     }
     
     bool isCancelled() {
@@ -347,11 +365,11 @@ class FfmpegService {
 
         if (!vResult.success) {
            log('❌ ${localizedStrings['videoSplitFailed']?.replaceAll('%s', vResult.log) ?? 'Video failed: ${vResult.log}'}');
-           summary.add('Video: FAILED');
+           summary.add('❌ Video: FAILED');
            return;
         }
         log('✅ ${localizedStrings['videoSplitSuccess']?.replaceAll('%s', outputVideoPath) ?? 'Video Ready: $outputVideoPath'}');
-        summary.add('Video: SUCCESS ($outputVideoPath)');
+        summary.add('✅ Video: $outputVideoPath');
 
         // 2. Audio Command
         if (isCancelled()) return;
@@ -367,10 +385,10 @@ class FfmpegService {
 
         if (aResult.success) {
            log('✅ ${localizedStrings['audioSplitSuccess']?.replaceAll('%s', outputAudioPath) ?? 'Audio Ready: $outputAudioPath'}');
-           summary.add('Audio: SUCCESS ($outputAudioPath)');
+           summary.add('✅ Audio: $outputAudioPath');
         } else {
            log('❌ ${localizedStrings['audioSplitFailed']?.replaceAll('%s', aResult.log) ?? 'Audio failed: ${aResult.log}'}');
-           summary.add('Audio: FAILED');
+           summary.add('❌ Audio: FAILED');
         }
 
       } else {
@@ -378,12 +396,12 @@ class FfmpegService {
         if (isCancelled()) return;
         
         final audioCmd = _buildAudioCommand(inputPath, outputAudioPath, mediaInfo?.audioBitrate ?? 0);
-        final result = await executeCommand(audioCmd, onLog: onLog, cancelToken: cancelToken);
+        final result = await executeCommand(audioCmd, onLog: log, cancelToken: cancelToken);
         
          if (result.success) {
-           summary.add('Audio: SUCCESS ($outputAudioPath)');
+           summary.add('✅ Audio: $outputAudioPath');
         } else {
-           summary.add('Audio: FAILED');
+           summary.add('❌ Audio: FAILED');
         }
       }
 
@@ -391,19 +409,24 @@ class FfmpegService {
       log('❌ Error: $e');
       summary.add('Error: $e');
     } finally {
-       final separator = '=' * 30;
-       onLog('\n$separator');
-       onLog('      PROCESSING SUMMARY');
-       onLog(separator);
-       if (summary.isEmpty) {
-         onLog('No actions completed.');
-       } else {
-         for (final line in summary) {
-           onLog(line);
-         }
-       }
-       onLog('$separator\n');
+       _logSummary(onLog, summary);
     }
+  }
+
+  static void _logSummary(void Function(String) onLog, List<String> summary) {
+    final separator = '═' * 40;
+    onLog('');
+    onLog(separator);
+    onLog('  RESULT SUMMARY');
+    onLog(separator);
+    if (summary.isEmpty) {
+      onLog('  No actions completed.');
+    } else {
+      for (final line in summary) {
+        onLog('  $line');
+      }
+    }
+    onLog(separator);
   }
 
   // --- Helpers ---
@@ -601,14 +624,16 @@ class FfmpegService {
       final durationSec = durationVal.toStringAsFixed(3);
       
        void log(String msg) {
-          onLog(msg);
           if (onProgress != null && durationVal > 0) {
             final current = _parseProgressTime(msg);
             if (current != null) {
               onProgress((current / durationVal).clamp(0.0, 1.0));
             }
           }
+          if (_isUsefulLogLine(msg)) onLog(msg);
        }
+
+       final List<String> summary = [];
 
        log('Generating Preview from ${startSec}s for ${durationSec}s');
 
@@ -627,10 +652,20 @@ class FfmpegService {
            else ...['-crf', '28', '-preset', 'ultrafast'],
            '-an', '-y', outputVideoPath
          ];
-          await executeCommand(cmd, onLog: log, cancelToken: cancelToken);
+         final vResult = await executeCommand(cmd, onLog: log, cancelToken: cancelToken);
+         if (cancelToken?.isCancelled == true) {
+           summary.add('Video: CANCELLED');
+         } else if (vResult.success) {
+           summary.add('✅ Video: $outputVideoPath');
+         } else {
+           summary.add('❌ Video: FAILED');
+         }
        }
 
-       if (cancelToken?.isCancelled == true) return "Cancelled";
+       if (cancelToken?.isCancelled == true) {
+         _logSummary(onLog, summary);
+         return "Cancelled";
+       }
        final audioCmd = [
            '-ss', startSec, '-t', durationSec,
            '-i', inputPath,
@@ -638,8 +673,16 @@ class FfmpegService {
            '-c:a', 'libvorbis', '-aq', '4', 
            '-y', outputAudioPath
        ];
-       await executeCommand(audioCmd, onLog: log, cancelToken: cancelToken);
+       final aResult = await executeCommand(audioCmd, onLog: log, cancelToken: cancelToken);
+       if (cancelToken?.isCancelled == true) {
+         summary.add('Audio: CANCELLED');
+       } else if (aResult.success) {
+         summary.add('✅ Audio: $outputAudioPath');
+       } else {
+         summary.add('❌ Audio: FAILED');
+       }
        
+       _logSummary(onLog, summary);
        return "Preview Generation Completed";
   }
 
@@ -706,5 +749,29 @@ class FfmpegService {
   static String getBundledFfprobePath() {
     final binDir = _getBinDir();
     return Platform.isWindows ? path.join(binDir, 'ffprobe.exe') : path.join(binDir, 'ffprobe');
+  }
+
+  static Future<FfmpegResult> generateWaveformImage({
+    required String inputPath,
+    required String outputImagePath,
+    int width = 2048,
+    int height = 200,
+    required void Function(String line) onLog,
+    CancellationToken? cancelToken,
+  }) async {
+    final ffmpegPath = getBundledFfmpegPath();
+    if (!await _verifyBinary(ffmpegPath)) {
+      return const FfmpegResult(false, 'FFmpeg not found');
+    }
+
+    final args = [
+      '-i', inputPath,
+      '-filter_complex',
+      'aformat=channel_layouts=mono,showwavespic=s=${width}x$height:colors=#7c4dff|#b388ff:scale=sqrt:draw=full',
+      '-frames:v', '1',
+      '-y', outputImagePath,
+    ];
+
+    return executeCommand(args, onLog: onLog, cancelToken: cancelToken);
   }
 }

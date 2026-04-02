@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:localization/localization.dart';
+import 'package:media_kit/media_kit.dart';
 
 import 'services/ffmpeg_service.dart';
 import 'ui/home/home_screen.dart';
@@ -11,6 +12,7 @@ import 'ui/home/home_screen.dart';
 /// Main application entry point
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  MediaKit.ensureInitialized();
   
   // Initialize Localization
   LocalJsonLocalization.delegate.directories = ['lib/i18n'];
