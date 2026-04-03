@@ -1,4 +1,3 @@
-using CycloneGames.Logger;
 using UnityEngine;
 
 namespace CycloneGames.GameplayFramework.Runtime
@@ -15,11 +14,18 @@ namespace CycloneGames.GameplayFramework.Runtime
     [CreateAssetMenu(fileName = "WorldSettings", menuName = "CycloneGames/GameplayFramework/WorldSettings")]
     public class WorldSettings : ScriptableObject, IWorldSettings
     {
+        [Header("Game Mode")]
         [SerializeField] private GameMode gameModeClass;
+
+        [Header("Player")]
         [SerializeField] private PlayerController playerControllerClass;
         [SerializeField] private Pawn pawnClass;
         [SerializeField] private PlayerState playerStateClass;
+
+        [Header("Camera")]
         [SerializeField] private CameraManager cameraManagerClass;
+
+        [Header("Spectator")]
         [SerializeField] private SpectatorPawn spectatorPawnClass;
 
         public GameMode GameModeClass => gameModeClass;
@@ -29,9 +35,29 @@ namespace CycloneGames.GameplayFramework.Runtime
         public CameraManager CameraManagerClass => cameraManagerClass;
         public SpectatorPawn SpectatorPawnClass => spectatorPawnClass;
 
-        void OnEnable()
+        /// <summary>
+        /// Validates that all required references are assigned.
+        /// Call this explicitly when the WorldSettings is about to be used (e.g., at game startup).
+        /// </summary>
+        public bool Validate(bool logWarnings = true)
         {
-            // CLogger.Instance.AddLoggerUnique(new UnityLogger());
+            bool valid = true;
+            if (gameModeClass == null)
+            {
+                if (logWarnings) Debug.LogWarning($"[WorldSettings] '{name}': GameModeClass is not assigned.");
+                valid = false;
+            }
+            if (playerControllerClass == null)
+            {
+                if (logWarnings) Debug.LogWarning($"[WorldSettings] '{name}': PlayerControllerClass is not assigned.");
+                valid = false;
+            }
+            if (pawnClass == null)
+            {
+                if (logWarnings) Debug.LogWarning($"[WorldSettings] '{name}': PawnClass is not assigned.");
+                valid = false;
+            }
+            return valid;
         }
     }
 }
