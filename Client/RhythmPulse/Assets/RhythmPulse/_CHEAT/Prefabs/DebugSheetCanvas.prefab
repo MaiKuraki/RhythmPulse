@@ -521,7 +521,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0, y: 0}
-  m_AnchoredPosition: {x: 96.83035, y: 706.5}
+  m_AnchoredPosition: {x: 60, y: 706.5}
   m_SizeDelta: {x: 750, y: 706.5}
   m_Pivot: {x: 0, y: 1}
 --- !u!114 &6564643837970611220
@@ -1142,6 +1142,8 @@ GameObject:
   - component: {fileID: 6564643838517370663}
   - component: {fileID: 6564643838517370656}
   - component: {fileID: 3939744926455960819}
+  - component: {fileID: 8969588042762631733}
+  - component: {fileID: 615660084339316441}
   m_Layer: 5
   m_Name: DebugSheetCanvas
   m_TagString: Untagged
@@ -1302,6 +1304,31 @@ MonoBehaviour:
   flicked:
     m_PersistentCalls:
       m_Calls: []
+--- !u!225 &8969588042762631733
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6564643838517370666}
+  m_Enabled: 1
+  m_Alpha: 0
+  m_Interactable: 1
+  m_BlocksRaycasts: 1
+  m_IgnoreParentGroups: 0
+--- !u!114 &615660084339316441
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6564643838517370666}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 10efa5258fa8ecd40a4e11cf18d9575a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: RhythmPulse.Cheat::RhythmPulse.Cheat.DebugSheetCanvasInitializer
+  canvasGroup: {fileID: 8969588042762631733}
 --- !u!1 &6564643838881343411
 GameObject:
   m_ObjectHideFlags: 0
