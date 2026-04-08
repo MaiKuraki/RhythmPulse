@@ -7,105 +7,100 @@ using UnityEngine;
 namespace RhythmPulse.Misc
 {
     /// <summary>
-    /// Manages the loading and persistence of Addressable GameObjects that are intended to survive scene transitions
-    /// via <see cref="UnityEngine.Object.DontDestroyOnLoad"/>. This class helps prevent issues such as lost references
-    /// or premature unloading of Addressable assets that are marked for persistence across scenes.
+    /// Loads and persists GameObjects across scene transitions via <see cref="Object.DontDestroyOnLoad"/>.
+    /// Each entry uses <see cref="AssetRef{T}"/> for type-safe, GUID-tracked asset references that
+    /// auto-heal on rename/move and are validated by the AssetRef build-time validator.
+    /// Loads all entries in parallel before instantiating on the main thread.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Problem Addressed:
-    /// When GameObjects are loaded via the Addressables system and then marked with <see cref="UnityEngine.Object.DontDestroyOnLoad"/>,
-    /// issues can arise during scene transitions or when the Addressable assets' containing groups are managed.
-    /// Specifically, references to these objects might be lost, or the objects themselves might be inadvertently destroyed
-    /// if not handled correctly, particularly if they originate from Addressable scenes that are subsequently unloaded.
-    /// </para>
-    /// <para>
-    /// Solution Provided by This Class:
-    /// This class acts as a centralized resolver and manager for such persistent Addressable GameObjects.
-    /// It ensures that:
-    /// <list type="bullet">
-    ///   <item><description>Specified GameObjects are loaded from their Addressable paths.</description></item>
-    ///   <item><description>They are instantiated into the scene.</description></item>
-    ///   <item><description>The instantiated GameObjects are correctly marked with <see cref="UnityEngine.Object.DontDestroyOnLoad"/>.</description></item>
-    ///   <item><description>The Addressable load operations are bound to the lifetime of this resolver (if it's persistent),
-    ///   ensuring that the underlying Addressable assets (handles) are appropriately managed and not prematurely released
-    ///   as long as these objects are intended to persist.</description></item>
-    /// </list>
-    /// </para>
-    /// <para>
-    /// Recommended Best Practice:
-    /// GameObjects that need to be persistent across scenes using <see cref="UnityEngine.Object.DontDestroyOnLoad"/>
-    /// and are managed by the Addressables system should ideally not be placed directly within Addressable scenes
-    /// that are loaded and unloaded additively. Instead, they should be instantiated and managed by a dedicated,
-    /// persistent service like this <see cref="AddressableResolverForDontDestroy"/> class. This approach ensures
-    /// that the creation of these objects and the management of their Addressable handles are controlled independently
-    /// of any individual scene's lifecycle.
-    /// </para>
-    /// </remarks>
-    public class AddressableResolverForDontDestroy : MonoBehaviour
+    public sealed class AddressableResolverForDontDestroy : MonoBehaviour
     {
         private const string DEBUG_FLAG = "[AssetResolver]";
 
         [SerializeField]
-        private List<AssetResolverData> dontDestroyAddressablePaths = new List<AssetResolverData>();
+        private List<AssetResolverEntry> entries = new List<AssetResolverEntry>();
 
-        // Track loaded handles to prevent memory leaks
-        private List<IAssetHandle<GameObject>> _loadedHandles = new List<IAssetHandle<GameObject>>();
+        private List<IAssetHandle<GameObject>> _loadedHandles;
 
         public bool Initialized { get; private set; } = false;
 
-        public async UniTask InitializeAsync(IAssetModule assetModule)
+        public async UniTask InitializeAsync(IAssetPackage assetPackage)
         {
-            var pkg = assetModule.GetPackage("DefaultPackage");
-
-            foreach (AssetResolverData pathData in dontDestroyAddressablePaths)
+            // Idempotency guard: prevent double-init (re-entry during async load leaks handles)
+            if (Initialized || _loadedHandles != null)
             {
-                // Load the asset using the generic interface
-                var handle = pkg.LoadAssetAsync<GameObject>(pathData.AddressablePath);
-                _loadedHandles.Add(handle); // Track the handle
+                CLogger.LogWarning($"{DEBUG_FLAG} Already initialized or initializing. Skipping.");
+                return;
+            }
 
-                await handle.Task;
+            if (assetPackage == null)
+            {
+                CLogger.LogError($"{DEBUG_FLAG} Invalid asset package.");
+                return;
+            }
 
-                if (string.IsNullOrEmpty(handle.Error) && handle.AssetObject != null)
+            var ct = this.GetCancellationTokenOnDestroy();
+            int count = entries.Count;
+            _loadedHandles = new List<IAssetHandle<GameObject>>(count);
+
+            // ── Phase 1: Fire all loads in parallel ──
+            var tasks = new UniTask[count];
+            for (int i = 0; i < count; i++)
+            {
+                var entry = entries[i];
+                if (!entry.Prefab.IsValid)
                 {
-                    // Instantiate the GameObject
-                    var prefab = handle.AssetObject as GameObject;
-                    if (prefab != null)
-                    {
-                        var instance = Instantiate(prefab);
-                        DontDestroyOnLoad(instance);
-                        CLogger.LogInfo($"{DEBUG_FLAG} Instantiate: {prefab.name}");
-                    }
-                    else
-                    {
-                        CLogger.LogError($"{DEBUG_FLAG} Loaded asset is not a GameObject: {pathData.AddressablePath}");
-                    }
+                    CLogger.LogWarning($"{DEBUG_FLAG} Skipping invalid entry: {entry.DisplayName}");
+                    tasks[i] = UniTask.CompletedTask;
+                    _loadedHandles.Add(null);
+                    continue;
+                }
+
+                var handle = assetPackage.LoadAsync(entry.Prefab);
+                _loadedHandles.Add(handle);
+                tasks[i] = handle.Task;
+            }
+
+            await UniTask.WhenAll(tasks).AttachExternalCancellation(ct);
+
+            // ── Phase 2: Instantiate (must be on main thread) ──
+            for (int i = 0; i < count; i++)
+            {
+                var handle = _loadedHandles[i];
+                if (handle == null) continue;
+
+                if (string.IsNullOrEmpty(handle.Error) && handle.AssetObject is GameObject prefab)
+                {
+                    var instance = Instantiate(prefab);
+                    DontDestroyOnLoad(instance);
+                    CLogger.LogInfo($"{DEBUG_FLAG} Instantiate: {prefab.name}");
                 }
                 else
                 {
-                    CLogger.LogError($"{DEBUG_FLAG} Failed to load asset: {pathData.AddressablePath}");
+                    CLogger.LogError($"{DEBUG_FLAG} Failed to load: {entries[i].Prefab.Location}, Error: {handle.Error}");
                 }
             }
 
             Initialized = true;
+            CLogger.LogInfo($"{DEBUG_FLAG} Initialization complete. {count} entries processed.");
         }
 
         private void OnDestroy()
         {
-            // Release all handles when this resolver is destroyed
-            foreach (var handle in _loadedHandles)
-            {
-                handle?.Dispose();
-            }
-            _loadedHandles.Clear();
+            if (_loadedHandles == null) return;
+
+            for (int i = 0; i < _loadedHandles.Count; i++)
+                _loadedHandles[i]?.Dispose();
+
+            // Null out the list reference; the List object itself is GC'd with this MonoBehaviour.
+            _loadedHandles = null;
             CLogger.LogInfo($"{DEBUG_FLAG} All handles disposed.");
         }
     }
 
     [System.Serializable]
-    public class AssetResolverData
+    public struct AssetResolverEntry
     {
         public string DisplayName;
-        public string AddressablePath;
+        public AssetRef<GameObject> Prefab;
     }
 }

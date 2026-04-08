@@ -7,6 +7,9 @@ using UnityEngine;
 [CustomEditor(typeof(AudioManager))]
 public sealed class AudioManagerEditor : Editor
 {
+    private SerializedProperty _singletonProp;
+    private SerializedProperty _audioSourcePrefabRefProp;
+
     private bool _showLoadedClips = true;
     private bool _showAudioStates = true;
     private bool _showMemoryUsage = true;
@@ -30,6 +33,12 @@ public sealed class AudioManagerEditor : Editor
     private static readonly Color HeaderBgColor = new(0.2f, 0.2f, 0.2f, 0.3f);
     private static readonly Color EntryBgColorA = new(0.18f, 0.18f, 0.18f, 0.3f);
     private static readonly Color EntryBgColorB = new(0.12f, 0.12f, 0.12f, 0.15f);
+
+    private void OnEnable()
+    {
+        _singletonProp = serializedObject.FindProperty("_singleton");
+        _audioSourcePrefabRefProp = serializedObject.FindProperty("_audioSourcePrefabRef");
+    }
 
     private static void EnsureStyles()
     {
@@ -100,7 +109,11 @@ public sealed class AudioManagerEditor : Editor
     public override void OnInspectorGUI()
     {
         EnsureStyles();
-        DrawDefaultInspector();
+        serializedObject.Update();
+
+        DrawConfigurationSection();
+
+        serializedObject.ApplyModifiedProperties();
 
         var audioManager = (AudioManager)target;
 
@@ -133,6 +146,27 @@ public sealed class AudioManagerEditor : Editor
         EditorGUILayout.EndFoldoutHeaderGroup();
 
         if (Application.isPlaying) Repaint();
+    }
+
+    private void DrawConfigurationSection()
+    {
+        EditorGUILayout.BeginVertical(s_BoxStyle);
+        EditorGUILayout.LabelField("Configuration", s_HeaderStyle);
+        EditorGUILayout.PropertyField(_singletonProp);
+        EditorGUILayout.PropertyField(_audioSourcePrefabRefProp, new GUIContent("Audio Source Prefab"));
+
+        var guidProp = _audioSourcePrefabRefProp?.FindPropertyRelative("m_GUID");
+        var locationProp = _audioSourcePrefabRefProp?.FindPropertyRelative("m_Location");
+        bool isValid = guidProp != null && locationProp != null &&
+                       !string.IsNullOrEmpty(guidProp.stringValue) &&
+                       !string.IsNullOrEmpty(locationProp.stringValue);
+
+        if (!isValid)
+        {
+            EditorGUILayout.HelpBox("Assign Audio Source Prefab via AssetRef to ensure stable GUID-based reference.", MessageType.Warning);
+        }
+
+        EditorGUILayout.EndVertical();
     }
 
     private void DrawHeader(AudioManager audioManager)

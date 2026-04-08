@@ -44,20 +44,36 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1a591ee606d43f6469a1d83752212171, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  dontDestroyAddressablePaths:
+  entries:
   - DisplayName: EventSystem
-    AddressablePath: Assets/RhythmPulse/LiveContent/Prefabs/Core/EventSystem.prefab
+    Prefab:
+      m_Location: Assets/RhythmPulse/LiveContent/Prefabs/Core/EventSystem.prefab
+      m_GUID: c42d6e36eb5c6bf4dbced3d750d90d1c
   - DisplayName: MainCamera
-    AddressablePath: Assets/RhythmPulse/LiveContent/Prefabs/Core/MainCamera.prefab
+    Prefab:
+      m_Location: Assets/RhythmPulse/LiveContent/Prefabs/Core/MainCamera.prefab
+      m_GUID: 35e330a40aff17e4b986f8db3f94df8f
   - DisplayName: AudioManager
-    AddressablePath: Assets/RhythmPulse/LiveContent/Prefabs/Audio/AudioManager.prefab
+    Prefab:
+      m_Location: Assets/RhythmPulse/LiveContent/Prefabs/Audio/AudioManager.prefab
+      m_GUID: 329cd189958c423479ab6be44860c72f
   - DisplayName: UIFramework
-    AddressablePath: Assets/RhythmPulse/LiveContent/Prefabs/UI/UIFramework.prefab
+    Prefab:
+      m_Location: Assets/RhythmPulse/LiveContent/Prefabs/UI/UIFramework.prefab
+      m_GUID: 77ece4faf69109748a184e5fb9e37ac3
   - DisplayName: FPSCounter
-    AddressablePath: Assets/RhythmPulse/_CHEAT/Prefabs/FPSCounter.prefab
+    Prefab:
+      m_Location: Assets/RhythmPulse/_CHEAT/Prefabs/FPSCounter.prefab
+      m_GUID: fe729c870b8f3c2418a23279946da061
   - DisplayName: IngameDebugConsole
-    AddressablePath: Assets/RhythmPulse/_CHEAT/Prefabs/IngameDebugConsole.prefab
+    Prefab:
+      m_Location: Assets/RhythmPulse/_CHEAT/Prefabs/IngameDebugConsole.prefab
+      m_GUID: 127bc8dff07fa284db9bcd1c8398032e
   - DisplayName: DebugSheetCanvas
-    AddressablePath: Assets/RhythmPulse/_CHEAT/Prefabs/DebugSheetCanvas.prefab
+    Prefab:
+      m_Location: Assets/RhythmPulse/_CHEAT/Prefabs/DebugSheetCanvas.prefab
+      m_GUID: 429e0d672f263a841afa005f044d0ff5
   - DisplayName: DebugSheetManager
-    AddressablePath: Assets/RhythmPulse/_CHEAT/Prefabs/DebugSheetManager.prefab
+    Prefab:
+      m_Location: Assets/RhythmPulse/_CHEAT/Prefabs/DebugSheetManager.prefab
+      m_GUID: 664e11f799cb6eb4d96af679770edd1e

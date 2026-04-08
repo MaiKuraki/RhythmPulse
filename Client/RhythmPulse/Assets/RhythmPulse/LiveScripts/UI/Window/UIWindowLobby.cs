@@ -22,6 +22,8 @@ namespace RhythmPulse.UI
         private UIPageGameModeSelection uiPageGameModeSelection;
         private UIPageGameplayMapSelection uiPageGameplayMapSelection;
         private CancellationTokenSource cancelRebuildMapList;
+        private bool isGameModeSelectionSubscribed = false;
+        private bool isMusicSelectionSubscribed = false;
 
         protected override void Awake()
         {
@@ -31,9 +33,30 @@ namespace RhythmPulse.UI
             uiPageGameplayMapSelection = GameplayMapSelectionTF.GetComponent<UIPageGameplayMapSelection>();
         }
 
+        protected override void OnDestroy()
+        {
+            // Clean up event subscriptions
+            if (uiPageGameModeSelection != null)
+            {
+                uiPageGameModeSelection.EnterTraditionalBeatsGame -= EnterTraditionalBeatsGame;
+                uiPageGameModeSelection.EnterDanceGame -= EnterJustDanceGame;
+            }
+
+            if (uiPageGameplayMapSelection != null)
+            {
+                uiPageGameplayMapSelection.ClickBackEvent -= EnterGameModeSelection;
+                uiPageGameplayMapSelection.EnterGameplayEvent -= EnterGameplay;
+            }
+
+            cancelRebuildMapList?.Cancel();
+            cancelRebuildMapList?.Dispose();
+
+            base.OnDestroy();
+        }
+
         void Start()
         {
-            RegisterElementsAfterDIInitialized(destroyCancellationToken).Forget();
+            RegisterElementsAfterDIInitialized(destroyCancellationToken);
         }
 
         protected override void OnFinishedOpen()
@@ -93,7 +116,7 @@ namespace RhythmPulse.UI
             return objectResolver;
         }
 
-        private async UniTask RegisterElementsAfterDIInitialized(CancellationToken cancellationToken)
+        private void RegisterElementsAfterDIInitialized(CancellationToken cancellationToken)
         {
             // Child components are part of the prefab and may need manual injection
             // Use scene resolver to ensure they can access scene-scoped dependencies (e.g., ITimeline)
@@ -119,11 +142,13 @@ namespace RhythmPulse.UI
             GameplayMapSelectionTF.gameObject.SetActive(false);
             GameModeSelectionTF.gameObject.SetActive(true);
 
-            uiPageGameModeSelection.EnterTraditionalBeatsGame -= EnterTraditionalBeatsGame;
-            uiPageGameModeSelection.EnterTraditionalBeatsGame += EnterTraditionalBeatsGame;
-
-            uiPageGameModeSelection.EnterDanceGame -= EnterJustDanceGame;
-            uiPageGameModeSelection.EnterDanceGame += EnterJustDanceGame;
+            // Subscribe only once to avoid duplicate event handlers
+            if (!isGameModeSelectionSubscribed)
+            {
+                uiPageGameModeSelection.EnterTraditionalBeatsGame += EnterTraditionalBeatsGame;
+                uiPageGameModeSelection.EnterDanceGame += EnterJustDanceGame;
+                isGameModeSelectionSubscribed = true;
+            }
         }
 
         private void EnterMusicSelection(MusicSelectionContext context)
@@ -131,14 +156,16 @@ namespace RhythmPulse.UI
             GameModeSelectionTF.gameObject.SetActive(false);
             GameplayMapSelectionTF.gameObject.SetActive(true);
 
-            uiPageGameplayMapSelection.ClickBackEvent -= EnterGameModeSelection;
-            uiPageGameplayMapSelection.ClickBackEvent += EnterGameModeSelection;
-            uiPageGameplayMapSelection.EnterGameplayEvent -= EnterGameplay;
-            uiPageGameplayMapSelection.EnterGameplayEvent += EnterGameplay;
+            // Subscribe only once to avoid duplicate event handlers
+            if (!isMusicSelectionSubscribed)
+            {
+                uiPageGameplayMapSelection.ClickBackEvent += EnterGameModeSelection;
+                uiPageGameplayMapSelection.EnterGameplayEvent += EnterGameplay;
+                isMusicSelectionSubscribed = true;
+            }
 
             cancelRebuildMapList?.Cancel();
             cancelRebuildMapList?.Dispose();
-            cancelRebuildMapList = null;
             cancelRebuildMapList = new CancellationTokenSource();
             uiPageGameplayMapSelection.RebuildMapListAfterDIInitialized(context, cancelRebuildMapList.Token).Forget();
         }

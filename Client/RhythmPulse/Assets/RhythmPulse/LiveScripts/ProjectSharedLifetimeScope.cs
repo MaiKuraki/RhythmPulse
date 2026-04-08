@@ -46,9 +46,12 @@ namespace RhythmPulse
             builder.Register<IUnityObjectSpawner, RhythmPulseObjectSpawner>(Lifetime.Singleton);
             builder.Register<IUIService, UIService>(Lifetime.Singleton);
 
-            builder.RegisterBuildCallback(async resolver =>
+            builder.RegisterBuildCallback(resolver =>
             {
                 var assetResolver = resolver.Resolve<AddressableResolverForDontDestroy>();
+                // Note: Component initialization happens automatically via RegisterComponentInNewPrefab
+                // AudioManager will be instantiated by AddressableResolverForDontDestroy.InitializeAsync()
+                // so SetAssetModule is called from LifecycleInitialScene.OnEnter() after initialization.
             });
 
             // Current registration: IGameplayMapListManager and IGameplayMapStorage are registered as Singleton in the root scope.

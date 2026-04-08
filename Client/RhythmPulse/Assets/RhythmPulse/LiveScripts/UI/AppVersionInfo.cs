@@ -26,7 +26,9 @@ namespace RhythmPulse.UI
 
         private void OnDestroy()
         {
+#if !UNITY_EDITOR
             UpdateVersionDisplayEvent -= UpdateVersionDisplay;
+#endif
         }
 
         private async UniTask UpdateVersionDisplay(IAssetModule assetModule)

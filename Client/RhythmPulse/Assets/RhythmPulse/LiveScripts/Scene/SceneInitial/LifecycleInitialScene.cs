@@ -7,6 +7,7 @@ using Cysharp.Threading.Tasks;
 using MackySoft.Navigathena;
 using MackySoft.Navigathena.SceneManagement;
 using MackySoft.Navigathena.SceneManagement.VContainer;
+using RhythmPulse.Audio;
 using RhythmPulse.Misc;
 using VContainer;
 
@@ -28,7 +29,12 @@ namespace RhythmPulse.Scene
         public async UniTask OnEnter(ISceneDataReader reader, CancellationToken cancellationToken)
         {
             var pkg = assetModule.GetPackage("DefaultPackage");
-            await assetResolver.InitializeAsync(assetModule);
+            await assetResolver.InitializeAsync(pkg);
+
+            // AudioManager is instantiated by AddressableResolverForDontDestroy above,
+            // so Instance is now available. Provide IAssetModule so it can finish initializing.
+            AudioManager.Instance?.SetAssetModule(assetModule);
+
             uiService.Initialize(assetPathBuilderFactory, objectSpawner, cameraService, pkg);
             
             await GlobalSceneNavigator.Instance.Push(SceneDefinitions.Splash);

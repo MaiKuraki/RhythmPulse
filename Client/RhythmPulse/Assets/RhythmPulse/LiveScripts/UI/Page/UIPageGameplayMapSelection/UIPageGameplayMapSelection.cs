@@ -74,11 +74,8 @@ namespace RhythmPulse.UI
 
         void Awake()
         {
-            enterMusicGameplayButton.OnClickAsObservable().Subscribe(_ => EnterGameplay());
-            backButton.OnClickAsObservable().Subscribe(_ => ClickBack());
-
-            scrollView.OnSelectedEvent -= OnSelectItem;
-            scrollView.OnSelectedEvent += OnSelectItem;
+            enterMusicGameplayButton.OnClickAsObservable().Subscribe(_ => EnterGameplay()).AddTo(this);
+            backButton.OnClickAsObservable().Subscribe(_ => ClickBack()).AddTo(this);
 
             // PERFORMANCE: Subscribe to difficulty change buttons only once.
             // The handlers will use class state to determine behavior.
@@ -90,9 +87,10 @@ namespace RhythmPulse.UI
 
         void OnEnable()
         {
-            // Re-subscribe safely when the page is re-enabled
             if (scrollView != null)
             {
+                // Re-subscribe when page is shown again (e.g., back from mode page to map selection).
+                // Defensive de-dup: remove first in case OnEnable is triggered repeatedly.
                 scrollView.OnSelectedEvent -= OnSelectItem;
                 scrollView.OnSelectedEvent += OnSelectItem;
             }
@@ -141,13 +139,12 @@ namespace RhythmPulse.UI
             {
                 scrollView.OnSelectedEvent -= OnSelectItem;
             }
-            cancelForSelection?.Cancel();
-            cancelForSelection?.Dispose();
-            cancelForSelection = null;
 
+            // Cancel any pending operations when the page is disabled
+            // (but don't dispose - that happens in OnDestroy)
+            cancelForSelection?.Cancel();
             cancelForMediaInfoUpdate?.Cancel();
-            cancelForMediaInfoUpdate?.Dispose();
-            cancelForMediaInfoUpdate = null;
+            timeline?.Stop();
         }
 
         void Update()

@@ -25,14 +25,15 @@ namespace RhythmPulse.UI
 
         void Start()
         {
-            buttonPause.OnClickAsObservable().Subscribe(_ => ClickPause());
-            buttonExit.OnClickAsObservable().Subscribe(_ => ClickExit());
+            buttonPause.OnClickAsObservable().Subscribe(_ => ClickPause()).AddTo(this);
+            buttonExit.OnClickAsObservable().Subscribe(_ => ClickExit()).AddTo(this);
             gameplayManager.OnUpdatePlaybackProgress -= UpdateProgressValue;
             gameplayManager.OnUpdatePlaybackProgress += UpdateProgressValue;
         }
 
         protected override void OnDestroy()
         {
+            gameplayManager.OnUpdatePlaybackProgress -= UpdateProgressValue;
             base.OnDestroy();
         }
 

@@ -20,7 +20,6 @@ namespace RhythmPulse.UI
         [SerializeField] Transform focusFlagTF = default;
         [SerializeField] Animator animator = default;
         [SerializeField] TMP_Text message = default;
-        [SerializeField] Image image = default;
         [SerializeField] Button button = default;
 
         private ItemData cachedItemData;
@@ -38,14 +37,15 @@ namespace RhythmPulse.UI
             focusFlagTF.OnDisableAsObservable().Subscribe(_ => { OnFocusChanged(false); }).AddTo(this);
         }
 
-        void OnDestroy()
-        {
-            cachedItemData = null;
-        }
-
         void Start()
         {
             button.onClick.AddListener(OnSelected);
+        }
+
+        void OnDestroy()
+        {
+            button?.onClick.RemoveListener(OnSelected);
+            cachedItemData = null;
         }
 
         private void OnFocusChanged(bool isFocused)

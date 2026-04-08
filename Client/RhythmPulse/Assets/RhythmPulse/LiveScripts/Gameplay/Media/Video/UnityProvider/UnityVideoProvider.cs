@@ -25,12 +25,10 @@ namespace RhythmPulse.Media
 
         [Header("Seek Settings")]
         [SerializeField] private bool cancelStandbyPrepareOnSeekSameUrl = true;
-        [SerializeField] private int seekTimeoutMs = 2000;
 
         [Header("Prepare Settings")]
         [SerializeField] private int preparePreDelayMs = 100;
         [SerializeField] private int internalStopToPrepareDelayMs = 100;
-        [SerializeField] private int preparePostDelayMs = 50;
         [SerializeField] private int prepareTimeoutMs = 8000;
 
         [Header("Retry Settings")]
@@ -499,7 +497,6 @@ namespace RhythmPulse.Media
 #if UNITY_STANDALONE || UNITY_EDITOR
             preparePreDelayMs = 0;
             internalStopToPrepareDelayMs = 0;
-            preparePostDelayMs = 0;
 #endif
 #if UNITY_WEBGL
             prepareTimeoutMs = 15000;

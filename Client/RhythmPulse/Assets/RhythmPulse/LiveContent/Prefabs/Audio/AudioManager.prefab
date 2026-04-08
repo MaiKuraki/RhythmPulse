@@ -46,7 +46,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _singleton: 1
-  AudioSourcePrefabPath: Assets/RhythmPulse/LiveContent/Prefabs/Audio/AudioSource.prefab
+  _audioSourcePrefabRef:
+    m_Location: Assets/RhythmPulse/LiveContent/Prefabs/Audio/AudioSource.prefab
+    m_GUID: 91c62447878846747953d7e276e13b9d
 --- !u!81 &1107678255744258605
 AudioListener:
   m_ObjectHideFlags: 0

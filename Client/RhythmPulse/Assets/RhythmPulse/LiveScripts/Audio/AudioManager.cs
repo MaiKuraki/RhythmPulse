@@ -1,26 +1,32 @@
 using System;
 using System.Collections.Generic;
-using Addler.Runtime.Core.LifetimeBinding;
+using System.Threading;
+using CycloneGames.AssetManagement.Runtime;
 using CycloneGames.Logger;
+using CycloneGames.Utility.Runtime;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
-using UnityEngine.AddressableAssets;
 using UnityEngine.Networking;
-using UnityEngine.ResourceManagement.AsyncOperations;
 
 namespace RhythmPulse.Audio
 {
     public interface IAudioLoader
     {
-        UniTask<AudioClip> LoadAudioAsync(string path, AudioType audioType);
+        UniTask<AudioClip> LoadAudioAsync(string path, AudioType audioType, CancellationToken cancellationToken = default);
+    }
+
+    public interface IAudioContentProvider
+    {
+        bool CanHandle(string path);
+        UniTask<AudioClip> LoadAudioAsync(string path, CancellationToken cancellationToken = default);
     }
 
     public sealed class UnityAudioLoader : IAudioLoader
     {
-        public async UniTask<AudioClip> LoadAudioAsync(string path, AudioType audioType)
+        public async UniTask<AudioClip> LoadAudioAsync(string path, AudioType audioType, CancellationToken cancellationToken = default)
         {
             using var www = UnityWebRequestMultimedia.GetAudioClip(path, audioType);
-            await www.SendWebRequest().ToUniTask();
+            await www.SendWebRequest().ToUniTask(cancellationToken: cancellationToken);
 
             if (www.result == UnityWebRequest.Result.ConnectionError || 
                 www.result == UnityWebRequest.Result.ProtocolError)
@@ -30,6 +36,88 @@ namespace RhythmPulse.Audio
             }
 
             return DownloadHandlerAudioClip.GetContent(www);
+        }
+    }
+
+    public sealed class ExternalAudioContentProvider : IAudioContentProvider
+    {
+        private readonly IAudioLoader _loader;
+
+        public ExternalAudioContentProvider(IAudioLoader loader)
+        {
+            _loader = loader;
+        }
+
+        public bool CanHandle(string path)
+        {
+            // Keep behavior permissive for now: external provider is the default fallback.
+            return !string.IsNullOrEmpty(path);
+        }
+
+        public UniTask<AudioClip> LoadAudioAsync(string path, CancellationToken cancellationToken = default)
+        {
+            var normalizedPath = NormalizePath(path);
+            if (string.IsNullOrEmpty(normalizedPath))
+            {
+                CLogger.LogError("[ExternalAudioContentProvider] Invalid path: " + path);
+                return UniTask.FromResult<AudioClip>(null);
+            }
+
+            var audioType = GetAudioType(path);
+            return _loader.LoadAudioAsync(normalizedPath, audioType, cancellationToken);
+        }
+
+        private static string NormalizePath(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return path;
+
+            // If already URL/file URI, keep it as AbsoluteOrFullUri.
+            if (path.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                path.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
+                path.StartsWith("file://", StringComparison.OrdinalIgnoreCase) ||
+                path.StartsWith("jar:file://", StringComparison.OrdinalIgnoreCase))
+            {
+                return FilePathUtility.GetUnityWebRequestUri(path, UnityPathSource.AbsoluteOrFullUri);
+            }
+
+            // Heuristic: rooted disk paths are absolute, otherwise treat as persistentData relative path.
+            if (System.IO.Path.IsPathRooted(path))
+            {
+                return FilePathUtility.GetUnityWebRequestUri(path, UnityPathSource.AbsoluteOrFullUri);
+            }
+
+            return FilePathUtility.GetUnityWebRequestUri(path, UnityPathSource.PersistentData);
+        }
+
+        private static AudioType GetAudioType(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return AudioType.UNKNOWN;
+
+            int dotIndex = path.LastIndexOf('.');
+            if (dotIndex < 0 || dotIndex >= path.Length - 1) return AudioType.UNKNOWN;
+
+            ReadOnlySpan<char> ext = path.AsSpan(dotIndex);
+
+            if (ExtEquals(ext, ".mp3")) return AudioType.MPEG;
+            if (ExtEquals(ext, ".wav")) return AudioType.WAV;
+            if (ExtEquals(ext, ".ogg")) return AudioType.OGGVORBIS;
+            if (ExtEquals(ext, ".aiff") || ExtEquals(ext, ".aif")) return AudioType.AIFF;
+            if (ExtEquals(ext, ".xm") || ExtEquals(ext, ".mod") || ExtEquals(ext, ".it") || ExtEquals(ext, ".s3m")) return AudioType.MOD;
+
+            return AudioType.UNKNOWN;
+        }
+
+        private static bool ExtEquals(ReadOnlySpan<char> ext, string target)
+        {
+            if (ext.Length != target.Length) return false;
+            for (int i = 0; i < ext.Length; i++)
+            {
+                char c = ext[i];
+                char t = target[i];
+                if (c >= 'A' && c <= 'Z') c = (char)(c + 32);
+                if (c != t) return false;
+            }
+            return true;
         }
     }
 
@@ -44,23 +132,38 @@ namespace RhythmPulse.Audio
         }
 
         [SerializeField] private bool _singleton = true;
-        [SerializeField] private string _audioSourcePrefabPath = "Assets/RhythmPulse/LiveContent/Prefabs/Audio/AudioSource.prefab";
+        [SerializeField] private AssetRef<GameObject> _audioSourcePrefabRef;
 
         // Pre-allocated collections
         private readonly Dictionary<string, AudioClip> _loadedClips = new(32);
         private readonly Dictionary<string, AudioLoadState> _audioLoadStates = new(32);
-        private readonly Dictionary<string, UniTaskCompletionSource<AudioClip>> _loadingTasks = new(8);
+        private readonly Dictionary<string, AudioLoadRequest> _loadingTasks = new(8);
         private readonly Dictionary<string, long> _audioMemoryUsage = new(32);
         private readonly List<string> _tempPathList = new(32); // Reusable list for iterations
 
+        private IAssetModule _assetModule;
+        private IAssetHandle<GameObject> _audioSourceHandle;
+
         private IAudioLoader _audioLoader;
+        private List<IAudioContentProvider> _audioProviders;
         private GameAudioSource _audioSourcePrefab;
         private bool _audioSourceReady;
+
+        private sealed class AudioLoadRequest
+        {
+            public readonly UniTaskCompletionSource<AudioClip> Completion = new();
+            public readonly CancellationTokenSource Cancellation = new();
+        }
 
         public static AudioManager Instance { get; private set; }
         public GameAudioSource AudioSourcePrefab => _audioSourcePrefab;
         public bool IsInitialized => _audioSourceReady;
         public long TotalMemoryUsage { get; private set; }
+
+        public void SetAssetModule(IAssetModule assetModule)
+        {
+            _assetModule = assetModule;
+        }
 
         // Zero-GC accessors
         public bool TryGetLoadedClip(string key, out AudioClip clip) => _loadedClips.TryGetValue(key, out clip);
@@ -80,12 +183,18 @@ namespace RhythmPulse.Audio
             }
 
             _audioLoader = new UnityAudioLoader();
+            _audioProviders = new List<IAudioContentProvider>(2)
+            {
+                new ExternalAudioContentProvider(_audioLoader)
+            };
             _audioSourceReady = false;
             LoadAudioSourceAsync().Forget();
         }
 
         private void OnDestroy()
         {
+            // Release the AudioSourcePrefab handle
+            _audioSourceHandle?.Dispose();
             ForceUnloadAll();
         }
 
@@ -93,13 +202,29 @@ namespace RhythmPulse.Audio
         {
             try
             {
-                var loadHandle = Addressables.LoadAssetAsync<GameObject>(_audioSourcePrefabPath);
-                await loadHandle.BindTo(gameObject);
-                await loadHandle.ToUniTask(PlayerLoopTiming.Update, destroyCancellationToken);
+                // Wait for IAssetModule to be provided via SetAssetModule()
+                await UniTask.WaitUntil(() => _assetModule != null, cancellationToken: destroyCancellationToken);
 
-                if (loadHandle.Status == AsyncOperationStatus.Succeeded)
+                var pkg = _assetModule.GetPackage("DefaultPackage");
+                if (pkg == null)
                 {
-                    _audioSourcePrefab = loadHandle.Result.GetComponent<GameAudioSource>();
+                    CLogger.LogError("[AudioManager] Failed to get DefaultPackage from IAssetModule");
+                    return;
+                }
+
+                if (!_audioSourcePrefabRef.IsValid)
+                {
+                    CLogger.LogError("[AudioManager] AudioSource prefab AssetRef is invalid.");
+                    return;
+                }
+
+                _audioSourceHandle = pkg.LoadAsync(_audioSourcePrefabRef);
+                await _audioSourceHandle.Task;
+
+                if (string.IsNullOrEmpty(_audioSourceHandle.Error) && _audioSourceHandle.AssetObject != null)
+                {
+                    var prefabObj = _audioSourceHandle.AssetObject as GameObject;
+                    _audioSourcePrefab = prefabObj?.GetComponent<GameAudioSource>();
                     if (_audioSourcePrefab != null)
                     {
                         _audioSourceReady = true;
@@ -111,7 +236,7 @@ namespace RhythmPulse.Audio
                 }
                 else
                 {
-                    CLogger.LogError("[AudioManager] Failed to load AudioSourcePrefab");
+                    CLogger.LogError("[AudioManager] Failed to load AudioSourcePrefab: " + _audioSourcePrefabRef.Location + ", Error: " + (_audioSourceHandle?.Error ?? "Unknown error"));
                 }
             }
             catch (OperationCanceledException) { }
@@ -121,7 +246,7 @@ namespace RhythmPulse.Audio
             }
         }
 
-        public async UniTask<AudioClip> LoadAudioAsync(string path)
+        public async UniTask<AudioClip> LoadAudioAsync(string path, CancellationToken cancellationToken = default)
         {
             if (_audioLoadStates.TryGetValue(path, out var state))
             {
@@ -130,52 +255,73 @@ namespace RhythmPulse.Audio
 
                 if (state == AudioLoadState.Loading)
                 {
-                    if (_loadingTasks.TryGetValue(path, out var tcs))
-                        return await tcs.Task;
+                    if (_loadingTasks.TryGetValue(path, out var request))
+                        return await request.Completion.Task.AttachExternalCancellation(cancellationToken);
                     
-                    await WaitForStateChange(path, AudioLoadState.Loading);
+                    await WaitForStateChange(path, AudioLoadState.Loading, cancellationToken);
                     return _loadedClips.TryGetValue(path, out var loadedClip) ? loadedClip : null;
                 }
 
                 if (state == AudioLoadState.Unloading)
                 {
-                    await WaitForStateChange(path, AudioLoadState.Unloading);
-                    return await LoadAudioAsync(path);
+                    await WaitForStateChange(path, AudioLoadState.Unloading, cancellationToken);
+                    return await LoadAudioAsync(path, cancellationToken);
                 }
             }
 
             _audioLoadStates[path] = AudioLoadState.Loading;
-            var completionSource = new UniTaskCompletionSource<AudioClip>();
-            _loadingTasks[path] = completionSource;
+            var loadRequest = new AudioLoadRequest();
+            _loadingTasks[path] = loadRequest;
 
             try
             {
-                var audioType = GetAudioType(path);
-                var clip = await _audioLoader.LoadAudioAsync(path, audioType);
+                var provider = ResolveProvider(path);
+                if (provider == null)
+                {
+                    _audioLoadStates[path] = AudioLoadState.NotLoaded;
+                    loadRequest.Completion.TrySetResult(null);
+                    _loadingTasks.Remove(path);
+                    CLogger.LogError("[AudioManager] No audio provider can handle path: " + path);
+                    return null;
+                }
+
+                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, destroyCancellationToken, loadRequest.Cancellation.Token);
+                var clip = await provider.LoadAudioAsync(path, linkedCts.Token);
 
                 if (clip != null)
                 {
                     _loadedClips[path] = clip;
                     _audioLoadStates[path] = AudioLoadState.Loaded;
                     UpdateMemoryUsage(path, clip);
-                    completionSource.TrySetResult(clip);
+                    loadRequest.Completion.TrySetResult(clip);
                     _loadingTasks.Remove(path);
+                    loadRequest.Cancellation.Dispose();
                     return clip;
                 }
                 else
                 {
                     _audioLoadStates[path] = AudioLoadState.NotLoaded;
-                    completionSource.TrySetResult(null);
+                    loadRequest.Completion.TrySetResult(null);
                     _loadingTasks.Remove(path);
+                    loadRequest.Cancellation.Dispose();
                     return null;
                 }
+            }
+            catch (OperationCanceledException)
+            {
+                _audioLoadStates[path] = AudioLoadState.NotLoaded;
+                loadRequest.Completion.TrySetCanceled();
+                _loadingTasks.Remove(path);
+                loadRequest.Cancellation.Dispose();
+                throw;
             }
             catch (Exception ex)
             {
                 Debug.LogError("[AudioManager] Exception loading audio: " + ex.Message);
                 _audioLoadStates[path] = AudioLoadState.NotLoaded;
-                completionSource.TrySetResult(null);
+                loadRequest.Completion.TrySetResult(null);
                 _loadingTasks.Remove(path);
+                loadRequest.Cancellation.Dispose();
                 return null;
             }
         }
@@ -187,10 +333,10 @@ namespace RhythmPulse.Audio
 
             if (currentState == AudioLoadState.Loading)
             {
-                if (_loadingTasks.TryGetValue(path, out var tcs))
-                    await tcs.Task;
+                if (_loadingTasks.TryGetValue(path, out var request))
+                    await request.Completion.Task;
                 else
-                    await WaitForStateChange(path, AudioLoadState.Loading);
+                    await WaitForStateChange(path, AudioLoadState.Loading, destroyCancellationToken);
 
                 if (!_audioLoadStates.TryGetValue(path, out currentState))
                     return;
@@ -233,6 +379,22 @@ namespace RhythmPulse.Audio
 
         public void ForceUnloadAll()
         {
+            // Cancel in-flight loads first so awaiting callers don't hang.
+            _tempPathList.Clear();
+            foreach (var kvp in _loadingTasks)
+                _tempPathList.Add(kvp.Key);
+
+            for (int i = 0; i < _tempPathList.Count; i++)
+            {
+                var key = _tempPathList[i];
+                if (!_loadingTasks.TryGetValue(key, out var request)) continue;
+
+                request.Cancellation.Cancel();
+                request.Completion.TrySetCanceled();
+                request.Cancellation.Dispose();
+            }
+            _tempPathList.Clear();
+
             foreach (var kvp in _loadedClips)
             {
                 if (kvp.Value != null)
@@ -246,10 +408,21 @@ namespace RhythmPulse.Audio
             TotalMemoryUsage = 0;
         }
 
-        private async UniTask WaitForStateChange(string path, AudioLoadState waitingState)
+        private async UniTask WaitForStateChange(string path, AudioLoadState waitingState, CancellationToken cancellationToken)
         {
             while (_audioLoadStates.TryGetValue(path, out var state) && state == waitingState)
-                await UniTask.Yield();
+                await UniTask.Yield(cancellationToken);
+        }
+
+        private IAudioContentProvider ResolveProvider(string path)
+        {
+            for (int i = 0; i < _audioProviders.Count; i++)
+            {
+                var provider = _audioProviders[i];
+                if (provider.CanHandle(path))
+                    return provider;
+            }
+            return null;
         }
 
         private long CalculateAudioClipMemoryUsage(AudioClip clip)
@@ -278,38 +451,6 @@ namespace RhythmPulse.Audio
             TotalMemoryUsage += memory;
         }
 
-        // Zero-GC audio type detection using ReadOnlySpan
-        private static AudioType GetAudioType(string path)
-        {
-            if (string.IsNullOrEmpty(path)) return AudioType.UNKNOWN;
-
-            int dotIndex = path.LastIndexOf('.');
-            if (dotIndex < 0 || dotIndex >= path.Length - 1) return AudioType.UNKNOWN;
-
-            ReadOnlySpan<char> ext = path.AsSpan(dotIndex);
-
-            if (ExtEquals(ext, ".mp3")) return AudioType.MPEG;
-            if (ExtEquals(ext, ".wav")) return AudioType.WAV;
-            if (ExtEquals(ext, ".ogg")) return AudioType.OGGVORBIS;
-            if (ExtEquals(ext, ".aiff") || ExtEquals(ext, ".aif")) return AudioType.AIFF;
-            if (ExtEquals(ext, ".xm") || ExtEquals(ext, ".mod") || ExtEquals(ext, ".it") || ExtEquals(ext, ".s3m")) return AudioType.MOD;
-
-            return AudioType.UNKNOWN;
-        }
-
-        private static bool ExtEquals(ReadOnlySpan<char> ext, string target)
-        {
-            if (ext.Length != target.Length) return false;
-            for (int i = 0; i < ext.Length; i++)
-            {
-                char c = ext[i];
-                char t = target[i];
-                // Case-insensitive compare for ASCII
-                if (c >= 'A' && c <= 'Z') c = (char)(c + 32);
-                if (c != t) return false;
-            }
-            return true;
-        }
     }
 
 #if UNITY_EDITOR
