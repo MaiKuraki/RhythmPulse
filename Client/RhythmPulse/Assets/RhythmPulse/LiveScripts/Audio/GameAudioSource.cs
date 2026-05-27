@@ -11,9 +11,9 @@ namespace RhythmPulse.Audio
     }
 
     [RequireComponent(typeof(AudioSource))]
-    public sealed class GameAudioSource : MonoBehaviour, IPoolable<GameAudioData, IMemoryPool>, IDisposable
+    public sealed class GameAudioSource : MonoBehaviour, IPoolable<GameAudioData, GameAudioSource>, IDisposable
     {
-        private IMemoryPool _pool;
+        private IDespawnableMemoryPool<GameAudioSource> _pool;
         private GameAudioData _data;
         private IAudioLoadService _audioLoadService;
         private AudioSource _audioSource;
@@ -112,7 +112,7 @@ namespace RhythmPulse.Audio
             gameObject.SetActive(false);
         }
 
-        public void OnSpawned(GameAudioData data, IMemoryPool pool)
+        public void OnSpawned(GameAudioData data, IDespawnableMemoryPool<GameAudioSource> pool)
         {
             _data = data;
             _pool = pool;

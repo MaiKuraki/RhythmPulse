@@ -2,66 +2,412 @@
 
 <div align="left"><a href="./README.md">English</a> | 简体中文</div>
 
-一个为 Unity 设计的简洁、健壮且数据驱动的 UI 框架，旨在实现可扩展性和易用性。它为管理 UI 窗口、层级和过渡动画提供了清晰的架构，并利用了异步加载和解耦的动画系统。
+一个面向**Unity**的生产级 UI 框架。除基础窗口管理外，还提供完整的导航上下文图、协调多窗口过渡动画、MVP 自动绑定、LRU 资产缓存、动态图集纹理合批，以及控制反转 DI/IoC 支持，所有功能均建立在零 GC、线程安全的运行时核心之上。
 
 ## 特性
 
-- **原生异步**: 所有资源加载和实例化操作都使用 `UniTask` 完全异步执行，确保流畅、无阻塞的用户体验。
-- **数据驱动**: 使用 `ScriptableObject` 资产配置窗口和层级，以实现最大的灵活性和设计师友好性。
-- **健壮的状态管理**: 通过正式的状态机管理每个 `UIWindow` 的生命周期，防止常见的错误和竞态条件。
-- **可扩展的动画系统**: 轻松为窗口创建和分配自定义的过渡动画。
-- **面向服务的架构**: 与 `AssetManagement`, `Factory`, `Logger` 等其他服务无缝集成，接口编程可以完美兼容各 DI/IoC 框架。
-- **注重性能**: 包含预制体缓存、实例化节流和动态图集系统等功能，以保持高性能。
+### 🏗️ 架构与可扩展性
+
+| 特性             | 说明                                                                                                                                      |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| **MVP 自动绑定** | 用 `[UIPresenterBind("窗口名")]` 装饰 Presenter，绑定、生命周期转发和注入自动完成，零样板代码                                             |
+| **DI / IoC**     | 所有公共契约均为接口（`IUIService`、`IUINavigationService`、`IUITransitionCoordinator` 等），原生兼容 VContainer、Zenject 及任何 IoC 容器 |
+| **数据驱动配置** | 每个窗口和层级通过 `ScriptableObject` 配置，设计师无需碰代码即可完全控制                                                                  |
+| **服务门面模式** | `IUIService` 是唯一的公共 API，内部 `UIManager` 复杂性完全封装                                                                            |
+
+### 🧭 导航上下文图（非线性堆栈）
+
+| 特性                     | 说明                                                                                                                  |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| **有向图（而非线性栈）** | 窗口可有多个打开者，支持非线性关闭；"返回"始终解析到最近存活的祖先                                                    |
+| **上下文 Payload**       | 打开窗口时传入任意类型对象，目标窗口随时通过 `NavigationService.GetContext()` 读取                                    |
+| **子节点关闭策略**       | `Reparent`（过继给祖父节点）、`Cascade`（级联强制关闭）、`Detach`（成为根节点）                                       |
+| **零 GC 查询**           | 导航图读取（`GetAncestors`、`ResolveBackTarget`、`GetHistory`）通过 `ReaderWriterLockSlim` 线程安全；写操作限定主线程 |
+| **不可变条目结构体**     | `UINavigationEntry` 是 `readonly struct`，每条记录零堆分配                                                            |
+
+### 🎬 过渡协调器（同步与堆叠动画）
+
+| 特性                | 说明                                                                                                  |
+| ------------------- | ----------------------------------------------------------------------------------------------------- |
+| **双窗口协调过渡**  | `NavigateToAsync()` 在**同一帧**同时触发退出和进入动画，窗口间零视觉间隙                              |
+| **堆叠 / 级联打开** | 在 `OnViewOpening()` 中调用 `NavigateTo()` 可在 B 动画播放时就启动 C，形成流畅的分层入场感            |
+| **内置协调器**      | 开箱即用：`SlideTransitionCoordinator`（方向性翻页）和 `CrossFadeTransitionCoordinator`（透明度溶解） |
+| **自定义协调器**    | 实现 `IUITransitionCoordinator` 即可支持任意效果：缩放、弹性、模糊——动画库无关                        |
+| **自动降级**        | 未注册协调器时，`NavigateToAsync()` 静默退化为串行 `NavigateTo()`，零 breaking change                 |
+| **独立弹窗动画**    | 非协调窗口（弹窗、提示）使用自身 `IUIWindowTransitionDriver`，完全不受影响                            |
+
+### ⚡ 性能
+
+| 特性                   | 说明                                                                                                                  |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| **资产生命周期委托**   | `UIManager` 每个资产持有一个 `IAssetHandle<T>`，生命周期（RefCount、驱逐）完全由 `AssetCacheService`（W-TinyLFU）管理 |
+| **逐帧实例化节流**     | 将密集实例化分散到多帧，避免帧峰值                                                                                    |
+| **动态图集系统**       | 运行时在窗口打开时将精灵打包到单张 GPU 纹理，大幅减少图标密集型 UI 的 DrawCall                                        |
+| **压缩图集变体**       | `CompressedDynamicAtlasService` 使用 ASTC/DXT/ETC 压缩格式降低 VRAM 占用，针对移动端优化                              |
+| **出血像素支持**       | 自动 1 像素边缘复制，防止双线性/三线性采样导致的精灵边界接缝（GPU + CPU 双路径）                                      |
+| **精灵元数据保留**     | `GetSpriteFromSprite()` 自动保留原始 pivot 锚点和 9-slice border 九宫格边距                                           |
+| **异步图集加载**       | `GetSpriteAsync()` 通过 `UniTask` 在后台线程执行磁盘 I/O，图集插入仍在主线程执行                                      |
+| **页数与 Mipmap 控制** | 可配置 `maxPages` 限制防止无限 VRAM 增长；可选 mipmap 生成支持 LOD 友好的世界空间 UI                                  |
+| **线程安全原子操作**   | 像素面积跟踪和引用计数使用 `Interlocked` 原子操作，消除并发场景下的 TOCTOU 竞态条件                                   |
+| **原生异步设计**       | 所有加载、实例化、打开操作均基于 `UniTask`，永不阻塞主线程                                                            |
+| **运行时监控器**       | Play 模式实时编辑器面板（`UIRuntimeMonitorWindow`）显示活动窗口、进行中的打开操作、句柄计数和逐层明细                 |
+| **性能审计器**         | 静态分析工具（`UIPerformanceAuditWindow`）扫描 UI 预制体，检测布局报废、冗余射线、材质膨胀等问题                      |
+| **嵌入式上下文快照**   | `UIAssetContextProvider` 内联缓存序列化元数据 — 首帧零延迟解析，无需等待异步加载                                      |
+| **上下文预加载预热**   | `BeginWarmup(IAssetPackage)` 在场景初始化期间后台启动异步上下文解析                                                   |
+
+### 🔒 可靠性与安全性
+
+| 特性                       | 说明                                                                                    |
+| -------------------------- | --------------------------------------------------------------------------------------- |
+| **正式窗口状态机**         | `Opening → Opened → Closing → Closed` 防止重复打开、重复关闭和竞态条件                  |
+| **内存安全生命周期**       | `OnReleaseAssetReference` 回调确保 Addressable 句柄精确释放一次，即使在取消操作下也如此 |
+| **CancellationToken 传播** | 所有异步路径接受 `CancellationToken`，取消时干净退出，无泄漏或孤立 GameObject           |
+| **线程安全导航**           | 导航图读操作可从任意线程安全调用；写操作受主线程保护                                    |
 
 ## 核心架构
 
-该框架由几个关键组件构建而成，它们协同工作，提供了一套全面的 UI 管理解决方案。
+```mermaid
+flowchart TB
+    subgraph GameCode["🎮 游戏代码"]
+        GameLogic["游戏逻辑 / Presenter"]
+    end
 
-### 1. `UIService` (门面)
+    subgraph Facade["📦 公共 API"]
+        UIService["IUIService<br/>• OpenUI / CloseUI<br/>• NavigationService<br/>• TransitionCoordinator"]
+    end
 
-这是与 UI 系统交互的主要公共 API。游戏逻辑代码应通过 `UIService` 来打开和关闭窗口，从而将底层的复杂性抽象出来。它作为一个清晰的入口点，并负责 `UIManager` 的初始化。
+    subgraph NavSystem["🧭 导航系统"]
+        NavService["IUINavigationService<br/>• 上下文图<br/>• ResolveBackTarget<br/>• ChildClosePolicy"]
+        Coordinator["IUITransitionCoordinator<br/>• SlideTransitionCoordinator<br/>• CrossFadeTransitionCoordinator<br/>• 自定义实现"]
+    end
 
-### 2. `UIManager` (核心)
+    subgraph Core["⚙️ 核心系统"]
+        UIManager["UIManager<br/>• 异步加载<br/>• 双 LRU 缓存<br/>• 分帧节流<br/>• silentOpen 路径"]
+    end
 
-一个持久化的单例，负责协调整个 UI 的生命周期。其职责包括：
+    subgraph MVP["🔌 MVP 层"]
+        Binder["UIPresenterBinder<br/>[UIPresenterBind] 自动发现"]
+        Presenter["UIPresenter<TView><br/>• NavigateTo / NavigateToAsync<br/>• NavigateBack<br/>• NavigationService"]
+    end
 
-- **异步加载**: 使用 `CycloneGames.AssetManagement` 异步加载 `UIWindowConfiguration` 和 UI 预制体。
-- **生命周期管理**: 管理 `UIWindow` 实例的创建、销毁和状态转换。
-- **资源缓存**: 实现了一个 LRU (最近最少使用) 缓存来存储 UI 预制体，以优化重开常用窗口时的性能。
-- **实例化节流**: 限制每帧实例化的 UI 元素数量，以防止性能峰值。
+    subgraph LayerConfigs["📋 LayerConfigs (1:1)"]
+        LayerConfigMenu["LayerConfig<br/>菜单"]
+        LayerConfigDialogue["LayerConfig<br/>对话"]
+    end
 
-### 3. `UIRoot` & `UILayer` (场景层级)
+    subgraph WindowConfigs["📋 WindowConfigs (1:1)"]
+        ConfigA["UIConfig A"]
+        ConfigB["UIConfig B"]
+        ConfigC["UIConfig C"]
+    end
 
-- **`UIRoot`**: 场景中必需的组件，作为所有 UI 元素的根节点。它包含 UI 相机并管理所有的 `UILayer`。
-- **`UILayer`**: 代表一个独立的渲染和输入层级（例如 `Menu`, `Dialogue`, `Notification`）。窗口被添加到特定的层级中，由层级控制其排序顺序和分组。`UILayer` 通过 `ScriptableObject` 资产进行配置。
+    subgraph Scene["🏗️ 场景层级"]
+        UIRoot["UIRoot"]
+        subgraph Layers["UILayers"]
+            UILayerMenu["UILayer<br/>菜单"]
+            UILayerDialogue["UILayer<br/>对话"]
+        end
+        subgraph Windows["🪟 UI 窗口"]
+            WindowA["UIWindowA<br/>主菜单"]
+            WindowB["UIWindowB<br/>设置"]
+            WindowC["UIWindowC<br/>对话框"]
+        end
+    end
 
-### 4. `UIWindow` (UI 单元)
+    GameLogic --> UIService
+    UIService --> UIManager
+    UIService --> NavService
+    UIService --> Coordinator
 
-所有 UI 面板、页面或弹窗的基类。每个 `UIWindow` 都是一个自包含的组件，拥有自己的行为和生命周期，由一个健壮的状态机管理：
+    UIManager --> UIRoot
+    UIRoot --> UILayerMenu
+    UIRoot --> UILayerDialogue
+    UILayerMenu --> WindowA
+    UILayerMenu --> WindowB
+    UILayerDialogue --> WindowC
 
-- **`Opening`**: 窗口正在被创建，其打开过渡动画正在播放。
-- **`Opened`**: 窗口完全可见并可交互。
-- **`Closing`**: 窗口的关闭过渡动画正在播放。
-- **`Closed`**: 窗口已隐藏并准备被销毁。
+    LayerConfigMenu -.->|定义| UILayerMenu
+    LayerConfigDialogue -.->|定义| UILayerDialogue
+    ConfigA -.->|定义| WindowA
+    ConfigB -.->|定义| WindowB
+    ConfigC -.->|定义| WindowC
 
-### 5. `UIWindowConfiguration` (数据驱动配置)
+    Binder -.->|注入| Presenter
+    Presenter -->|NavigateToAsync| Coordinator
+    Coordinator -->|同帧触发| UIManager
+    UIManager -->|注册/注销| NavService
+```
 
-一个 `ScriptableObject`，用于定义 `UIWindow` 的属性。这种数据驱动的方法将配置与代码解耦，使设计师能够轻松修改 UI 行为而无需接触脚本。关键属性包括：
+### 1. `UIService`（门面）
 
-- 需要实例化的 UI 预制体。
-- 窗口所属的 `UILayer`。
+唯一公共 API 入口。所有游戏逻辑和 Presenter 只通过 `IUIService` 交互，内部 `UIManager` 的复杂性完全封装。DI 环境中将 `IUIService` 注册为单例即可从任何地方注入，同时获得 `NavigationService` 和 `TransitionCoordinator` 的访问权限。
 
-### 6. `IUIWindowTransitionDriver` (解耦的动画)
+### 2. `UIManager`（核心）
 
-一个接口，定义了窗口在打开和关闭时的动画方式。这个强大的抽象允许您使用任何动画系统（如 Unity Animator, LitMotion, DOTween）来实现过渡逻辑，并将其应用于窗口，而无需修改其核心逻辑。
+协调完整的窗口生命周期：
+
+- **异步加载**：通过 `CycloneGames.AssetManagement` 加载配置和预制体。
+- **句柄直接持有**：直接的 `IAssetHandle<T>` 字典取代了原来的 LRU 缓存。每个唯一资产路径持有一个句柄；调用 `Dispose()` 通知 `AssetCacheService`（W-TinyLFU）递减 RefCount，让闲置资产从 Active → Trial → Main 池流转直至被驱逐。
+- **实例化节流**：限制每帧实例化次数，避免帧峰值。
+- **silentOpen 路径**：`OpenSilentAsync()` 将窗口加载到就绪状态但不播放动画，由 `CoordinatedNavigateAsync` 调用，让协调器在同一帧驱动双窗口动画。
+
+### 3. `UIRoot` & `UILayer`（场景层级）
+
+- **`UIRoot`**：所有 UI 的根锚点，管理 UI 相机和所有层级。
+- **`UILayer`**：命名排序层（如 `Menu`、`Dialogue`、`HUD`、`Overlay`），每个窗口属于唯一一层，控制渲染顺序和输入优先级。
+
+### 4. `UIWindow`（UI 单元）
+
+所有面板、页面和弹窗的基类：
+
+```mermaid
+stateDiagram-v2
+    [*] --> Opening: Open() / OpenSilentAsync()
+
+    Opening --> Opened: 过渡完成
+    Opening --> Closing: 取消/Close()
+
+    Opened --> Closing: Close()
+
+    Closing --> Closed: 过渡完成
+
+    Closed --> [*]: 销毁
+```
+
+`OpenSilentAsync()` 推进状态机并通知 Binder，但**不播放**过渡动画——专供过渡协调器同步双窗口动画使用。
+
+### 5. `UIWindowConfiguration`（数据驱动配置）
+
+定义预制体来源、目标层级及可选覆盖参数的 `ScriptableObject`。设计师无需修改代码即可配置窗口行为。
+
+配置还包含 **`SubCanvasPolicy`**（`InheritLayerCanvas` / `ForceOwnSubCanvas` / `AutoDetect`），控制窗口是否获得独立子 Canvas 以隔离重建开销。
+
+支持的预制体来源模式：
+
+| 模式              | 序列化字段                                 | 典型后端                                      | 说明                                                  |
+| ----------------- | ------------------------------------------ | --------------------------------------------- | ----------------------------------------------------- |
+| `PrefabReference` | `windowPrefab`                             | Unity 直接预制体引用                          | 配置最直接，适合本地静态 UI。                         |
+| `AssetReference`  | `prefabAssetRef`（`AssetRef<GameObject>`） | Addressables、YooAsset 或任意 `AssetRef` 后端 | 热更新场景推荐，运行时通过 `AssetRef.Location` 加载。 |
+| `PathLocation`    | `prefabLocation`（string）                 | xAsset / 自定义加载器                         | 兼容性最高，适合历史项目或自研管线。                  |
+
+运行时行为与安全保证：
+
+- 非直引模式（`AssetReference` / `PathLocation`）统一通过 `IAssetPackage` 按 location 加载。
+- `UIWindowConfiguration.OnValidate()` 会在非直引模式下清空 `windowPrefab`，避免误持有强引用。
+- `UIManager` 以 location 为键共享预制体句柄，相同 location 的窗口复用同一 handle。
+- 窗口销毁回调已接入幂等释放路径，即使外部销毁窗口也不会泄漏共享句柄。
+
+### 6. `IUIWindowTransitionDriver`（单窗口动画）
+
+控制**单个**窗口的开关动画。适用于弹窗、提示、Toast 等各自独立的效果，与过渡协调器并行工作互不干扰。
+
+### 7. `IUITransitionCoordinator`（双窗口协调动画）
+
+同时驱动**两个**窗口的动画。注册到 `IUIService` 后，所有 `NavigateToAsync()` 调用都将使用它实现无缝翻页、交叉淡入或任何自定义效果。实现这个接口只需约 10 行代码，可接入 DOTween、LitMotion 或任何动画库。
 
 ## 依赖项
 
 - `com.cysharp.unitask`
-- `com.cyclone-games.assetmanagement`
+- `com.cyclone-games.asset-management`
 - `com.cyclone-games.factory`
 - `com.cyclone-games.logger`
 - `com.cyclone-games.service`
+
+## 资产管理与内存管理策略
+
+UIFramework 对 `CycloneGames.AssetManagement` 有**一级依赖**，自身**不维护独立的驱逐缓存**——所有资产生命周期决策完全委托给 `AssetCacheService`。
+
+### 运作原理
+
+```
+OpenUI("MyWindow")
+  └─ assetPackage.LoadAssetAsync<UIWindowConfiguration>(path, bucket: "UIFramework")
+       └─ AssetCacheService: 缓存命中 → Retain()（RefCount ↑）
+            OR 缓存未命中 → 加载，注册节点，RefCount = 1
+       └─ UIManager 存储 IAssetHandle<T> 引用
+
+CloseUI("MyWindow")
+  └─ UIManager: configHandle.Dispose()   → AssetCacheService: RefCount ↓
+  └─ UIManager: prefabHandle.Dispose()   → 若无其他窗口使用同一预制体
+       └─ RefCount → 0 → 资产进入闲置池（Trial/Main，由 W-TinyLFU 管理）
+       └─ W-TinyLFU 根据访问频率决定是驱逐还是晋升
+```
+
+### 设计关键属性
+
+| 属性                       | 说明                                                                                     |
+| -------------------------- | ---------------------------------------------------------------------------------------- |
+| **唯一 RefCount 体系**     | UIManager 内部无私有计数器，`AssetCacheService` 是唯一权威                               |
+| **`"UIFramework"` Bucket** | 所有 UI 资产统一打标签，可在 Cache Debugger 的 Buckets 标签页中隔离查看                  |
+| **预制体共享**             | 使用同一预制体路径的多个窗口共享同一句柄，最后一个窗口关闭时才释放                       |
+| **Config 句柄**            | 每个窗口名对应一个句柄（windowName → config 路径），`CloseUI` 时释放                     |
+| **场景卸载零泄漏**         | `CleanupAllWindows()` 批量 `Dispose()` 全部持有句柄，正确排空 AssetCacheService RefCount |
+
+### 与 W-TinyLFU 搭配的推荐策略
+
+为了获得更好的缓存命中质量和内存稳定性：
+
+1. 生产与热更新窗口优先使用 `AssetReference`。
+2. 保持 location 字符串长期稳定（避免每次构建都变更），让 W-TinyLFU 更准确学习访问频率。
+3. `PathLocation` 建议用于 `AssetRef` 尚未接入的历史/自定义链路。
+4. `PrefabReference` 建议主要用于常驻本地窗口（启动、调试、离线 UI）。
+5. 如需观察生命周期细节，可启用 `UIManager.EnableAssetLifecycleDebugLog`，通过 `CLogger` 输出来源模式与释放决策日志。
+
+### Debug 日志开关示例
+
+`UIManager` 默认关闭资源生命周期调试日志。建议只在开发或性能分析构建中启用：
+
+```csharp
+using CycloneGames.UIFramework.Runtime;
+using UnityEngine;
+
+public class UIDebugBootstrap : MonoBehaviour
+{
+    [SerializeField] private bool enableAssetLifecycleLogsInDev = true;
+
+    void Start()
+    {
+        var manager = FindFirstObjectByType<UIManager>();
+        if (manager == null) return;
+
+        // 生产环境保持日志干净，仅在需要诊断时开启。
+        manager.EnableAssetLifecycleDebugLog = Debug.isDebugBuild && enableAssetLifecycleLogsInDev;
+    }
+}
+```
+
+## 资产加载上下文（逐窗口资产元数据）
+
+**`UIAssetLoadContext`** 允许你为每个 UI 资产加载附加自定义元数据（bucket、tag、owner），从而精细控制 `AssetCacheService` 如何跟踪、分析和驱逐 UI 资源。
+
+### 为什么需要它？
+
+- **按功能模块隔离**：将主菜单资产标记为 `"MainMenu"`，战斗 HUD 标记为 `"Battle"`，Cache Debugger 中一目了然。
+- **基于 Owner 的驱逐**：分配 `Owner` 值（如关卡 ID），场景卸载时可批量释放该 Owner 下的所有 UI 资产。
+- **Config 与 Prefab 分离管理**：给配置资产分配长生命周期 bucket，预制体资产放入更激进的驱逐池。
+
+### 结构体
+
+`UIAssetLoadContext` 是 `readonly struct`（零堆分配）：
+
+```csharp
+// Config 和 Prefab 共用同一组 bucket/tag/owner
+var ctx = new UIAssetLoadContext(
+    sharedBucket: "Battle",
+    sharedTag:    "hud",
+    sharedOwner:  "level_3"
+);
+
+// 或者为 Config 和 Prefab 分别指定不同的元数据
+var ctx = new UIAssetLoadContext(
+    configBucket: "ui_configs",  configTag: "menu",  configOwner: "global",
+    prefabBucket: "ui_prefabs",  prefabTag: "menu",  prefabOwner: "level_1"
+);
+
+// 从 AssetBucketScope 构造
+var ctx = UIAssetLoadContext.FromScope(myScope);
+var ctx = UIAssetLoadContext.FromScopes(configScope, prefabScope);
+
+// 检查是否设置了任何字段
+if (ctx.HasAnyMetadata) { /* ... */ }
+```
+
+### 两级合并层级
+
+调用 `OpenUI` / `OpenUIAsync` 时，最终元数据按以下两层合并（每个字段优先取首个非空值）：
+
+1. **调用点参数** — 直接传给 `OpenUI("Window", assetLoadContext: ctx)`
+2. **UIAssetContextProvider** — 从 `UIRoot` 上的 `UIAssetContextProvider` 组件解析的默认上下文
+
+```csharp
+// Provider 会自动从 UIRoot（或其父级）上查找
+// 所有未显式传入 context 的 OpenUI 调用都会回退到 Provider 提供的元数据。
+
+// 按调用覆盖
+await uiService.OpenUIAsync("UIWindow_Shop", assetLoadContext: new UIAssetLoadContext(
+    sharedBucket: "Shop",
+    sharedOwner:  "shop_v2"
+));
+```
+
+### UIAssetContextProvider（场景级默认）
+
+`UIAssetContextProvider` 是一个 `sealed MonoBehaviour`，挂载在与 `UIRoot` 相同的 `GameObject` 上（或其父级）。它为所有未在调用点指定上下文的窗口提供**框架全局默认**的 `UIAssetLoadContext`。
+
+支持三种来源模式：
+
+| 模式              | 序列化字段             | 说明                                                          |
+| ----------------- | ---------------------- | ------------------------------------------------------------- |
+| `DirectReference` | `contextAsset`         | 直接引用一个 `UIAssetContextAsset` ScriptableObject           |
+| `AssetReference`  | `contextAssetRef`      | 使用 `AssetRef<UIAssetContextAsset>`（Addressables / 热更新） |
+| `PathLocation`    | `contextAssetLocation` | 通过 `IAssetPackage` 按字符串路径加载                         |
+
+- **Direct 模式**同步返回上下文 — 适用于本地/静态配置。
+- **异步模式**（`AssetReference` / `PathLocation`）通过 `ResolveLoadContextAsync()` 解析一次后缓存，后续调用直接使用缓存。
+- `OnValidate()` 在非 Direct 模式下会清除 `contextAsset` 字段，防止产生意外的内存引用。
+
+#### 嵌入式快照（首帧零延迟）
+
+在 Inspector 中启用 `useEmbeddedSnapshot`，可将元数据字段（`configBucket`、`configTag` 等）直接缓存在组件上。同步方法 `GetLoadContext()` 会立即返回该快照 — 首帧无需异步等待。
+
+```csharp
+// 同步路径 — 使用嵌入式快照，永不阻塞
+UIAssetLoadContext ctx = provider.GetLoadContext();
+```
+
+快照通过 Inspector 中的 **Sync Embedded Snapshot** 按钮（或代码中调用 `SyncEmbeddedSnapshotFromAsset()`）从关联的 `UIAssetContextAsset` 填充。使用 `ClearEmbeddedSnapshot()` 清除。
+
+#### 预加载预热
+
+对于 `AssetReference` 或 `PathLocation` 模式，在场景初始化时调用 `BeginWarmup(IAssetPackage)` 即可在后台开始解析资产。当第一次 `OpenUI` 调用到来时，上下文已缓存就绪：
+
+```csharp
+// 场景启动时
+provider.BeginWarmup(assetPackage);
+
+// 稍后 — 从缓存立即解析
+await uiService.OpenUIAsync("MyWindow");
+```
+
+也可以在 Inspector 中勾选 `preloadPackageBackedContext`，框架会在 `IAssetPackage` 可用时自动调用 `BeginWarmup`。
+
+#### 公开 API
+
+| 方法 / 属性                       | 说明                                                  |
+| --------------------------------- | ----------------------------------------------------- |
+| `GetLoadContext()`                | 同步 — 立即返回嵌入式快照或 Direct 引用的上下文       |
+| `ResolveLoadContextAsync()`       | 异步 — 通过 package 解析并缓存结果；自动去重并发调用  |
+| `BeginWarmup(IAssetPackage)`      | fire-and-forget 后台解析，适用于 package 模式         |
+| `SyncEmbeddedSnapshotFromAsset()` | 将当前资产字段复制到嵌入式快照                        |
+| `ClearEmbeddedSnapshot()`         | 将所有嵌入字段重置为 `null`                           |
+| `HasConfiguredSource`             | 任一来源模式具有有效引用/路径时为 `true`              |
+| `HasResolvedAssetReference`       | 异步解析已完成并已缓存时为 `true`                     |
+| `HasEmbeddedSnapshot`             | 至少一个嵌入字段非空时为 `true`                       |
+| `HasEffectiveMetadata`            | 任一路径（直接、已解析、快照）可提供元数据时为 `true` |
+
+### UIAssetContextAsset（设计师友好配置）
+
+对于偏好 Inspector 操作的设计师，可创建 `UIAssetContextAsset` ScriptableObject：
+
+**创建路径** → `CycloneGames > UIFramework > UI Asset Context Asset`
+
+该资产在 Inspector 中暴露 `configBucket / configTag / configOwner` 和 `prefabBucket / prefabTag / prefabOwner` 字段。运行时通过 `asset.ToLoadContext()` 转换为结构体。
+
+### 解析流程图
+
+```
+OpenUI("MyWindow", assetLoadContext: callSiteCtx)
+  │
+  ├─ 1. callSiteCtx（显式的逐调用覆盖）
+  │
+  └─ 2. UIRoot.AssetContextProvider.ResolveLoadContextAsync()
+       ├─ DirectReference  → contextAsset.ToLoadContext()            (同步)
+       ├─ AssetReference   → package.LoadAsync(ref).ToLoadContext()  (异步，已缓存)
+       └─ PathLocation     → package.LoadAssetAsync(path).ToLoadContext() (异步，已缓存)
+  │
+  └─ 合并：callSiteCtx.Merge(providerCtx)  →  resolvedContext
+       └─ 每个字段：callSite ?? provider
+```
 
 ## 快速上手指南
 
@@ -84,12 +430,10 @@
 `UILayer` 配置定义了 UI 窗口的渲染和输入层级。框架提供了几个默认层级，但您可以创建自定义的。
 
 1. **创建新的层级配置**:
-
    - 在项目窗口中，右键单击并选择 **Create > CycloneGames > UIFramework > UILayer Configuration**
    - 为其指定一个描述性的名称，例如 `UILayer_Menu`、`UILayer_Dialogue`、`UILayer_Notification`
 
 2. **配置层级**:
-
    - 在 Inspector 中打开 `UILayerConfiguration` 资产
    - 设置 `Layer Name`（例如 "Menu"、"Dialogue"）
    - 如果需要，调整 `Sorting Order`（数值越大，渲染越靠前）
@@ -116,12 +460,10 @@ UILayer_Notification (Sorting Order: 300)
 框架提供了一个便捷的编辑器工具，可以一次性创建所有必要的文件。
 
 1. **打开 UIWindow Creator**:
-
    - 在 Unity 菜单栏中，转到 **Tools > CycloneGames > UIWindow Creator**
    - 将打开一个包含所有创建选项的窗口
 
 2. **填写所需信息**:
-
    - **Window Name**: 输入描述性名称（例如 `MainMenuWindow`、`HUDWindow`）
    - **Namespace**（可选）: 如果您使用命名空间，请在此输入（例如 `MyGame.UI`）
    - **Script Save Path**: 拖入一个文件夹，C# 脚本将保存在此
@@ -193,7 +535,6 @@ UILayer_Notification (Sorting Order: 300)
    ```
 
 2. **创建预制体**:
-
    - 在场景中创建一个新的 UI `Canvas` 或 `Panel`
    - 将您的 `MainMenuWindow` 组件添加到根 `GameObject`
    - 设计您的 UI（添加按钮、文本、图像等）
@@ -381,6 +722,277 @@ public class MyWindow : UIWindow
         Debug.Log("窗口已关闭并将被销毁");
     }
 }
+```
+
+## UI 导航上下文系统教程
+
+当你的窗口系统运转起来之后，你可能希望框架能够**记录用户的来源路径**——这样不管玩家是从哪个入口进来的，按"返回"时都能正确跳回上一个界面。
+
+**UI 导航上下文系统**维护着一张实时有向图，记录每个窗口的"打开者"关系。不同于简单的线性堆栈，它支持**非线性流程**：比如关掉中间的窗口 B，窗口 C 仍然存活，按返回时 C 也能正确跳回 A。
+
+### 核心概念
+
+| 术语                                  | 含义                                                   |
+| ------------------------------------- | ------------------------------------------------------ |
+| **节点 (Node)**                       | 一条窗口记录：谁打开的我、传了什么数据、什么时候注册的 |
+| **打开者 (Opener)**                   | 触发本窗口打开的那个窗口                               |
+| **祖先链 (Ancestor chain)**           | 完整来源路径，如 `主界面 → 商店 → 详情 → 结算`         |
+| **子节点关闭策略 (ChildClosePolicy)** | 父窗口关闭时，其子窗口的处理方式                       |
+
+**ChildClosePolicy 可选项：**
+
+| 策略               | 效果                                                 |
+| ------------------ | ---------------------------------------------------- |
+| `Reparent`（默认） | 子窗口存活，并被自动"过继"给被关闭窗口的上一级       |
+| `Cascade`          | 所有子窗口（及其后代）一并强制关闭                   |
+| `Detach`           | 子窗口存活，但与来源关系断开，成为无返回目标的根节点 |
+
+### 第一步：初始化导航服务
+
+在启动逻辑中创建一次 `UINavigationService` 并挂载到 `IUIService`：
+
+```csharp
+// 非 DI 启动时
+var navService = new UINavigationService();
+uiService.SetNavigationService(navService);
+
+// 让 PresenterBinder 知道 IUIService，从而让各 Presenter 都能调用导航
+presenterBinder.SetUIService(uiService);
+```
+
+DI 方式（VContainer 示例）：
+
+```csharp
+// 在 LifetimeScope 中
+builder.Register<UINavigationService>(Lifetime.Singleton).AsImplementedInterfaces();
+// 然后通过 IUIService.SetNavigationService(nav) 注入
+```
+
+### 第二步：从 Presenter 发起导航
+
+`UIPresenter<TView>` 基类内置了两个导航辅助方法：
+
+```csharp
+[UIPresenterBind("UIWindow_Shop")]
+public class ShopPresenter : UIPresenter<IShopView>
+{
+    public void OnClickItemDetail(int itemId)
+    {
+        // 打开详情窗口，并将商店窗口记为其 Opener
+        // itemId 可在目标 Presenter 中通过 NavigationService.GetContext() 取回
+        NavigateTo("UIWindow_ItemDetail", new ItemContext { ItemId = itemId });
+    }
+
+    public void OnClickBack()
+    {
+        // 关闭当前窗口，并自动跳转到最近还活着的祖先窗口
+        NavigateBack();
+    }
+}
+```
+
+### 第三步：在目标窗口中读取上下文
+
+```csharp
+[UIPresenterBind("UIWindow_ItemDetail")]
+public class ItemDetailPresenter : UIPresenter<IItemDetailView>
+{
+    public override void OnViewOpened()
+    {
+        // 取出 Shop 传来的 context 数据
+        var ctx = NavigationService?.GetContext("UIWindow_ItemDetail") as ItemContext;
+        if (ctx != null)
+            View.SetItem(ctx.ItemId);
+    }
+}
+```
+
+### 第四步：非线性流程——关掉中间窗口
+
+默认的 `Reparent` 策略会自动处理这个场景。假设路径为 `A → B → C`：
+
+```csharp
+// 关掉 B，C 仍然存活
+uiService.CloseUI("UIWindow_B");
+// 框架自动将 C 的 Opener 改为 A
+// C 按返回键时，NavigateBack() 会正确跳到 A
+```
+
+如果 B 关闭时需要连带关闭 C（比如模态向导流程），使用 `Cascade`：
+
+```csharp
+uiService.NavigationService?.Unregister("UIWindow_B", ChildClosePolicy.Cascade);
+uiService.CloseUI("UIWindow_B");
+```
+
+### 第五步：查询导航图
+
+```csharp
+IUINavigationService nav = uiService.NavigationService;
+
+// 当前最顶层的活跃窗口
+string current = nav.CurrentWindow;
+
+// 当前窗口的完整来源路径（从最早的打开者到最新的）
+List<string> path = nav.GetAncestors("UIWindow_Checkout");
+// → ["UIWindow_MainMenu", "UIWindow_Shop", "UIWindow_ItemDetail"]
+
+// Shop 窗口打开了哪些子窗口？
+List<string> children = nav.GetChildren("UIWindow_Shop");
+
+// 完整历史记录（按注册时间从旧到新）
+List<UINavigationEntry> history = nav.GetHistory();
+
+// 按"返回"会去哪？
+string backTarget = nav.ResolveBackTarget("UIWindow_ItemDetail");
+```
+
+### API 速查
+
+| 方法 / 属性                   | 说明                                         |
+| ----------------------------- | -------------------------------------------- |
+| `CurrentWindow`               | 最近注册且仍存活的窗口名                     |
+| `CanNavigateBack`             | 当前窗口是否有可用的返回目标                 |
+| `Register(name, opener, ctx)` | 注册一个窗口节点（UIManager 开窗时自动调用） |
+| `Unregister(name, policy)`    | 注销一个窗口节点（UIManager 关窗时自动调用） |
+| `Clear()`                     | 清空整张图（如重启游戏时）                   |
+| `GetOpener(name)`             | 谁打开了这个窗口                             |
+| `GetContext(name)`            | 该窗口被打开时携带的 payload 数据            |
+| `GetAncestors(name)`          | 完整来源链，从最旧的打开者开始               |
+| `GetChildren(name)`           | 该窗口直接打开的所有还活着的子窗口           |
+| `ResolveBackTarget(name)`     | 最近还活着的祖先窗口名                       |
+| `GetHistory()`                | 按注册顺序的快照列表                         |
+
+> **线程安全**：`Register`、`Unregister`、`Clear` 必须在主线程调用。所有查询方法（`GetAncestors`、`GetHistory` 等）支持从任意线程安全调用。
+
+## UI 过渡协调器教程
+
+默认情况下，调用 `NavigateTo()` 时，每个窗口各自播放自己的开关动画——一个结束后另一个才开始。**过渡协调器（Transition Coordinator）** 系统让两个窗口**在同一时刻同步播放动画**，实现无缝的页面切换效果。
+
+### 什么时候用哪种方式
+
+| 场景                                          | 选择                                                    |
+| --------------------------------------------- | ------------------------------------------------------- |
+| 弹窗从中心淡入叠加在背景上（各自独立）        | `NavigateTo()` + 弹窗自身的 `IUIWindowTransitionDriver` |
+| 页面 A 向左滑出 + 页面 B 从右滑入（同步协调） | `NavigateToAsync()` + `IUITransitionCoordinator`        |
+| 两个全屏界面之间交叉淡入淡出                  | `NavigateToAsync()` + `CrossFadeTransitionCoordinator`  |
+
+### 第一步：在启动时注册协调器
+
+```csharp
+// 不注册 = 默认串行模式，各窗口独立动画（无需配置）
+
+// 滑动过渡（翻页感）
+var slideCoordinator = new SlideTransitionCoordinator(duration: 0.35f);
+uiService.SetTransitionCoordinator(slideCoordinator);
+
+// 交叉淡入淡出
+var fadeCoordinator = new CrossFadeTransitionCoordinator(duration: 0.25f);
+uiService.SetTransitionCoordinator(fadeCoordinator);
+```
+
+### 第二步：在 Presenter 中发起协调导航
+
+```csharp
+[UIPresenterBind("UIWindow_Shop")]
+public class ShopPresenter : UIPresenter<IShopView>
+{
+    // 同步动画：A 退出的同时 B 进入
+    public async void OnClickDetail(int itemId)
+    {
+        await NavigateToAsync(
+            "UIWindow_ItemDetail",
+            context: new ItemContext { ItemId = itemId },
+            direction: NavigationDirection.Forward);
+    }
+
+    // 返回时方向相反
+    public async void OnClickBack()
+    {
+        await NavigateToAsync(
+            NavigationService?.ResolveBackTarget(/* myWindowName */) ?? "",
+            direction: NavigationDirection.Backward);
+        NavigateBack();
+    }
+
+    // 没有注册协调器时，NavigateToAsync() 自动退化为 NavigateTo() 的串行行为
+}
+```
+
+### 第三步：实现自定义协调器
+
+只需实现 `IUITransitionCoordinator` 接口，动画方式完全自由：
+
+```csharp
+// 示例：缩放 + 淡入组合，适合模态弹窗
+public class ZoomFadeCoordinator : IUITransitionCoordinator
+{
+    public async UniTask TransitionAsync(UIWindow leaving, UIWindow entering,
+        NavigationDirection direction, CancellationToken ct)
+    {
+        var leavingCg  = leaving.GetComponent<CanvasGroup>();
+        var enteringCg = entering.GetComponent<CanvasGroup>();
+        var enteringRt = entering.GetComponent<RectTransform>();
+
+        float elapsed = 0f;
+        const float duration = 0.3f;
+        while (elapsed < duration && !ct.IsCancellationRequested)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            float t = Mathf.Clamp01(elapsed / duration);
+            if (leavingCg  != null) leavingCg.alpha  = 1f - t;
+            if (enteringCg != null) enteringCg.alpha = t;
+            if (enteringRt != null) enteringRt.localScale = Vector3.LerpUnclamped(Vector3.one * 0.85f, Vector3.one, t);
+            await UniTask.Yield(PlayerLoopTiming.Update, ct);
+        }
+    }
+}
+
+// 注册
+uiService.SetTransitionCoordinator(new ZoomFadeCoordinator());
+```
+
+### NavigationDirection（导航方向）
+
+| 值         | 使用时机                                               |
+| ---------- | ------------------------------------------------------ |
+| `Forward`  | 进入子界面（Push）。滑动：当前左移退出，新窗口从右进入 |
+| `Backward` | 返回上级（Pop）。滑动：当前右移退出，新窗口从左进入    |
+| `Replace`  | 无方向感的替换（如交叉淡入淡出）                       |
+
+> **注意**：如果没有注册协调器，`NavigateToAsync` 会自动退化为与 `NavigateTo` 相同的串行行为，不会影响任何现有代码。
+
+### 协调导航策略
+
+当用户在动画进行中快速触发连续导航（例如在第一个过渡动画播放时快速点击两个 Tab），框架需要一种策略处理重叠。`CoordinatedNavStrategy` 控制此行为：
+
+```csharp
+// 启动时设置（默认为 DirectJump）
+uiService.SetCoordinatedNavStrategy(CoordinatedNavStrategy.DirectJump);
+```
+
+| 策略         | 行为                                                                                          | 适用场景                     |
+| ------------ | --------------------------------------------------------------------------------------------- | ---------------------------- |
+| `DirectJump` | 取消进行中的过渡，从**原始**源直接跳转到**最新**目标。A→B 动画中 + B→C 请求 = 直接播放 A→C。  | Tab 栏、扁平导航、底部导航   |
+| `CardStack`  | 允许多个过渡**独立重叠**运行，产生层叠式卡片堆叠视觉效果。A→B 继续播放的同时 B→C 在上层开始。 | 钻取流程、设置页面、详情页面 |
+
+**DirectJump 示例：**
+
+```
+用户点击 Tab1 → Tab2（A→B 开始播放动画）
+用户快速点击 Tab3（A→B 尚未完成）
+  └─ 框架取消 A→B，销毁 B
+  └─ 直接开始 A→C（平滑跳过）
+```
+
+**CardStack 示例：**
+
+```
+用户打开 设置 → 音频（A→B 开始播放动画）
+用户快速点击 EQ 详情（A→B 尚未完成）
+  └─ B→C 立即开始，与 A→B 重叠
+  └─ 两个过渡独立运行
+  └─ A→B 完成时销毁 A；B→C 完成时销毁 B
 ```
 
 ## 动态图集系统教程
@@ -745,6 +1357,7 @@ public class IconListWindow : UIWindow
 ```csharp
 using CycloneGames.UIFramework.DynamicAtlas;
 using CycloneGames.AssetManagement.Runtime;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 
 public class GameInitializer : MonoBehaviour
@@ -756,25 +1369,98 @@ public class GameInitializer : MonoBehaviour
         // 初始化您的资源管理系统
         assetPackage = await InitializeYourAssetPackageAsync();
 
-        // 使用自定义加载/卸载函数配置动态图集
-        DynamicAtlasManager.Instance.Configure(
-            load: async (path) =>
+        // 使用 DynamicAtlasConfig 配置动态图集（推荐）
+        DynamicAtlasManager.Instance.Configure(new DynamicAtlasConfig
+        {
+            loadFunc = (path) => assetPackage.LoadAssetSync<Texture2D>(path).Asset,
+            unloadFunc = (path, tex) => assetPackage.ReleaseAsset(path),
+            loadFuncAsync = async (path) =>
             {
-                // 使用您的资源管理系统加载纹理
                 var handle = await assetPackage.LoadAssetAsync<Texture2D>(path);
                 return handle.Asset;
             },
-            unload: (path, tex) =>
-            {
-                // 使用您的资源管理系统卸载
-                assetPackage.ReleaseAsset(path);
-            },
-            size: 2048,
-            autoScaleLargeTextures: true
-        );
+            pageSize = 2048,
+            autoScaleLargeTextures = true,
+            enableBleed = true,         // 防止边缘采样伪影
+            enableMipmap = false,       // 世界空间 UI 时启用
+            maxPages = 0,               // 0 = 无限制
+        });
     }
 }
 ```
+
+> **异步加载**: 配置 `loadFuncAsync` 后，可使用 `GetSpriteAsync()`（参见[步骤 9](#步骤-9-异步加载)）实现非阻塞纹理加载。磁盘 I/O 在后台线程运行，图集插入仍在主线程执行。
+
+### 步骤 3b: 平台层级配置
+
+无需手动设置每个字段，使用内置的 `PlatformTier` 预设即可获取目标硬件的推荐默认值：
+
+```csharp
+// 根据当前运行时平台自动检测
+var config = DynamicAtlasConfig.CreateForCurrentPlatform(
+    loadFunc:  path => assetPackage.LoadAssetSync<Texture2D>(path).Asset,
+    unloadFunc: (path, tex) => assetPackage.ReleaseAsset(path),
+    useCompression: true,              // 使用 ASTC/ETC2/BC7 替代 RGBA32
+    preferLowMemoryProfile: false      // true = 更小页面、更严格限制
+);
+DynamicAtlasManager.Instance.Configure(config);
+```
+
+**可选层级：**
+
+| 层级                          | 页面大小 | 最大页数 | 出血 | Mipmap | 说明                         |
+| ----------------------------- | -------- | -------- | ---- | ------ | ---------------------------- |
+| `PlatformTier.DesktopHighEnd` | 4096     | 无限制   | ✅   | ❌     | PC / Mac / 主机              |
+| `PlatformTier.MobileHighEnd`  | 2048     | 8        | ✅   | ❌     | 现代手机 / 平板              |
+| `PlatformTier.MobileLowEnd`   | 1024     | 4        | ❌   | ❌     | 低端设备，强制使用未压缩格式 |
+| `PlatformTier.WebGL`          | 1024     | 2        | ❌   | ❌     | 无 CopyTexture，仅 RGBA32    |
+
+也可以直接指定特定层级：
+
+```csharp
+// 指定硬件层级
+var config = DynamicAtlasConfig.CreateForTier(
+    DynamicAtlasConfig.PlatformTier.MobileHighEnd,
+    loadFunc:  path => Resources.Load<Texture2D>(path),
+    unloadFunc: (path, tex) => Resources.UnloadAsset(tex),
+    useCompression: true
+);
+DynamicAtlasManager.Instance.Configure(config);
+
+// DynamicAtlasManager 上的一行式便捷方法
+DynamicAtlasManager.Instance.ConfigurePlatformOptimized(
+    load: path => Resources.Load<Texture2D>(path),
+    unload: (path, tex) => Resources.UnloadAsset(tex),
+    useCompression: true
+);
+```
+
+### 步骤 3c: 配置验证
+
+`DynamicAtlasConfig` 包含 `Validate()` 方法，可在运行时问题出现之前捕获常见的错误配置：
+
+```csharp
+var config = new DynamicAtlasConfig
+{
+    pageSize = 8192,
+    padding = 1,
+    enableBleed = true,
+};
+
+if (!config.Validate(out string error))
+{
+    Debug.LogWarning($"图集配置问题: {error}");
+    // 回退到安全默认值
+}
+```
+
+验证检查项：
+
+- 当前平台是否支持指定纹理格式
+- 页面大小 vs. `SystemInfo.maxTextureSize`
+- Padding 范围（0–16）
+- 出血像素要求 `padding >= 2`（未压缩格式）
+- `maxPages` 不可为负值
 
 ### 步骤 4: 最佳实践和技巧
 
@@ -795,30 +1481,37 @@ protected override void OnDestroy()
 ```
 
 3. **使用适当的页面大小**:
-
    - **1024x1024**: 适用于低端设备或内存受限的情况
    - **2048x2048**: 推荐用于大多数情况（默认值）
    - **4096x4096**: 适用于内存充足的高端设备
 
 4. **启用自动缩放**: 设置 `autoScaleLargeTextures: true` 以自动缩放对于图集来说太大的纹理。这可以防止错误并确保所有纹理都可以被打包。
 
-5. **监控图集使用情况**: 在开发中，您可以检查使用了多少页面：
+5. **启用出血像素**: 保持 `enableBleed: true`（默认值）以防止双线性/三线性纹理过滤在精灵边界采样时出现可见接缝。系统使用 GPU 路径（或在 GPU CopyTexture 不可用时使用 CPU 回退）自动生成 1 像素边框复制。压缩格式会自动禁用出血，因为子块像素操作在物理上不可行。
+
+6. **使用 maxPages 限制 VRAM**: 设置 `maxPages` 为非零值以限制创建的图集页数。当达到上限时，新的精灵插入将优雅地失败，而不是分配无限的 GPU 内存。
+
+7. **世界空间 UI 启用 Mipmap**: 如果图集精灵显示在世界空间 UI 或不同相机距离上，设置 `enableMipmap: true`。这允许 GPU 执行正确的 LOD 过滤。屏幕空间 UI 保持禁用以节省内存。
+
+8. **精灵元数据保留**: 使用 `GetSpriteFromSprite()` 时，系统自动保留源精灵的 pivot 锚点和 9-slice border 九宫格边距。无需手动配置——您的切片精灵在图集中可以正确工作。
+
+9. **监控图集使用情况**: 在开发中，您可以检查使用了多少页面：
 
 ```csharp
 // 这需要访问内部状态，因此主要用于调试
 // 系统在需要时会自动创建新页面
 ```
 
-6. **纹理要求**:
+10. **纹理要求**:
+    - 纹理必须是可读的（在纹理导入设置中启用 "Read/Write Enabled"）
+    - 纹理应该是支持运行时修改的格式（RGBA32、ARGB32 等）
+    - 压缩格式（DXT、ETC）可能需要转换
 
-   - 纹理必须是可读的（在纹理导入设置中启用 "Read/Write Enabled"）
-   - 纹理应该是支持运行时修改的格式（RGBA32、ARGB32 等）
-   - 压缩格式（DXT、ETC）可能需要转换
-
-7. **性能考虑**:
-   - 打包发生在主线程上，因此避免在单帧中打包许多大纹理
-   - 考虑在加载屏幕期间预加载常用图标
-   - 将图集用于中小型纹理（图标、按钮）而不是大型背景图像
+11. **性能考虑**:
+    - 打包发生在主线程上，因此避免在单帧中打包许多大纹理
+    - 考虑在加载屏幕期间预加载常用图标
+    - 将图集用于中小型纹理（图标、按钮）而不是大型背景图像
+    - 使用 `GetSpriteAsync()` 配合 `loadFuncAsync` 避免在磁盘 I/O 期间阻塞主线程
 
 ### 步骤 5: 故障排除
 
@@ -845,6 +1538,279 @@ protected override void OnDestroy()
 - 确保来自图集的精灵在同一 Canvas 上
 - 检查精灵是否使用相同的材质/着色器
 - 验证 Unity 的批处理是否已启用
+
+### 步骤 6: 从 SpriteAtlas 加载精灵
+
+动态图集支持从现有的 Unity SpriteAtlas 资源复制精灵。这在您想要将静态图集与运行时批处理结合使用时非常有用。
+
+```csharp
+using CycloneGames.UIFramework.DynamicAtlas;
+using UnityEngine;
+using UnityEngine.U2D;
+
+public class SpriteAtlasExample : MonoBehaviour
+{
+    [SerializeField] private SpriteAtlas sourceAtlas;
+
+    void LoadFromAtlas()
+    {
+        // 从 SpriteAtlas 获取精灵
+        Sprite sourceSprite = sourceAtlas.GetSprite("icon_sword");
+
+        // 复制到动态图集（可用时使用 GPU CopyTexture）
+        Sprite dynamicSprite = DynamicAtlasManager.Instance.GetSpriteFromSprite(sourceSprite);
+
+        // 使用精灵...
+
+        // 使用完毕后释放
+        DynamicAtlasManager.Instance.ReleaseSprite(sourceSprite.name);
+    }
+
+    void LoadFromRegion()
+    {
+        // 从任意纹理复制特定区域
+        Texture2D texture = Resources.Load<Texture2D>("LargeTexture");
+        Rect region = new Rect(100, 100, 64, 64);
+
+        Sprite regionSprite = DynamicAtlasManager.Instance.GetSpriteFromRegion(
+            texture, region, "my_region_key"
+        );
+
+        // 使用完毕后释放
+        DynamicAtlasManager.Instance.ReleaseSprite("my_region_key");
+    }
+}
+```
+
+> **内存警告**: 从 SpriteAtlas 加载会将整个源图集保留在内存中，直到显式卸载。建议使用 Addressables 配合独立纹理以获得更好的内存控制。
+
+### 步骤 7: 压缩动态图集（高级）
+
+为了获得最高的内存效率，使用 `CompressedDynamicAtlasService`，它可以直接在 GPU 纹理之间复制压缩纹理块，无需解压缩。
+
+**关键要求：**
+
+- 源 SpriteAtlas 和动态图集必须使用**完全相同**的 TextureFormat
+- GPU CopyTexture 必须受支持（除 WebGL 外的所有平台）
+
+```csharp
+using CycloneGames.UIFramework.DynamicAtlas;
+using UnityEngine;
+using UnityEngine.U2D;
+
+public class CompressedAtlasExample : MonoBehaviour
+{
+    [SerializeField] private SpriteAtlas sourceAtlas; // 必须是 ASTC_4x4 格式
+    private CompressedDynamicAtlasService _atlas;
+
+    void Start()
+    {
+        // 使用与源相同的格式创建压缩图集
+        _atlas = new CompressedDynamicAtlasService(
+            format: TextureFormat.ASTC_4x4,  // 必须与源匹配！
+            pageSize: 2048
+        );
+    }
+
+    void LoadSprite()
+    {
+        Sprite source = sourceAtlas.GetSprite("icon");
+
+        // GPU 直接块复制 - 零 CPU，零 GC
+        Sprite compressed = _atlas.GetSpriteFromSprite(source);
+    }
+
+    void OnDestroy()
+    {
+        _atlas?.Dispose();
+    }
+}
+```
+
+**平台格式推荐：**
+
+| 平台              | 推荐格式                              |
+| ----------------- | ------------------------------------- |
+| iOS               | ASTC 4×4 或 ASTC 6×6                  |
+| Android           | ASTC 4×4（现代设备）或 ETC2（旧设备） |
+| Windows/Mac/Linux | BC7（高质量）或 DXT5（兼容性）        |
+| PS4 / PS5         | BC7（高质量）或 DXT5（兼容性）        |
+| Xbox Series / One | BC7（高质量）或 DXT5（兼容性）        |
+| Nintendo Switch   | ASTC 4×4 或 ETC2                      |
+| WebGL             | 不支持（使用未压缩格式）              |
+
+### CompressedDynamicAtlasFactory
+
+相比直接构造 `CompressedDynamicAtlasService`，可以使用 `CompressedDynamicAtlasFactory` 简化创建和管理共享实例：
+
+```csharp
+var factory = new CompressedDynamicAtlasFactory();
+
+// 1. 指定格式创建新实例
+var atlas = factory.Create(TextureFormat.ASTC_4x4, pageSize: 2048);
+
+// 2. 共享单例 — 相同格式复用同一个实例（线程安全）
+var shared = factory.GetSharedInstance(TextureFormat.ASTC_4x4);
+
+// 3. 自动检测当前平台最佳格式
+var optimized = factory.CreatePlatformOptimized(pageSize: 2048);
+// 当没有合适的压缩格式时返回 null（例如 WebGL）。
+
+// 不再需要时释放共享实例
+CompressedDynamicAtlasFactory.ClearSharedInstance();
+```
+
+| 方法                        | 说明                                                                                   |
+| --------------------------- | -------------------------------------------------------------------------------------- |
+| `Create()`                  | 按指定 `TextureFormat` 创建新图集                                                      |
+| `GetSharedInstance()`       | 线程安全单例；如果请求的格式改变则重新创建                                             |
+| `CreatePlatformOptimized()` | 通过 `TextureFormatHelper` 自动选择推荐压缩格式并创建图集。平台无合适格式时返回 `null` |
+| `ClearSharedInstance()`     | 释放并清除共享单例（静态方法）                                                         |
+
+### 步骤 8: 编辑器工具
+
+框架提供了多个编辑器窗口用于诊断和验证：
+
+#### 图集格式验证器
+
+**菜单**: `Tools > CycloneGames > Dynamic Atlas > Atlas Format Validator`
+
+扫描 `SpriteAtlas` 资产，验证压缩格式与 `CompressedDynamicAtlasService` 的兼容性。显示逐平台格式、有效性状态和推荐建议。
+
+#### 动态图集调试器
+
+**菜单**: `Tools > CycloneGames > Dynamic Atlas > Dynamic Atlas Debugger`
+
+Play 模式下的可视化调试器：
+
+- 侧边栏列出所有图集页面，显示 VRAM 使用量和填充率进度条
+- 主区域渲染图集纹理，支持缩放滚动视图
+- 叠加层绘制精灵矩形和名称
+- 逐页精灵项目列表用于详细检查
+
+### 步骤 9: 异步加载
+
+对于包含大量图标的 UI 界面，同步加载纹理可能导致帧率尖峰。使用 `GetSpriteAsync()` 在后台线程执行磁盘 I/O，同时保持图集插入在主线程执行。
+
+**配置：**
+
+```csharp
+// 配置异步加载器（例如在游戏初始化时）
+DynamicAtlasManager.Instance.Configure(new DynamicAtlasConfig
+{
+    loadFunc = (path) => Resources.Load<Texture2D>(path),      // 同步回退
+    unloadFunc = (path, tex) => Resources.UnloadAsset(tex),
+    loadFuncAsync = async (path) =>
+    {
+        // 使用您的资源管理系统的异步 API
+        var handle = await assetPackage.LoadAssetAsync<Texture2D>(path);
+        return handle.Asset;
+    },
+    pageSize = 2048,
+});
+```
+
+**使用方式：**
+
+```csharp
+using Cysharp.Threading.Tasks;
+
+public class IconLoader : MonoBehaviour
+{
+    [SerializeField] private UnityEngine.UI.Image iconImage;
+
+    public async UniTaskVoid LoadIconAsync(string iconPath)
+    {
+        // 磁盘 I/O 在后台线程运行；图集插入在主线程执行
+        Sprite sprite = await DynamicAtlasManager.Instance.GetSpriteAsync(iconPath);
+        if (sprite != null)
+        {
+            iconImage.sprite = sprite;
+        }
+    }
+
+    private void OnDestroy()
+    {
+        if (iconImage.sprite != null)
+        {
+            DynamicAtlasManager.Instance.ReleaseSprite(iconImage.sprite.name);
+        }
+    }
+}
+```
+
+> **注意**: `GetSpriteAsync()` 需要配置 `loadFuncAsync`。如果仅设置了 `loadFunc`，请使用 `GetSprite()`（同步方式）替代。如果未配置 `loadFuncAsync`，异步 API 将返回 `null` 并输出错误日志。
+
+### 进阶架构与内存管理 (Advanced Architecture)
+
+#### 内存策略与 GC 表现
+
+- **零 GC 内存拷贝 (Zero-GC):** 系统彻底移除了传统的基于 CPU 的像素级拷贝操作（如 `GetRawTextureData`）。目前所有的图集重排、合并，均 100% 依赖底层的 GPU-To-GPU 通道 (`Graphics.CopyTexture` 或 `Graphics.Blit`)。这意味着在图集运行和动态合并的过程中，**产生 0 字节的 GC 分配**，彻底杜绝了因 UI 加载引发的卡顿。
+- **Draw Call 极小化:** 通过将散碎的各类图标集中打包进 2048×2048 或 4096×4096 的大图集页中，Unity 底层可以实现完美的动态批处理 (Dynamic Batching)。这能将动辄几百个散图的 Draw Call 压缩至个位数。
+- **引用计数原子安全:** 每当一个图标被提取，系统会精确记录其引用计数与真实占用的像素面积 (`UsedPixelArea`)。所有计数器使用 `Interlocked` 原子操作，消除多线程场景下的 TOCTOU（检查时间与使用时间不一致）竞态条件。整数溢出通过 `(long)width * height` 类型提升进行防护。当界面销毁释放图标时，若某张 Page 的活跃引用归零，该整张纹理会被立刻 `Destroy` 回收给系统。
+
+#### 出血像素支持 (Edge Bleeding / Gutter)
+
+当启用双线性或三线性纹理过滤时，在精灵边界进行采样可能会意外读取相邻精灵的像素，导致可见接缝。动态图集系统通过**自动 1 像素边框复制（出血）**解决此问题：
+
+- **GPU 路径（主通道）:** 在支持 `Graphics.CopyTexture` 的平台（除 WebGL 以外的所有平台），出血像素通过将边缘行/列复制到周围的 gutter 区域来生成——零 GC，完全在 GPU 上执行。
+- **CPU 路径（回退）:** 当纹理数据驻留在 CPU 端时（例如 `RenderTexture` 回读后），直接使用 `GetPixels`/`SetPixels`。这避免了使用 `Graphics.Blit` 时引入的不必要 GPU↔CPU 往返开销。
+- **压缩格式守卫:** 当图集使用压缩格式时（块大小 > 1），出血自动禁用，因为子块像素操作在物理上不可行。
+- **由配置控制:** 设置 `enableBleed: true`（默认）并确保 `padding > 0` 即可生效。
+
+#### 精灵元数据保留
+
+当通过 `GetSpriteFromSprite()` 从 SpriteAtlas 或其他源复制精灵时，系统会保留原始精灵的：
+
+- **Pivot 锚点** —— UI 布局锚定保持正确
+- **9-slice Border 九宫格边距** —— 切片精灵在图集中正确渲染，无需手动重新配置
+
+这对于精灵携带丰富元数据（不仅仅是原始像素）的生产级 UI 管线至关重要。
+
+#### 页数限制与 Mipmap 支持
+
+- **`maxPages`**: 设置非零值以限制图集页的最大数量。当达到上限时，`CreateNewPage()` 返回 `false`，插入被拒绝，而不是分配无限的 VRAM。设置为 `0` 表示不限制（默认）。
+- **`enableMipmap`**: 设为 `true` 时，图集页创建时带有 mipmap 支持。这对于在不同相机距离下渲染的世界空间 UI 元素至关重要，允许 GPU 执行正确的 LOD 过滤。屏幕空间 UI 保持 `false` 可以每页节省约 33% 的内存。
+
+#### 异步加载便捷层
+
+磁盘 I/O（从 AssetBundle/Addressable 加载源纹理）可以完全异步，但图集插入（`Graphics.CopyTexture` / `Blit`）**必须**在主线程执行。`GetSpriteAsync()` API 弥合了这一差距：
+
+1. `await loadFuncAsync(path)` —— 后台线程加载纹理
+2. `Service.GetSpriteFromRegion()` —— 主线程将像素插入图集
+3. `unloadFunc(path, tex)` —— 释放源纹理
+
+该 API 通过 `LoadAssetAsync<Texture2D>` 与 `CycloneGames.AssetManagement` 自然集成。图集层**不添加 LRU/LFU**，因为源纹理的生命周期已由 `AssetCacheService`（W-TinyLFU）管理。
+
+#### 压缩纹理的矩阵块对齐 (Block Alignment)
+
+当我们使用 `CompressedDynamicAtlasService` 时，系统将直接操作硬件压缩格式（如 ASTC、ETC2、BC7），这种模式极大地节省了显存。但压缩纹理是以“像素块 (Block)”而非“像素点”为单位物理存储的。
+
+- **严格的格式匹配:** 源图片的压缩格式必须与图集格式 100% 一致。
+- **智能块对齐算法:** 框架内部实现了专门的边缘对齐逻辑。如果你试图将一张宽为 13 像素的图标塞入一个 `ASTC_4x4` 的压缩图集中，打包算法会自动将边界向上取整扩展至 16x16 (4的倍数)。这种物理级别的块隔离，可以 100% 杜绝因 GPU 采样插值导致的“相邻图标边缘像素污染/马赛克”问题，做到极限压缩下依然能保持画质清晰。
+- **NativeArray 零 GC 初始化:** `CompressedAtlasPage` 使用 `NativeArray<byte>` 而非托管 byte 数组进行初始纹理数据初始化，消除了页面创建时的大块 GC 分配。
+
+#### 内存碎片整理与无缝热重排 (Defragmentation)
+
+随着游戏长时间运行，散碎 UI 这边释放几个，那边加载几个，整块图集往往会变成“瑞士奶酪”——充满空洞且碎片化严重。为了解决此类 VRAM 浪费，框架实现了一套**双缓冲无缝倒库 (Double-Buffering Repack)** 策略：
+
+1. **触发扫描:** 业务层调用 `DynamicAtlasManager.Instance.Defragment(0.5f)`，引擎会挑出那些碎片空洞率 `>=50%` 的脏页。
+2. **后台双缓冲:** 悄悄在显存中开辟一张全新的干净 Page 图纸。
+3. **活体数据转移:** 利用 `CopyTexture` 极速将旧图纸上还活着的 UI 像素，紧凑地转移到新图纸上。重排后调用 `ApplyIfNeeded()` 确保新页面的像素数据已提交。
+4. **触发全服更新事件:** 在 C# 层重设图集引用，并向全框架广播 `OnSpriteRepacked` 全局事件。
+5. **UI 无缝替换:** 只需你的 UI 组件监听该事件并在收到时热更 `.sprite` 属性，玩家眼中不会看到任何一帧的屏幕闪烁或白块。
+
+#### 平台支持矩阵
+
+| 平台                  | 压缩图集 | 非压缩图集 | CopyTexture | GPU Blit 回退 | 出血(Bleed) |
+| --------------------- | -------- | ---------- | ----------- | ------------- | ----------- |
+| Windows (DX11/12)     | ✅       | ✅         | ✅          | ✅            | ✅          |
+| macOS (Metal)         | ✅       | ✅         | ✅          | ✅            | ✅          |
+| iOS (Metal)           | ✅       | ✅         | ✅          | ✅            | ✅          |
+| Android (Vulkan/GLES) | ✅       | ✅         | ✅          | ✅            | ✅          |
+| PS4 / PS5             | ✅       | ✅         | ✅          | ❌            | ✅          |
+| Xbox One / Series     | ✅       | ✅         | ✅          | ❌            | ✅          |
+| Nintendo Switch       | ✅       | ✅         | ✅          | ✅            | ✅          |
 
 ## 高级特性
 
@@ -1065,6 +2031,81 @@ gameObject.SetActive(false);
 SetVisible(false);
 ```
 
+### 运行时监控器
+
+**菜单**: `Tools > CycloneGames > UI Framework > Runtime Monitor`
+
+Play 模式下的实时编辑器面板，每帧自动刷新。显示完整的 `UIPerformanceStats` 快照：
+
+| 指标                        | 说明                                |
+| --------------------------- | ----------------------------------- |
+| `ActiveWindowCount`         | 当前打开的窗口总数                  |
+| `SceneBoundWindowCount`     | 绑定到当前场景的窗口数              |
+| `InFlightOpenCount`         | 正在进行中的打开操作（加载 / 动画） |
+| `CachedConfigHandleCount`   | UIManager 持有的配置资产句柄数      |
+| `CachedPrefabHandleCount`   | UIManager 持有的预制体资产句柄数    |
+| `LayerCount`                | 活动 UI 层数                        |
+| `TotalLayerWindowCount`     | 所有层的窗口总和                    |
+| `IsolatedWindowCanvasCount` | 拥有独立子 Canvas 的窗口数          |
+| `HasPendingSceneSweep`      | 是否有待处理的场景绑定清扫          |
+
+摘要下方还有**层级明细**表格，显示每个层的名称、排序顺序和窗口数。
+
+```csharp
+// 也可以在代码中查询这些统计数据：
+UIPerformanceStats stats = uiManager.GetPerformanceStats();
+
+var layerStats = new List<UILayerRuntimeStats>();
+uiManager.CopyLayerRuntimeStats(layerStats);
+```
+
+### 性能审计器（静态分析）
+
+**菜单**: `Tools > CycloneGames > UI Framework > Performance Auditor`
+
+离线工具，扫描所有 `UIWindowConfiguration` 资产（或选中项）并生成逐窗口审计报告。特性：
+
+- **全部扫描 / 扫描选中项** 支持定向或全项目分析
+- **严重级过滤**: Info、Warning、Error
+- **排序模式**: 按警告数、名称、图形数量、材质变体排序
+- **彩色编码摘要栏** 显示计数芯片
+
+每个窗口采集的指标：
+
+| 指标              | 说明                                                                |
+| ----------------- | ------------------------------------------------------------------- |
+| 图形数量          | 预制体中 `Graphic` 组件总数                                         |
+| 射线目标          | 启用 `RaycastTarget` 的数量                                         |
+| 非交互射线        | 无 `Selectable` / 事件处理器但启用了射线的元素                      |
+| 布局组            | `HorizontalLayoutGroup` / `VerticalLayoutGroup` / `GridLayoutGroup` |
+| ContentSizeFitter | `ContentSizeFitter` 组件（布局重建开销）                            |
+| Mask / RectMask   | `Mask` 和 `RectMask2D` 组件                                         |
+| Canvas 数量       | 嵌套的 `Canvas` 组件                                                |
+| 材质 / 纹理变体   | 不同的材质和纹理数（影响 DrawCall）                                 |
+| ScrollRect        | `ScrollRect` 组件                                                   |
+
+自动标记的问题：
+
+- `LayoutGroup` + `ContentSizeFitter` 在同一对象上（Warning）
+- ≥3 个布局组件（Warning — 可能过度嵌套）
+- ≥2 个 `Mask` 组件（Warning — 模板开销）
+- ≥3 种不同材质（Warning — DrawCall 膨胀）
+- ≥6 个非交互射线目标（Warning）
+- `ScrollRect` 无嵌套子 Canvas（Info）
+- ≥80 个 `Graphic` 组件（Info — 建议拆分）
+
+### SubCanvasPolicy
+
+`UIWindowConfiguration` 暴露了 `SubCanvasPolicy` 枚举，控制每个窗口是否获得独立的子 Canvas：
+
+| 策略                 | 行为                                                                |
+| -------------------- | ------------------------------------------------------------------- |
+| `InheritLayerCanvas` | 共享层级的 Canvas — 最大化合批，适合静态窗口                        |
+| `ForceOwnSubCanvas`  | 始终创建独立子 Canvas — 将重建开销限制在本窗口内                    |
+| `AutoDetect`         | 框架自动为包含高频变化标记（动画、ScrollRect）的窗口创建独立 Canvas |
+
+性能审计器会根据窗口的组件组成建议最优策略。
+
 ---
 
 ## 架构模式 (MVP 自动绑定)
@@ -1073,12 +2114,12 @@ CycloneGames.UIFramework 提供**可选的** MVP (Model-View-Presenter) 支持�
 
 ### 使用级别
 
-| 级别   | 模式                                             | 使用场景        |
-| ------ | ------------------------------------------------ | --------------- |
-| **L0** | `class MyUI : UIWindow`                          | 简单窗口、新手  |
-| **L1** | `class MyUI : UIWindow` + 手动 Presenter         | 手动控制        |
-| **L2** | `class MyUI : UIWindow<TPresenter>`              | 自动绑定、无 DI |
-| **L3** | `class MyUI : UIWindow<TPresenter>` + VContainer | 完整 DI 集成    |
+| 级别   | 模式                                                       | 使用场景        |
+| ------ | ---------------------------------------------------------- | --------------- |
+| **L0** | `class MyUI : UIWindow`                                    | 简单窗口、新手  |
+| **L1** | `class MyUI : UIWindow` + 手动 Presenter                   | 手动控制        |
+| **L2** | `class MyUI : UIWindow` + `[UIPresenterBind]`              | 自动绑定、无 DI |
+| **L3** | `class MyUI : UIWindow` + `[UIPresenterBind]` + VContainer | 完整 DI 集成    |
 
 ---
 
@@ -1103,7 +2144,7 @@ public class UIWindowSimple : UIWindow
 
 ### Level 2: 自动绑定（无需 DI 框架）
 
-使用 `UIWindow<TPresenter>` 自动创建和管理 Presenter。
+使用 `[UIPresenterBind]` 来全自动且无耦合地创建和管理 Presenter。
 
 #### 步骤 1: 定义 View 接口
 
@@ -1122,7 +2163,7 @@ using CycloneGames.UIFramework.Runtime;
 using UnityEngine;
 using UnityEngine.UI;
 
-public class UIWindowInventory : UIWindow<InventoryPresenter>, IInventoryView
+public class UIWindowInventory : UIWindow, IInventoryView
 {
     [SerializeField] private Text goldText;
     [SerializeField] private Text itemCountText;
@@ -1137,6 +2178,8 @@ public class UIWindowInventory : UIWindow<InventoryPresenter>, IInventoryView
 ```csharp
 using CycloneGames.UIFramework.Runtime;
 
+[UIPresenterBind("UIWindow_Inventory")]
+// 也可以使用强类型绑定：[UIPresenterBind(typeof(UIWindowInventory))]
 public class InventoryPresenter : UIPresenter<IInventoryView>
 {
     // 从 UIServiceLocator 自动注入（无需 DI 框架）
@@ -1469,14 +2512,10 @@ public class GameController
         _uiService = uiService;
     }
 
-    public async void OpenInventory()
+    public void OpenInventory()
     {
-        var window = await _uiService.OpenUIAsync("UIWindow_Inventory");
-
-        if (window is UIWindow<InventoryPresenter> inventoryWindow)
-        {
-            inventoryWindow.Presenter.RefreshData();
-        }
+        _uiService.OpenUI("UIWindow_Inventory");
+        // 业务逻辑交由 InventoryPresenter 自动接手完成！
     }
 
     public void CloseInventory()
@@ -1504,26 +2543,25 @@ public class GameController
 >     ▼
 > 运行时：uiService.OpenUIAsync("UIWindow_Inventory")
 >     │  - UIManager 加载预制体
->     │  - 实例化 UIWindow<InventoryPresenter>
->     ▼
-> UIWindow.Awake()
->     │  - UIPresenterFactory.Create<InventoryPresenter>()
+>     │  - 实例化 UIWindow
+>     │  - UIManager 触发 OnWindowCreated
+>     │  - VContainerWindowBinder 匹配 [UIPresenterBind("UIWindow_Inventory")]
+>     │  - UIPresenterFactory.Create() 创建 InventoryPresenter
 >     ├─ VContainer 已注册 → 构造函数注入
 >     └─ VContainer 未注册 → Activator + [UIInject] 注入
 > ```
 
 ---
 
-### 设计理念：为何选择 View-First MVP？
+### 设计理念：彻底解耦的 Binder 架构
 
-您可能会问：_“为什么是 View 创建 Presenter，而不是 Presenter 创建 View？”_
+您可能会问：_“为什么框架选择了 `[UIPresenterBind]` 而不是传统的 Presenter 创建 View 流程？”_
 
-我们针对 Unity 引擎特性专门选择了 **View-First**（视图驱动）模式：
+我们针对 Unity 引擎特性专门选择了 **Binder 驱动**模式：
 
-1.  **符合 Unity 原生工作流**: 在 Unity 中，UI 始于 Prefab。`UIWindow` 组件是天然的逻辑入口，符合拖拽使用的直觉。
-2.  **生命周期安全**: Presenter 的生命周期与 GameObject 完美绑定（`Awake` 到 `OnDestroy`）。永远不会出现“View 销毁了但 Presenter 还在跑”的僵尸状态，避免了大量空引用异常。
-3.  **零胶水代码**: `UIWindow<T>` 自动处理了绑定。您不需要编写额外的“Router”或“Manager”脚本仅仅为了把 View 和 Presenter 连起来。
-4.  **兼容依赖注入**: 虽然是 View 发起创建，但通过 `UIPresenterFactory` 层作为中介，真正的对象创建和依赖注入依然可以由 DI 框架（如 VContainer）接管。这实现了 **View 驱动生命周期 + DI 驱动业务逻辑** 的完美平衡。
+1.  **符合 Unity 原生工作流**: 在 Unity 中，UI 始于 Prefab。`UIWindow` 组件是天然的界面入口，完全符合日常开发中拖拽预制体的直觉。
+2.  **生命周期安全**: Presenter 的创建与销毁完全被底层的 Binder 同步管理（`OnWindowCreated` 到 `OnWindowDestroying`）。永远不会出现“View 销毁了但 Presenter 还在跑”的僵尸状态，避免了空引用与内存泄漏。
+3.  **兼容依赖注入**: 虽然是窗口生命周期触发了装配，但通过 `UIPresenterBinder` 作为中介隔离，真正的对象组装和依赖注入依然可以由 DI 框架（如 VContainer）接管。这实现了 **Unity 驱动生命周期 + DI 驱动业务逻辑** 的完美平衡。
 
 ---
 
@@ -1567,3 +2605,163 @@ public class GameController
 - **线程安全**：UIServiceLocator 使用锁保证并发访问
 - **内存安全**：Presenter 随窗口一起销毁
 - **无强制 DI**：无需任何 DI 框架即可工作
+
+---
+
+## 本地化集成（可选）
+
+CycloneGames.UIFramework 提供与 [CycloneGames.Localization](../CycloneGames.Localization/README.SCH.md) 的**可选集成**。当检测到 `CycloneGames.Localization` 包时，脚本定义符号 `CYCLONE_LOCALIZATION` 会自动添加 — 无需手动设置。如果该包不存在，所有本地化代码将被编译器剔除，零开销。
+
+### 架构
+
+```mermaid
+graph TD
+    subgraph UIFramework
+        LWB[LocalizationWindowBinder<br/><i>IUIWindowBinder</i>]
+        ULL[UILocaleLayout<br/><i>ILocaleResponder</i>]
+        ILR[ILocaleResponder]
+    end
+
+    subgraph Localization 包
+        LS[ILocalizationService]
+        LTT[LocalizeTMPText]
+        LI[LocalizeImage]
+    end
+
+    LS -- OnLocaleChanged --> LWB
+    LWB -- 在窗口层级中发现<br/>ILocaleResponder --> ILR
+    ULL -.实现.-> ILR
+    LTT -.实现.-> ILR
+    LWB -- OnWindowCreated --> ULL
+    ULL -- 应用快照 --> RectTransform/TMP_Text
+```
+
+### 功能概览
+
+| 功能               | 详情                                                                                                                        |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| **逐语言布局快照** | `UILocaleLayout` 为每个语言存储字号、行间距、字间距、锚点位置和尺寸偏差 — 预制体的原始状态**即为**基础语言（零额外存储）    |
+| **自动窗口绑定**   | `LocalizationWindowBinder` 实现 `IUIWindowBinder`；注册一次后，每个新创建的 `UIWindow` 都会自动发现 `ILocaleResponder` 组件 |
+| **预览模式**       | 编辑器允许在 Scene 视图中切换语言快照，无需离开 Prefab 模式 — 修改完全可逆                                                  |
+| **保存时自动捕获** | 在 Prefab 模式下按 Ctrl+S 时，未保存的布局变更会自动捕获到当前激活的快照                                                    |
+| **右键菜单追踪**   | 右键点击任意 `TMP_Text`、`Image` 或 `RectTransform` → _"Track Layout"_ 即可将其添加到最近的 `UILocaleLayout`                |
+| **运行时零 GC**    | 烘焙的并行数组（`RectTransform[]`、`TMP_Text[]`、`ElementSnapshot[]`）— 切换语言时无内存分配                                |
+
+### 快速上手
+
+#### 步骤 1：为预制体添加 `UILocaleLayout`
+
+在 UI 预制体的根节点添加 `UILocaleLayout` 组件（与 `UIWindow` 同级）。
+
+```
+[UIWindow 预制体根节点]
+ ├── UIWindow
+ ├── UILocaleLayout          ← 添加此组件
+ ├── Header (TMP_Text)
+ ├── BodyText (TMP_Text)
+ └── IconImage (Image)
+```
+
+#### 步骤 2：扫描并添加覆盖语言
+
+1. 在 Prefab 模式中打开预制体。
+2. 在 `UILocaleLayout` Inspector 中，点击 **Scan Hierarchy** — 自动发现所有 `TMP_Text` 和 `Image` 组件。
+3. 选择**基础语言**（预制体的原始设计语言，如 `en`）。
+4. 点击 **+ Add Override** 添加需要覆盖的语言，如 `zh-CN`、`ja`、`ko` 等。
+
+#### 步骤 3：调整并捕获
+
+1. 从下拉菜单中选择覆盖语言（如 `zh-CN`）。
+2. 直接在 Scene 视图中修改字号、位置或间距。
+3. 点击 **Capture**（或直接按 Ctrl+S）— 快照已保存。
+4. 使用 **Preview** 在不影响已保存预制体的情况下对比各语言布局。
+
+#### 步骤 4：在启动时注册绑定器
+
+```csharp
+// VContainer 示例
+public class UIInstaller : LifetimeScope
+{
+    protected override void Configure(IContainerBuilder builder)
+    {
+        builder.Register<LocalizationWindowBinder>(Lifetime.Singleton)
+               .AsImplementedInterfaces();
+    }
+}
+```
+
+或手动注册：
+
+```csharp
+var binder = new LocalizationWindowBinder(localizationService);
+uiManager.RegisterWindowBinder(binder);
+```
+
+注册后，每个打开的 `UIWindow` 都会自动将语言变更传播到其层级结构中的所有 `ILocaleResponder` 组件。
+
+### 核心组件
+
+#### `UILocaleLayout`（MonoBehaviour，`ILocaleResponder`）
+
+逐预制体的语言布局管理器。预制体的原始状态即为基础语言 — 仅覆盖语言存储快照数据。
+
+| 成员                        | 描述                                                   |
+| --------------------------- | ------------------------------------------------------ |
+| `_baseLocale`               | 预制体设计语言的 BCP 47 代码                           |
+| `_elements`                 | `TrackedElement` 数组（RectTransform + 可选 TMP_Text） |
+| `_snapshots`                | `LocaleSnapshot` 数组（每个覆盖语言一个）              |
+| `OnLocaleChanged(LocaleId)` | 应用匹配的快照，若无匹配则恢复基础布局                 |
+
+#### `LocalizationWindowBinder`（`IUIWindowBinder`）
+
+将 `ILocalizationService.OnLocaleChanged` 桥接到所有活跃窗口中的 `ILocaleResponder`。
+
+| 成员                           | 描述                                                     |
+| ------------------------------ | -------------------------------------------------------- |
+| `OnWindowCreated(UIWindow)`    | 扫描新窗口中的 `ILocaleResponder` 组件并立即应用当前语言 |
+| `OnWindowDestroying(UIWindow)` | 从追踪列表中移除窗口                                     |
+| `Dispose()`                    | 取消订阅语言变更事件                                     |
+
+#### `ILocaleResponder`（接口）
+
+```csharp
+public interface ILocaleResponder
+{
+    void OnLocaleChanged(LocaleId newLocale);
+}
+```
+
+在 `UIWindow` 层级结构中的任意 MonoBehaviour 上实现此接口。绑定器通过共享缓存的 `GetComponentsInChildren` 发现所有响应器（零内存分配）。
+
+#### 数据结构
+
+| 类型              | 描述                                          |
+| ----------------- | --------------------------------------------- |
+| `TrackedElement`  | `RectTransform Target` + `TMP_Text Text` 配对 |
+| `ElementSnapshot` | 字号、行间距、字间距、锚点位置、尺寸偏差      |
+| `LocaleSnapshot`  | `string LocaleCode` + `ElementSnapshot[]`     |
+
+### 编辑器工作流
+
+`UILocaleLayoutEditor` 自定义 Inspector 提供全面的可视化工作流：
+
+| 功能             | 描述                                                           |
+| ---------------- | -------------------------------------------------------------- |
+| **语言下拉菜单** | 从 `LocalizationSettings` 资产自动填充                         |
+| **元素分组**     | 当追踪元素超过 6 个时自动分层折叠显示                          |
+| **差异指示器**   | 绿色对勾 = 与快照一致，橙色圆点 = 已修改，红色叉号 = 引用丢失  |
+| **预览模式**     | 蓝色横幅，安全的只读语言切换，退出时自动恢复                   |
+| **自动捕获**     | 挂钩 `PrefabStage.prefabSaving`，Ctrl+S 时自动捕获未保存的变更 |
+| **关闭保护**     | 关闭有未保存布局变更的预制体时提示 保存/放弃/取消              |
+
+### 右键菜单
+
+在 Inspector 的组件标题上右键点击：
+
+| 菜单项                             | 操作                                           |
+| ---------------------------------- | ---------------------------------------------- |
+| `TMP_Text` → **Track Layout**      | 将该文本添加到最近的 `UILocaleLayout` 追踪列表 |
+| `Image` → **Track Layout**         | 将该图片的 RectTransform 添加到追踪列表        |
+| `RectTransform` → **Track Layout** | 直接添加该 Transform                           |
+
+如果预制体根节点上不存在 `UILocaleLayout`，系统会自动创建一个。

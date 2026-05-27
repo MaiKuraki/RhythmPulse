@@ -1,8 +1,8 @@
 using UnityEditor;
 using UnityEngine;
-using CycloneGames.GameplayTags.Runtime;
+using CycloneGames.GameplayTags.Core;
 
-namespace CycloneGames.GameplayTags.Editor
+namespace CycloneGames.GameplayTags.Unity.Editor
 {
    [InitializeOnLoad]
    public static class GameplayTagPlayModeWatcher

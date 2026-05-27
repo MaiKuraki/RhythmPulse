@@ -2,9 +2,9 @@
 
 # CycloneGames.GameplayFramework
 
-A structured gameplay framework for Unity, inspired by **Unreal Engine's GameFramework** architecture. It separates game logic into clear, composable layers — **Actor**, **Pawn**, **Controller**, **GameMode**, **PlayerState**, and more — each solving a specific architectural problem to keep your project scalable, testable, and easy to extend.
+CycloneGames.GameplayFramework is a gameplay foundation for Unity derived from **Unreal Engine's GameFramework** concepts and adapted to Unity's runtime model. It organizes gameplay code into explicit layers such as **Actor**, **Pawn**, **Controller**, **PlayerController**, **GameMode**, and **PlayerState**, so that ownership, lifecycle, spawning, possession, and camera behavior follow a consistent contract.
 
-Ideal for developers who want Unreal Engine's proven architecture patterns in Unity, or for teams transitioning from Unreal Engine to Unity. The framework provides clean separation of concerns and follows industry-standard design patterns that have been battle-tested in countless AAA titles.
+The package is intended for projects that need a reusable gameplay architecture rather than isolated MonoBehaviour scripts. It is particularly suitable for projects that expect multiple game modes, multiple pawn types, AI controllers, respawn flows, or persistent player state across character replacement.
 
 - **Unity**: 2022.3+
 - **Dependencies**:
@@ -18,31 +18,65 @@ Ideal for developers who want Unreal Engine's proven architecture patterns in Un
 
 ## Table of Contents
 
-1. [Design Philosophy](#design-philosophy)
-2. [Architecture Overview](#architecture-overview)
-3. [Class Reference](#class-reference)
-   - [Actor](#actor)
-   - [Pawn](#pawn)
-   - [Controller](#controller)
-   - [PlayerController](#playercontroller)
-   - [AIController](#aicontroller)
-   - [PlayerState](#playerstate)
-   - [GameMode](#gamemode)
-   - [GameState](#gamestate)
-   - [GameSession](#gamesession)
-   - [DamageType System](#damagetype-system)
-   - [World & WorldSettings](#world--worldsettings)
-   - [CameraManager](#cameramanager)
-   - [PlayerStart](#playerstart)
-   - [SpectatorPawn](#spectatorpawn)
-   - [KillZVolume](#killzvolume)
-   - [SceneLogic](#scenelogic)
-   - [ActorTag System](#actortag-system)
-4. [Quick Start](#quick-start)
-5. [Advanced Usage](#advanced-usage)
-6. [Integration with Other Packages](#integration-with-other-packages)
-7. [Best Practices](#best-practices)
-8. [FAQ](#faq)
+- [CycloneGames.GameplayFramework](#cyclonegamesgameplayframework)
+  - [Table of Contents](#table-of-contents)
+  - [Design Philosophy](#design-philosophy)
+    - [The Problem](#the-problem)
+    - [The Solution](#the-solution)
+    - [Key Principles](#key-principles)
+    - [What This Package Standardizes](#what-this-package-standardizes)
+  - [Architecture Overview](#architecture-overview)
+    - [Component Hierarchy](#component-hierarchy)
+    - [Lifecycle Sequence](#lifecycle-sequence)
+    - [Data Lifetime](#data-lifetime)
+    - [Recommended Extension Workflow](#recommended-extension-workflow)
+  - [Class Reference](#class-reference)
+    - [Actor](#actor)
+    - [Pawn](#pawn)
+    - [Controller](#controller)
+    - [PlayerController](#playercontroller)
+    - [AIController](#aicontroller)
+    - [PlayerState](#playerstate)
+    - [GameMode](#gamemode)
+    - [GameState](#gamestate)
+    - [GameSession](#gamesession)
+    - [DamageType System](#damagetype-system)
+    - [World \& WorldSettings](#world--worldsettings)
+    - [CameraManager](#cameramanager)
+    - [GameplayAbility Integration with Skill Camera](#gameplayability-integration-with-skill-camera)
+    - [PlayerStart](#playerstart)
+    - [SpectatorPawn](#spectatorpawn)
+    - [KillZVolume](#killzvolume)
+    - [SceneLogic](#scenelogic)
+    - [ActorTag System](#actortag-system)
+    - [Config Assets](#config-assets)
+    - [Scene Transition](#scene-transition)
+    - [Serialization](#serialization)
+    - [Camera Modes](#camera-modes)
+    - [Camera Action Presets (ScriptableObject)](#camera-action-presets-scriptableobject)
+    - [CameraProfile](#cameraprofile)
+    - [Animation-Agnostic Trigger Binding](#animation-agnostic-trigger-binding)
+      - [Step 1 — Author a CameraActionPreset](#step-1--author-a-cameraactionpreset)
+      - [Step 2 — Create a CameraActionMap (optional but recommended)](#step-2--create-a-cameraactionmap-optional-but-recommended)
+      - [Step 3 — Add CameraActionBinding to your character](#step-3--add-cameraactionbinding-to-your-character)
+      - [Step 4 — Connect your animation system](#step-4--connect-your-animation-system)
+    - [Optional Animancer Integration](#optional-animancer-integration)
+    - [Camera Blend Curves](#camera-blend-curves)
+  - [Quick Start](#quick-start)
+    - [Prerequisites](#prerequisites)
+    - [Minimal Setup](#minimal-setup)
+      - [1. Create the required prefabs](#1-create-the-required-prefabs)
+      - [2. Create and configure WorldSettings](#2-create-and-configure-worldsettings)
+      - [3. Create a bootstrap entry point](#3-create-a-bootstrap-entry-point)
+      - [4. Configure the scene](#4-configure-the-scene)
+      - [5. Validate the startup flow](#5-validate-the-startup-flow)
+  - [Advanced Usage](#advanced-usage)
+    - [Respawn System](#respawn-system)
+    - [Character Swapping](#character-swapping)
+    - [Input Suppression](#input-suppression)
+    - [Damage with Event Subscription](#damage-with-event-subscription)
+    - [Example — Navigathena bootstrap](#example--navigathena-bootstrap)
+  - [Best Practices](#best-practices)
 
 ---
 
@@ -50,33 +84,40 @@ Ideal for developers who want Unreal Engine's proven architecture patterns in Un
 
 ### The Problem
 
-A typical Unity project tends to evolve a monolithic `PlayerController` script that handles input, movement, camera, scoring, respawn, and game rules all in one place. As the project grows, this creates tight coupling, makes character swapping difficult, and turns testing into a nightmare.
+In many Unity projects, gameplay responsibilities gradually accumulate inside a small number of scripts, usually around player control, scene state, and spawning. Input, movement, camera control, scoring, respawn, and rule processing often become coupled to the same behaviour. That coupling increases the cost of iteration, makes possession and pawn replacement harder, and weakens testability.
 
 ### The Solution
 
-Drawing inspiration from Unreal Engine's GameFramework, this framework decomposes gameplay into **layers with clear responsibilities**:
+CycloneGames.GameplayFramework addresses this by defining a stable gameplay kernel with explicit responsibilities for each role:
 
-| Layer | Class | Responsibility |
-|-------|-------|---------------|
-| **Entity** | `Actor` | Base for all gameplay objects — lifecycle, ownership, tags, damage |
-| **Controllable** | `Pawn` | An Actor that can be possessed and receive movement input |
-| **Decision** | `Controller` | The brain — decides what the Pawn does |
-| **Human Input** | `PlayerController` | A Controller driven by human input, with camera and spectator support |
-| **AI Decision** | `AIController` | A Controller driven by AI logic, with focus and auto-rotation |
-| **Persistent Data** | `PlayerState` | Player data that survives Pawn death/respawn (score, name, stats) |
-| **Game Rules** | `GameMode` | Spawn logic, respawn rules, match flow orchestration |
-| **Match State** | `GameState` | Observable match state machine and player roster |
-| **Session** | `GameSession` | Network-agnostic player capacity, login validation, kick/ban |
-| **Damage** | `DamageType` | Typed damage pipeline with point/radial routing |
-| **World** | `World` | Lightweight service locator for GameMode/GameState/PlayerController |
-| **Configuration** | `WorldSettings` | ScriptableObject that binds all prefab class references |
+| Layer               | Class              | Responsibility                                                          |
+| ------------------- | ------------------ | ----------------------------------------------------------------------- |
+| **Entity**          | `Actor`            | Base for all gameplay objects — lifecycle, ownership, tags, damage      |
+| **Controllable**    | `Pawn`             | An Actor that can be possessed and receive movement input               |
+| **Decision**        | `Controller`       | Control object that owns possession, control rotation, and command flow |
+| **Human Input**     | `PlayerController` | A Controller driven by human input, with camera and spectator support   |
+| **AI Decision**     | `AIController`     | A Controller driven by AI logic, with focus and auto-rotation           |
+| **Persistent Data** | `PlayerState`      | Player data that survives Pawn death/respawn (score, name, stats)       |
+| **Game Rules**      | `GameMode`         | Spawn logic, respawn rules, match flow orchestration                    |
+| **Match State**     | `GameState`        | Observable match state machine and player roster                        |
+| **Session**         | `GameSession`      | Network-agnostic player capacity, login validation, kick/ban            |
+| **Damage**          | `DamageType`       | Typed damage pipeline with point/radial routing                         |
+| **World**           | `World`            | Lightweight service locator for GameMode/GameState/PlayerController     |
+| **Configuration**   | `WorldSettings`    | ScriptableObject that binds all prefab class references                 |
 
 ### Key Principles
 
 - **DI-friendly**: All spawning goes through `IUnityObjectSpawner` — swap in any DI container or object pool without touching framework code.
-- **Interface-first extensibility**: Core systems expose interfaces (`IGameMode`, `IGameSession`, `IDamageType`, `IWorldSettings`) so you can provide custom implementations without subclassing.
+- **Stable gameplay kernel**: Core gameplay semantics live on `Actor`, `Pawn`, `Controller`, `PlayerController`, `GameMode`, and `PlayerState`. These base classes define the default usage habits and naming style.
+- **Layered extensibility**: Use inheritance for gameplay roles, strategy objects for optional rules such as camera policies and camera modes, and interfaces for infrastructure adapters.
 - **No forced dependencies**: The framework has **zero** compile-time dependency on GameplayAbilities, GameplayTags, Networking, or any other CycloneGames package. Integration is handled through interfaces and opaque context fields.
-- **Zero-GC awareness**: Hot paths use pre-allocated buffers, static lists, and Burst-compiled math. No per-frame allocations in Actor visibility toggling, tag queries, or orientation math.
+
+### What This Package Standardizes
+
+- **Possession flow**: `GameMode` spawns or restarts a Pawn, `Controller` possesses it, and `PlayerState` remains attached to the player lifecycle rather than the Pawn lifecycle.
+- **Player identity vs character identity**: `PlayerController` and `PlayerState` persist across respawn, while `Pawn` is treated as the replaceable runtime body.
+- **Camera ownership**: `PlayerController` owns the current view target, `Actor` and `Pawn` expose camera semantics, and `CameraManager` resolves the final camera pose.
+- **Game-rule ownership**: `GameMode` remains the authoritative entry point for login, player start selection, spawning, respawn, and match progression.
 
 ---
 
@@ -136,7 +177,7 @@ sequenceDiagram
     PC->>PS: spawn PlayerState
     PC->>Cam: spawn CameraManager
     PC->>SP: spawn SpectatorPawn
-    PC-->>GM: InitializationTask complete
+    GM->>PC: InitializeRuntimeComponents()
     deactivate PC
     GM->>GM: PostLogin(PC)
     GM->>GM: HandleStartingNewPlayer(PC)
@@ -148,14 +189,23 @@ sequenceDiagram
 
 ### Data Lifetime
 
-| Survives Pawn Death | Destroyed with Pawn |
-|---|---|
-| `PlayerController` | `Pawn` instance |
-| `PlayerState` (score, name, stats) | Movement state |
-| `CameraManager` | Visual components |
-| `SpectatorPawn` | Physics state |
+| Survives Pawn Death                | Destroyed with Pawn |
+| ---------------------------------- | ------------------- |
+| `PlayerController`                 | `Pawn` instance     |
+| `PlayerState` (score, name, stats) | Movement state      |
+| `CameraManager`                    | Visual components   |
+| `SpectatorPawn`                    | Physics state       |
 
 This separation means respawning is simply: destroy old Pawn -> spawn new Pawn -> `Possess()` — all player data remains intact.
+
+### Recommended Extension Workflow
+
+When adding a new gameplay feature, classify it first:
+
+1. If it changes what an in-world object is or how it behaves when possessed, extend `Actor` or `Pawn`.
+2. If it changes who owns input, aiming, or camera target selection, extend `Controller` or `PlayerController`.
+3. If it changes spawn rules, match flow, or player admission, extend `GameMode` or `GameSession`.
+4. If it changes only an optional rule, keep it in an outer layer such as `CameraMode`, `IViewTargetPolicy`, or a feature package.
 
 ---
 
@@ -169,20 +219,20 @@ This separation means respawning is simply: destroy old Pawn -> spawn new Pawn -
 
 **Key features**:
 
-| Feature | API | Notes |
-|---|---|---|
-| Lifecycle | `BeginPlay()` / `EndPlay()` | Called once after Start / before OnDestroy |
-| Ownership | `SetOwner(Actor)` / `GetOwner()` | Hierarchical ownership chain |
-| Instigator | `SetInstigator(Actor)` / `GetInstigator()` | Who caused this Actor to be created |
-| Tags | `ActorHasTag(string)` / `AddTag()` / `RemoveTag()` | Simple string-based tag system with `[ActorTag]` Inspector support |
-| Visibility | `SetActorHiddenInGame(bool)` | Zero-GC batch renderer toggle |
-| Damage | `TakeDamage(float)` / `TakeDamage(float, DamageEvent, ...)` | Routes to `ReceivePointDamage` / `ReceiveRadialDamage` / `ReceiveAnyDamage` |
-| Lifespan | `SetLifeSpan(float)` | Auto-destroy after N seconds |
-| Bounds | `FellOutOfWorld()` / `OutsideWorldBounds()` | Override to handle out-of-bounds |
-| Network | `HasAuthority()` | Override in network layer; defaults to `true` (standalone) |
-| Orientation | `GetOrientation()` | Burst-compiled quaternion-to-Euler conversion |
-| Events | `OnDestroyed` / `OwnerChanged` | Observable Actor lifecycle events |
-| Transform | `GetActorLocation()` / `SetActorLocation()` / `GetActorRotation()` / ... | Convenience wrappers over `transform` |
+| Feature     | API                                                                      | Notes                                                                       |
+| ----------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
+| Lifecycle   | `BeginPlay()` / `EndPlay()`                                              | Called once after Start / before OnDestroy                                  |
+| Ownership   | `SetOwner(Actor)` / `GetOwner()`                                         | Hierarchical ownership chain                                                |
+| Instigator  | `SetInstigator(Actor)` / `GetInstigator()`                               | Who caused this Actor to be created                                         |
+| Tags        | `ActorHasTag(string)` / `AddTag()` / `RemoveTag()`                       | Simple string-based tag system with `[ActorTag]` Inspector support          |
+| Visibility  | `SetActorHiddenInGame(bool)`                                             | Batch renderer toggle                                                       |
+| Damage      | `TakeDamage(float)` / `TakeDamage(float, DamageEvent, ...)`              | Routes to `ReceivePointDamage` / `ReceiveRadialDamage` / `ReceiveAnyDamage` |
+| Lifespan    | `SetLifeSpan(float)`                                                     | Auto-destroy after N seconds                                                |
+| Bounds      | `FellOutOfWorld()` / `OutsideWorldBounds()`                              | Override to handle out-of-bounds                                            |
+| Network     | `HasAuthority()`                                                         | Override in network layer; defaults to `true` (standalone)                  |
+| Orientation | `GetOrientation()`                                                       | Burst-compiled quaternion-to-Euler conversion                               |
+| Events      | `OnDestroyed` / `OwnerChanged`                                           | Observable Actor lifecycle events                                           |
+| Transform   | `GetActorLocation()` / `SetActorLocation()` / `GetActorRotation()` / ... | Convenience wrappers over `transform`                                       |
 
 **Example — Custom Actor with lifecycle and damage handling**:
 
@@ -277,9 +327,9 @@ public class CharacterPawn : Pawn
 
 ### Controller
 
-**Purpose**: The abstract "brain" that possesses and controls a Pawn. Holds persistent references (PlayerState, start spot) and manages control rotation.
+**Purpose**: Abstract control object that possesses and controls a Pawn. Holds persistent references such as `PlayerState` and start spot, and manages control rotation independently from Pawn lifetime.
 
-**Design rationale**: By separating decision-making (Controller) from execution (Pawn), the framework supports hot-swapping characters, AI takeover of player pawns, and clean input suppression — all impossible with monolithic player scripts.
+**Design rationale**: Separating control from embodiment keeps possession explicit. A Pawn can be replaced without recreating controller-side state, and the same Pawn class can be driven by human input, AI logic, replay logic, or scripted control.
 
 **Key features**:
 
@@ -291,15 +341,23 @@ public class CharacterPawn : Pawn
 
 ### PlayerController
 
-**Purpose**: A Controller for human players. Extends Controller with **camera management**, **spectator pawn**, and **async initialization**.
+**Purpose**: A Controller for human players. Extends Controller with **view-target ownership**, **camera extension state**, and **spectator pawn**.
 
-**Design rationale**: Human players need camera setup, spectator fallback during loading, and async init (waiting for dependencies). PlayerController encapsulates all of this so game-specific subclasses only need to handle input.
+**Design rationale**: `PlayerController` is the persistent runtime owner of human input, player-local camera state, and spectator fallback. The framework keeps the camera contract centered on `GetViewTarget`, `SetViewTarget`, and `AutoManageActiveCameraTarget`, while `CameraContext`, `IViewTargetPolicy`, and `CameraMode` remain optional extension points.
 
 **Key features**:
 
-- **Async init**: `InitializationTask` (UniTask) — spawns PlayerState, CameraManager, SpectatorPawn in sequence. GameMode awaits this before proceeding.
-- **Camera**: `GetCameraManager()`, `SetViewTarget(Actor)`, `SetViewTargetWithBlend(Actor, float)`, `AutoManageActiveCameraTarget(Actor)`.
-- **Spectator**: `SpawnSpectatorPawn()` / `GetSpectatorPawn()` — used as fallback Pawn during loading.
+- **Runtime component initialization**: `InitializeRuntimeComponents()` creates and wires `PlayerState`, `CameraManager`, `CameraContext`, and `SpectatorPawn` after controller dependencies have been injected. `InitializationTask` remains as a compatibility surface for older call sites.
+- **View-target management**: `SetViewTarget(Actor)`, `ClearViewTargetOverride()`, `SetViewTargetPolicy(IViewTargetPolicy)`, and `AutoManageActiveCameraTarget(Actor)` coordinate manual overrides and automatic selection.
+- **Camera-style management**: `SetBaseCameraMode(CameraMode)`, `PushCameraMode(CameraMode)`, `RemoveCameraMode(CameraMode)`, and `GetCameraContext()` expose a layered way to apply framing styles without replacing the ownership model.
+- **Spectator fallback**: `SpawnSpectatorPawn()` and `GetSpectatorPawn()` provide a stable fallback when the player temporarily has no active gameplay Pawn.
+
+**Recommended usage**:
+
+1. Keep human-input collection in `PlayerController` or an input-facing subclass.
+2. Keep movement, locomotion response, and animation-driving logic in the Pawn.
+3. Treat `SetViewTarget` as the authoritative API for view-target override.
+4. Use `CameraMode` to change framing style, not gameplay ownership.
 
 **Example — PlayerController with input**:
 
@@ -399,6 +457,7 @@ public class PatrolAIController : AIController
 - **Pawn tracking**: `GetPawn()` / `OnPawnSetEvent` — notified when the possessed Pawn changes. Event signature: `(PlayerState, newPawn, oldPawn)`.
 - **Player info**: `GetPlayerName()` / `SetPlayerName()`, `GetPlayerId()` / `SetPlayerId()`, `GetScore()` / `SetScore()`, `AddScore()` (returns new score).
 - **Flags**: `IsABot()` / `SetIsABot()`, `IsSpectator()` / `SetIsSpectator()`.
+- **Serialization seam**: `Serialize(IDataWriter)` / `Deserialize(IDataReader)` provide a framework-level persistence contract for save systems, replay systems, or networking adapters.
 - **Copy**: `CopyProperties(PlayerState)` — for seamless travel or respawn state transfer.
 
 **Example — Custom PlayerState with inventory**:
@@ -445,6 +504,9 @@ public class RPGPlayerState : PlayerState
 - **Spawn pipeline**: `SpawnDefaultPawnAtPlayerStart/Transform/Location()` — spawns Pawn, handles CharacterController/Rigidbody teleport via `TeleportPawn()`.
 - **Login/Logout**: `PreLogin()` (validate with GameSession) -> `PostLogin()` (register + HandleStartingNewPlayer) -> `Logout()` (unregister).
 - **Session integration**: `SetGameSession(IGameSession)` — optional. Without a session, all login checks pass (standalone mode).
+- **Config-driven rules**: `SetGameModeConfig(GameModeConfig)` / `GetGameModeConfig()` let rule presets live in assets instead of hard-coded subclasses.
+- **Scene travel seam**: `SetSceneTransitionHandler(ISceneTransitionHandler)` / `GetSceneTransitionHandler()` define a clean adapter boundary for scene navigation systems such as Navigathena.
+- **Travel lifecycle**: `TravelToLevel()` performs game-side shutdown through `EndGameAsync()` and then delegates the actual scene change to the transition handler.
 - **Pawn class selection**: Override `GetDefaultPawnPrefabForController()` to return different Pawn prefabs per player (class-based or team-based selection).
 
 **Example — GameMode with lives and custom spawn**:
@@ -672,14 +734,14 @@ public class EnemyActor : Actor
 
 **`WorldSettings`** (ScriptableObject) — The configuration asset that binds all class references:
 
-| Field | Type | Required |
-|---|---|---|
-| `GameModeClass` | `GameMode` | Yes |
-| `PlayerControllerClass` | `PlayerController` | Yes |
-| `PawnClass` | `Pawn` | Yes |
-| `PlayerStateClass` | `PlayerState` | No |
-| `CameraManagerClass` | `CameraManager` | No |
-| `SpectatorPawnClass` | `SpectatorPawn` | No |
+| Field                   | Type               | Required |
+| ----------------------- | ------------------ | -------- |
+| `GameModeClass`         | `GameMode`         | Yes      |
+| `PlayerControllerClass` | `PlayerController` | Yes      |
+| `PawnClass`             | `Pawn`             | Yes      |
+| `PlayerStateClass`      | `PlayerState`      | No       |
+| `CameraManagerClass`    | `CameraManager`    | No       |
+| `SpectatorPawnClass`    | `SpectatorPawn`    | No       |
 
 Create via `Create -> CycloneGames -> GameplayFramework -> WorldSettings`. Editor validation shows green/red/yellow status for each field.
 
@@ -695,26 +757,460 @@ Pawn pawn = world.GetPlayerPawn();
 
 ### CameraManager
 
-**Purpose**: Manages Cinemachine cameras and follows the current view target.
+**Purpose**: Resolves the final `CameraPose` for the current player and applies it to the active Cinemachine rig.
 
 **Requirements**: Main Camera must have `CinemachineBrain`. At least one `CinemachineCamera` must exist in the scene.
 
-**Key API**: `InitializeFor(PlayerController)`, `SetActiveVirtualCamera()`, `SetViewTarget(Transform)`, `SetFOV(float)`.
+**Setup guidance (recommended)**:
 
-**Example — Switching camera target**:
+1. Set `Bootstrap Virtual Camera` on the `CameraManager` prefab (typically the same object's `CinemachineCamera`).
+2. `Bootstrap Brain` is optional:
+   - If `CameraManager` is scene-placed, you can drag the scene `MainCamera`'s `CinemachineBrain` directly.
+   - If `CameraManager` is runtime-spawned (common), prefab assets cannot hold scene references. This is expected. Bind at runtime via `SetBootstrapBrain(...)`, or call `TryResolveAndBindBrain()` for auto-discovery.
+3. If your scene has multiple `CinemachineBrain` instances, prefer explicit binding to avoid ambiguity.
+
+**Runtime binding API**:
+
+- `SetBootstrapBrain(CinemachineBrain brain, bool rebindImmediately = true)`
+- `SetBootStartpBrain(...)` (backward-compatible alias)
+- `TryResolveAndBindBrain()`
+
+**Behavior when no Brain is present**:
+
+- `CameraManager` still evaluates `CameraPose`, but final camera output is not driven (a warning is logged).
+- Core gameplay can continue, but camera-module features will not be visible.
+
+**Key API**: `InitializeFor(PlayerController)`, `UpdateCamera(float)`, `NotifyCameraStateChanged()`, `SetActiveVirtualCamera()`, `SetFOV(float)`.
+
+**Extended camera hooks**:
+
+- **Blend shaping**: `CameraBlendState` now accepts an `ICameraBlendCurve`, allowing blend timing to be decoupled from pose interpolation logic.
+- **Mode layering**: `CameraMode` remains the extension point for framing, while reusable presets can now be stored in `CameraProfile` ScriptableObjects.
+- **Sample reference implementations**: `FirstPersonCameraMode`, `OrbitalCameraMode`, and `ThirdPersonFollowCameraMode` are provided in `Samples/Sample.CameraModes` as optional camera-style examples.
+
+**Camera workflow**:
+
+- **`Actor.GetActorEyesViewPoint()`** provides the base observation point for an actor.
+- **`Actor.CalcCamera()`** is the main camera-evaluation hook. `Pawn` and other actors can override it to provide actor-specific view semantics.
+- **`Controller.GetViewTarget()` and `PlayerController.SetViewTarget()`** define which actor is currently being observed.
+- **`CameraContext` and `IViewTargetPolicy`** can refine target selection without moving that policy into the gameplay kernel.
+- **`CameraMode`** applies optional framing logic such as follow distance, look-at adjustment, and FOV override.
+- **`CameraManager`** composes these layers and writes the resolved result to the active camera.
+
+**When to customize**:
+
+1. Override `GetActorEyesViewPoint()` when the observation point differs from the actor pivot.
+2. Override `CalcCamera()` when the actor itself owns the view logic.
+3. Add `CameraMode` when the target stays the same but the framing style changes.
+4. Add or replace `IViewTargetPolicy` when automatic target selection rules differ by game mode or spectator state.
+
+**Example — Switching camera target and mode**:
 
 ```csharp
 // In your PlayerController subclass:
 public void SwitchToSpectateTarget(Actor target)
 {
     SetViewTargetWithBlend(target, 0.5f); // 0.5s blend
+    SetBaseCameraMode(new ViewTargetCameraMode());
 }
 
-// Or access CameraManager directly:
-CameraManager cam = GetCameraManager();
-cam.SetViewTarget(someActor.transform);
-cam.SetFOV(60f);
+public void EnableCombatCamera()
+{
+    // MyThirdPersonCameraMode is your game-layer CameraMode subclass — see the pattern below
+    PushCameraMode(new MyThirdPersonCameraMode
+    {
+        FollowDistance = 5.5f,
+        PivotHeight = 1.8f,
+        LookAtHeight = 1.2f,
+        OverrideFov = 55f
+    });
+}
+
+public void DisableCombatCamera(CameraMode combatMode)
+{
+    RemoveCameraMode(combatMode);
+}
 ```
+
+**Pattern — Creating a game-layer third-person CameraMode**:
+
+`ThirdPersonFollowCameraMode` in `Samples/Sample.CameraModes` is a reference implementation you can study or copy. For production use, create your own `CameraMode` subclass in your game project layer so the framing parameters belong to your code:
+
+```csharp
+// Assets/Game/Scripts/Camera/MyThirdPersonCameraMode.cs
+using UnityEngine;
+using CycloneGames.GameplayFramework.Runtime;
+
+public sealed class MyThirdPersonCameraMode : CameraMode
+{
+    public float FollowDistance { get; set; } = 4.5f;
+    public float PivotHeight    { get; set; } = 1.6f;
+    public float LookAtHeight   { get; set; } = 1.1f;
+    public float OverrideFov    { get; set; } = 60f;
+
+    public override float BlendDuration => 0.25f;
+
+    public override CameraPose Evaluate(CameraContext context, in CameraPose basePose, float deltaTime)
+    {
+        Actor target = context?.CurrentViewTarget;
+        if (target == null) return basePose;
+
+        target.CalcCamera(deltaTime, out CameraPose targetPose, basePose.Fov);
+
+        Vector3 pivot    = targetPose.Position + Vector3.up * PivotHeight;
+        Vector3 position = pivot + (targetPose.Rotation * Vector3.back) * FollowDistance;
+        Vector3 lookAt   = targetPose.Position + Vector3.up * LookAtHeight;
+        Quaternion rot   = Quaternion.LookRotation((lookAt - position).normalized, Vector3.up);
+        float fov        = OverrideFov > 0f ? OverrideFov : basePose.Fov;
+
+        return new CameraPose(position, rot, fov);
+    }
+}
+```
+
+Add position/rotation lag, angular dead zone, or collision avoidance by extending this base. The `Sample.CameraModes` package includes a full-featured reference (`ThirdPersonFollowCameraMode`, `ThirdPersonCollisionPostProcessor`) that you can import from the Package Manager Samples tab.
+
+**Reference pattern — Composing third-person and skill cameras in the game layer**:
+
+```csharp
+using UnityEngine;
+using CycloneGames.GameplayFramework.Runtime;
+
+// Game-layer PlayerController extension
+public class MyGamePlayerController : PlayerController
+{
+    // Configure third-person parameters from the Inspector rather than hard-coding them.
+    // MyThirdPersonCameraMode is a plain C# class and cannot be serialized directly,
+    // so intermediate SerializeField values are used and assigned to the instance at possess time.
+    [SerializeField] private float followDistance = 4.5f;
+    [SerializeField] private float pivotHeight    = 1.6f;
+    [SerializeField] private float lookAtHeight   = 1.1f;
+    [SerializeField] private float overrideFov    = 60f;
+
+    // Reuse the same instance to avoid GC allocations on every Possess.
+    private readonly MyThirdPersonCameraMode thirdPersonMode = new MyThirdPersonCameraMode();
+    private readonly SkillCameraMode skillMode = new SkillCameraMode();
+
+    // Keep framework default neutral and opt into project framing explicitly.
+    protected override CameraMode CreateDefaultCameraMode()
+    {
+        return new ViewTargetCameraMode();
+    }
+
+    // Called by the framework when a Pawn is possessed — switch to third-person framing here.
+    protected override void OnPossess(Pawn inPawn)
+    {
+        base.OnPossess(inPawn); // calls AutoManageActiveCameraTarget internally
+        EnterGameplayCamera();
+    }
+
+    // Revert to neutral framing when the Pawn is lost (death, spectator, etc.).
+    protected override void OnUnPossess()
+    {
+        base.OnUnPossess();
+        SetBaseCameraMode(new ViewTargetCameraMode());
+    }
+
+    private void EnterGameplayCamera()
+    {
+        // Write Inspector values into the reused instance — supports runtime hot-change.
+        thirdPersonMode.FollowDistance = followDistance;
+        thirdPersonMode.PivotHeight    = pivotHeight;
+        thirdPersonMode.LookAtHeight   = lookAtHeight;
+        thirdPersonMode.OverrideFov    = overrideFov;
+        SetBaseCameraMode(thirdPersonMode);
+    }
+
+    public void OnSkillBegin(float duration)
+    {
+        skillMode.Setup(duration, 7f, 52f);
+        PushCameraMode(skillMode);
+    }
+
+    public void OnSkillEnd()
+    {
+        RemoveCameraMode(skillMode);
+    }
+}
+
+// Game-layer skill camera mode example
+public sealed class SkillCameraMode : CameraMode
+{
+    private float duration;
+    private float elapsed;
+    private float targetDistance;
+    private float targetFov;
+
+    public override float BlendDuration => 0.15f;
+
+    public void Setup(float inDuration, float inDistance, float inFov)
+    {
+        duration = Mathf.Max(0.01f, inDuration);
+        elapsed = 0f;
+        targetDistance = inDistance;
+        targetFov = inFov;
+    }
+
+    public override void Tick(CameraContext context, float deltaTime)
+    {
+        elapsed = Mathf.Min(duration, elapsed + deltaTime);
+    }
+
+    public override CameraPose Evaluate(CameraContext context, in CameraPose basePose, float deltaTime)
+    {
+        Actor target = context != null ? context.CurrentViewTarget : null;
+        if (target == null)
+        {
+            return basePose;
+        }
+
+        target.CalcCamera(deltaTime, out CameraPose targetPose, basePose.Fov);
+
+        float alpha = duration > 0f ? elapsed / duration : 1f;
+        alpha = alpha * alpha * (3f - 2f * alpha); // SmoothStep
+
+        Vector3 pivot = targetPose.Position + Vector3.up * 1.6f;
+        Vector3 desiredPos = pivot + (targetPose.Rotation * Vector3.back) * targetDistance;
+        Vector3 lookAt = targetPose.Position + Vector3.up * 1.1f;
+        Quaternion desiredRot = Quaternion.LookRotation((lookAt - desiredPos).normalized, Vector3.up);
+
+        CameraPose skillPose = new CameraPose(desiredPos, desiredRot, targetFov);
+        return CameraPose.Lerp(basePose, skillPose, alpha);
+    }
+}
+```
+
+**Layering guidelines**:
+
+1. Keep concrete `CameraMode` style implementations in the game project layer (for example, `Assets/Game/Scripts/Camera`).
+2. Keep framework runtime focused on neutral contracts and extension seams (`ViewTargetCameraMode`, `SetBaseCameraMode`, `PushCameraMode`, `RemoveCameraMode`).
+3. Implement third-person, lock-on, and skill cinematic behavior by composing game-layer `CameraMode` classes.
+4. Reuse `CameraMode` instances for high-frequency skill events to reduce runtime allocations.
+
+### GameplayAbility Integration with Skill Camera
+
+When authoring skills with the GameplayAbility system, camera animations should be coordinated by the Ability using the `CameraMode` stack. This approach provides several benefits:
+
+- **Unified lifecycle**: Push CameraMode on Ability activation, auto-remove on Ability completion
+- **Reusability**: The same camera effect can be reused across multiple abilities
+- **No conflict**: CameraMode and Ability System are fully decoupled
+- **Zero-GC**: Reuse CameraMode instances for high-frequency abilities
+
+**Implementing multi-stage skill camera (example: charge → release-push)**:
+
+```csharp
+// Assets/Game/Scripts/Camera/AbilityCameraClip.cs
+[CreateAssetMenu(menuName = "Game/Ability/AbilityCameraClip")]
+public class AbilityCameraClip : ScriptableObject
+{
+    [System.Serializable]
+    public struct CameraStage
+    {
+        public float duration;               // Stage duration in seconds
+        public AnimationCurve localOffsetX;  // Camera-local right offset
+        public AnimationCurve localOffsetY;  // Camera-local up offset
+        public AnimationCurve localOffsetZ;  // Camera-local forward offset: positive = pull in, negative = push out
+        public AnimationCurve fov;           // FOV curve for this stage
+    }
+
+    [SerializeField] public CameraStage[] stages = new CameraStage[2]
+    {
+        // Stage 1: Charge (pull back + lower)
+        new CameraStage
+        {
+            duration = 0.6f,
+            localOffsetY = AnimationCurve.EaseInOut(0, 0f, 1, -0.35f),
+            localOffsetZ = AnimationCurve.EaseInOut(0, 0f, 1, 1.0f),
+            fov = AnimationCurve.EaseInOut(0, 60f, 1, 54f)
+        },
+        // Stage 2: Release (return to the default follow position)
+        new CameraStage
+        {
+            duration = 0.4f,
+            localOffsetY = AnimationCurve.EaseInOut(0, -0.35f, 1, 0f),
+            localOffsetZ = AnimationCurve.EaseInOut(0, 1.0f, 1, 0f),
+            fov = AnimationCurve.EaseInOut(0, 54f, 1, 60f)
+        }
+    };
+}
+```
+
+```csharp
+// Assets/Game/Scripts/Camera/AbilityCinematicMode.cs
+using UnityEngine;
+using CycloneGames.GameplayFramework.Runtime;
+
+public sealed class AbilityCinematicMode : CameraMode
+{
+    private AbilityCameraClip clip;
+    private float totalElapsed;
+    private int currentStageIndex;
+    private float stageElapsed;
+    private bool finished;
+
+    public bool IsFinished => finished;
+    public override float BlendDuration => 0.15f;
+
+    public void Setup(AbilityCameraClip inClip)
+    {
+        clip = inClip;
+        totalElapsed = 0f;
+        currentStageIndex = 0;
+        stageElapsed = 0f;
+        finished = false;
+    }
+
+    public override void Tick(CameraContext context, float deltaTime)
+    {
+        if (clip == null || clip.stages.Length == 0 || finished) return;
+
+        totalElapsed += deltaTime;
+        stageElapsed += deltaTime;
+
+        // Advance to next stage when current stage duration is exceeded
+        while (currentStageIndex < clip.stages.Length && stageElapsed >= clip.stages[currentStageIndex].duration)
+        {
+            stageElapsed -= clip.stages[currentStageIndex].duration;
+            currentStageIndex++;
+        }
+
+        // All stages complete
+        if (currentStageIndex >= clip.stages.Length)
+        {
+            finished = true;
+        }
+    }
+
+    public override CameraPose Evaluate(CameraContext context, in CameraPose basePose, float deltaTime)
+    {
+        if (clip == null || clip.stages.Length == 0 || currentStageIndex >= clip.stages.Length)
+            return basePose;
+
+        AbilityCameraClip.CameraStage stage = clip.stages[currentStageIndex];
+        float t = stage.duration > 0f ? Mathf.Clamp01(stageElapsed / stage.duration) : 1f;
+
+        // Apply offsets in the current third-person basePose local space.
+        // This means ability camera motion is always relative to the existing gameplay camera,
+        // regardless of the default third-person distance configured by the project.
+        float offsetX = stage.localOffsetX != null ? stage.localOffsetX.Evaluate(t) : 0f;
+        float offsetY = stage.localOffsetY != null ? stage.localOffsetY.Evaluate(t) : 0f;
+        float offsetZ = stage.localOffsetZ != null ? stage.localOffsetZ.Evaluate(t) : 0f;
+        Vector3 localOffset = basePose.Rotation * new Vector3(offsetX, offsetY, offsetZ);
+        Vector3 position = basePose.Position + localOffset;
+
+        float fov = stage.fov.Evaluate(t);
+
+        return new CameraPose(position, basePose.Rotation, fov);
+    }
+}
+```
+
+```csharp
+// Using it in your Ability
+public sealed class PowerStrikeAbility : GameplayAbility
+{
+    [SerializeField] private AbilityCameraClip cameraClip;
+
+    private AbilityCinematicMode cameraModeInstance = new AbilityCinematicMode();
+    private bool isSkillCameraActive;
+
+    protected override void OnActivate()
+    {
+        base.OnActivate();
+
+        // Start ability montage
+        PlayAbilityMontage("PowerStrike");
+
+        StartSkillCamera();
+    }
+
+    protected override void OnAbilityEnds(bool wasCancelled)
+    {
+        StopSkillCamera();
+
+        base.OnAbilityEnds(wasCancelled);
+    }
+
+    private void StartSkillCamera()
+    {
+        if (isSkillCameraActive || cameraClip == null || avatarPawn == null)
+        {
+            return;
+        }
+
+        var playerController = avatarPawn.Controller as PlayerController;
+        if (playerController == null)
+        {
+            return;
+        }
+
+        cameraModeInstance.Setup(cameraClip);
+        if (playerController.TryPushCameraMode(cameraModeInstance))
+        {
+            isSkillCameraActive = true;
+        }
+    }
+
+    private void StopSkillCamera()
+    {
+        if (!isSkillCameraActive || avatarPawn == null)
+        {
+            return;
+        }
+
+        var playerController = avatarPawn.Controller as PlayerController;
+        if (playerController != null && playerController.RemoveCameraMode(cameraModeInstance))
+        {
+            isSkillCameraActive = false;
+        }
+    }
+
+    // Optional: additional camera feedback at specific moments (e.g., damage hit)
+    public void OnDamageHit()
+    {
+        // If needed, trigger screen shake or other PostProcessor feedback here
+    }
+}
+```
+
+**Workflow summary**:
+
+1. **Create `AbilityCameraClip` asset** — Configure camera parameters for each skill (assign to Ability's clip field)
+2. **On Ability activation** → `cameraModeInstance.Setup(cameraClip)` and `PushCameraMode()`
+3. **Each frame** → CameraMode's `Tick()` advances stage progress, `Evaluate()` computes current Pose
+4. **On Ability end** → `RemoveCameraMode()` automatically reverts to the previous CameraMode (typically third-person)
+
+**Important rule for temporary skill cameras**:
+
+- If a `CameraMode` is meant to be removed when the skill ends, its final stage should **converge back to `basePose`**, meaning local offsets return to `0,0,0` and FOV returns to the default follow value.
+- Otherwise, when `RemoveCameraMode()` runs, the camera will visibly snap from an offset pose back to the normal third-person follow pose, which feels like a reset.
+- For that reason, the sample's second stage now returns to the default follow position instead of overshooting to another extra position.
+- If you intentionally want a dramatic overshoot and then settle, add a third `settle-back` stage that smoothly brings all offsets back to `0` before removing the `CameraMode`.
+
+**Common pitfall: why does it get faster every time**:
+
+- `CameraContext` does not automatically deduplicate stacked modes. If the same `CameraMode` instance is pushed multiple times, it will exist in the stack multiple times.
+- `CameraManager` calls `Tick()` and `Evaluate()` once per stacked entry each frame. If the same instance is stacked 2 or 3 times, its internal time advances 2 or 3 times per frame, which looks like the camera animation is accelerating.
+- This usually happens when an Ability is re-triggered, an AnimationEvent fires more than once, or the mode is not successfully removed when the skill ends.
+- The fix is the same as in the sample above: guard with `isSkillCameraActive` so the same instance is pushed only once until it is removed.
+
+**Synchronization with animation**:
+
+Align the **animation montage length** with **total stage durations**. For example, if the montage is 1.0 second and consists of 0.6s charge + 0.4s release, both timelines stay naturally synchronized.
+
+**Position vs FOV**:
+
+- **Position** changes the real spatial relationship between the camera and the character. It produces stronger perspective, occlusion, and acceleration cues. If you want the camera to physically push toward the character and then return to the default follow distance, Position should be the primary tool.
+- **FOV** changes lens language rather than true distance. It is better for emphasis, pressure, focus, or release, but by itself it can feel like numerical zoom rather than a physical camera move.
+- **Recommended for action games**: use small-to-medium Position offsets as the primary effect, then layer in a moderate FOV change as seasoning. That usually gives the most convincing sense of power without hurting readability.
+- If you want a pure dolly-in without changing FOV, animate only `localOffsetY/Z`. For the current third-person basePose, `localOffsetZ > 0` moves the camera forward toward the target, while `localOffsetZ < 0` moves it backward away from the target. If the mode will be removed at skill end, make sure the final curve returns to `0` so the camera naturally settles back to the default follow pose.
+
+For event-driven camera feedback at specific points (e.g., damage hit), you can:
+
+- Use AnimationEvent to call a method on the Ability (e.g., `OnDamageHit()`)
+- That method can temporarily register an `ICameraPostProcessor` for screen shake or other effects
+
+**Note**: `ThirdPersonFollowCameraMode`, `FirstPersonCameraMode`, and `OrbitalCameraMode` are optional reference implementations and are now located in `Samples/Sample.CameraModes`. The runtime core contract remains centered on `ViewTargetCameraMode`, `CameraMode`, and the camera stack APIs.
 
 ### PlayerStart
 
@@ -793,6 +1289,310 @@ if (someActor.ActorHasTag("Enemy"))
 }
 ```
 
+### Config Assets
+
+**Purpose**: Move common gameplay tuning out of subclasses and into reusable ScriptableObject assets.
+
+**Included assets**:
+
+- **`WorldSettings`** — binds the core prefab classes used to bootstrap the framework.
+- **`PawnConfig`** — stores controllable-body tuning such as controller-rotation usage, eye height, look angle limits, and look sensitivity.
+- **`GameModeConfig`** — stores high-level rule values such as respawn delay, match duration, player limits, and spectator defaults.
+- **`CameraProfile`** — stores camera-agnostic global defaults. The base class currently exposes `fov` and fallback `blendDuration`; subclass it in project code when additional global camera parameters need to travel as a single asset.
+
+**Why it matters**:
+
+1. Designers can iterate on gameplay values without recompiling code.
+2. Multiple game modes or pawn archetypes can share the same runtime code but load different assets.
+3. The framework stays independent because the configs are simple ScriptableObjects, not adapters to other packages.
+
+**Example — asset-driven setup**:
+
+```csharp
+public class ArenaGameMode : GameMode
+{
+    [SerializeField] private GameModeConfig config;
+
+    protected override void BeginPlay()
+    {
+        base.BeginPlay();
+
+        if (config == null) return;
+
+        SetGameModeConfig(config);
+        config.ApplyTo(this);
+    }
+}
+
+public class CharacterPawn : Pawn
+{
+    [SerializeField] private PawnConfig config;
+
+    protected override void BeginPlay()
+    {
+        base.BeginPlay();
+
+        if (config == null) return;
+
+        SetPawnConfig(config);
+        config.ApplyTo(this);
+    }
+}
+```
+
+For `CameraProfile`, keep the same pattern: assign the asset where your camera stack is initialized, then apply it to the active `CameraManager` when that runtime object becomes available.
+
+### Scene Transition
+
+**Purpose**: Keep scene navigation outside the gameplay kernel while still giving `GameMode` a stable travel API.
+
+**Core contract**: `ISceneTransitionHandler`
+
+- `ChangeScene(string sceneName, CancellationToken)`
+- `PushScene(string sceneName, CancellationToken)`
+- `PopScene(CancellationToken)`
+- `ReplaceScene(string sceneName, CancellationToken)`
+
+**Design intent**:
+
+- `GameMode` is responsible for gameplay shutdown and orchestration.
+- The actual scene-system semantics belong to an adapter.
+- Different projects can plug in Unity SceneManager, Navigathena, or a custom loading stack without modifying `GameMode`.
+
+**Important behavior**:
+
+`TravelToLevel()` does not directly bootstrap the next scene's `GameMode`. That responsibility belongs to the destination scene's own bootstrap flow or scene entry point.
+
+### Serialization
+
+**Purpose**: Provide a minimal persistence seam without forcing a save-system or networking dependency into the framework.
+
+**Core contracts**:
+
+- **`IGameplayFrameworkSerializable`** — implemented by runtime classes that want to expose persistent state.
+- **`IDataWriter`** / **`IDataReader`** — typed read/write abstraction for adapters.
+
+**Current built-in usage**:
+
+- `PlayerState` serializes core fields such as player name, player id, score, bot flag, and spectator flag.
+
+**Recommended usage**:
+
+1. Implement these interfaces in save-game or networking adapters.
+2. Extend `PlayerState.Serialize()` / `Deserialize()` in subclasses for project-specific data such as inventory, progression, or team assignment.
+3. Keep binary format, JSON format, and transport details outside the framework package.
+
+### Camera Modes
+
+**Purpose**: Provide reusable camera behaviors without changing view-target ownership rules.
+
+**Sample examples**:
+
+- **`FirstPersonCameraMode`** — evaluates from the target's eye point and is suitable for direct first-person control.
+- **`OrbitalCameraMode`** — rotates around the target at configurable radius and height and supports optional auto-rotation.
+- **`ThirdPersonFollowCameraMode`** — provides a follow-camera framing baseline for third-person gameplay.
+
+These sample camera mode classes are shipped under `Samples/Sample.CameraModes` and are intentionally separated from runtime core.
+
+**Usage guidance**:
+
+- Use `SetBaseCameraMode()` when the mode defines the player's default framing.
+- Use `PushCameraMode()` / `RemoveCameraMode()` for temporary overlays such as combat zoom, lock-on, or photo mode.
+- Keep ownership changes in `SetViewTarget()` and framing changes in `CameraMode`.
+
+### Camera Action Presets (ScriptableObject)
+
+For action gameplay, camera shots can be authored as reusable assets with `CameraActionPreset` and executed via `PresetCameraMode`.
+
+- `CameraActionPreset` stores timing, blend duration, framing offsets, and FOV.
+- `PresetCameraMode` evaluates the selected preset against current view target and outputs `CameraPose`.
+
+Example workflow:
+
+```csharp
+public class MyActionCameraDriver : MonoBehaviour
+{
+    [SerializeField] private PlayerController playerController;
+    [SerializeField] private CameraActionPreset heavyAttackPreset;
+
+    private readonly PresetCameraMode actionMode = new PresetCameraMode();
+
+    public void PlayHeavyAttackCamera(float attackDuration)
+    {
+        actionMode.Setup(heavyAttackPreset, attackDuration);
+        playerController.PushCameraMode(actionMode);
+    }
+
+    private void Update()
+    {
+        if (actionMode.IsFinished)
+        {
+            playerController.RemoveCameraMode(actionMode);
+        }
+    }
+}
+```
+
+This pattern keeps runtime camera evaluation lightweight while enabling designer-authored camera assets that can be bound to animation/VFX pipelines.
+
+### CameraProfile
+
+`CameraProfile` is an intentionally minimal shared-config ScriptableObject for camera-agnostic parameters:
+
+| Field           | Purpose                                                                   |
+| --------------- | ------------------------------------------------------------------------- |
+| `fov`           | Default field-of-view applied to the `CameraManager` at startup           |
+| `blendDuration` | Fallback blend duration when the active `CameraMode` does not specify one |
+
+**It is a designed base class, not redundant.** Subclass it to add project-specific camera globals (post-process volumes, CinemachineChannels, lens presets, etc.) that need to travel as a single assignable asset:
+
+```csharp
+[CreateAssetMenu(menuName = "MyGame/MyCameraProfile")]
+public class MyCameraProfile : CameraProfile
+{
+    [SerializeField] private VolumeProfile postProcessVolume;
+    [SerializeField] private float motionBlurIntensity;
+
+    public override void ApplyTo(CameraManager manager)
+    {
+        base.ApplyTo(manager);
+        // apply custom fields to manager or Cinemachine brain
+    }
+}
+```
+
+Create via: `Assets > Create > CycloneGames > GameplayFramework > CameraProfile`
+
+---
+
+### Animation-Agnostic Trigger Binding
+
+The camera action system decouples triggering from any specific animation runtime.
+Every animation stack calls the same `CameraActionBinding` API — the camera module never needs to know which system fired it.
+
+#### Step 1 — Author a CameraActionPreset
+
+`Assets > Create > CycloneGames > GameplayFramework > CameraActionPreset`
+
+Configure timing, framing, and lens override fields in the Inspector.
+Subclass it in code to override any of the 7 virtual evaluation steps (`ResolveUpAxis`, `ResolveOffset`, `ComputePivotPoint`, `ComputeDesiredPosition`, `ComputeLookAtPoint`, `ComputeDesiredRotation`, `ResolveDesiredFov`).
+
+#### Step 2 — Create a CameraActionMap (optional but recommended)
+
+`Assets > Create > CycloneGames > GameplayFramework > CameraActionMap`
+
+Maps `ActionKey` strings to presets. A shared map can be referenced by many characters so changing a preset in one asset affects all of them.
+
+| Field                | Purpose                                             |
+| -------------------- | --------------------------------------------------- |
+| `ActionKey`          | Unique string identifier the animation system sends |
+| `Preset`             | The `CameraActionPreset` asset to activate          |
+| `Policy`             | `ReplaceSameKey` / `IgnoreIfRunning` / `Stack`      |
+| `AutoRemoveOnFinish` | Remove mode automatically when duration ends        |
+| `DurationOverride`   | Override preset duration (≤0 = use preset value)    |
+
+Per-component inline entries on `CameraActionBinding` always take priority over map entries for the same key, letting individual characters override shared defaults without editing the shared asset.
+
+#### Step 3 — Add CameraActionBinding to your character
+
+Add the component next to (or on a parent of) `PlayerController`. Assign either an inline `actionEntries` list, a shared `CameraActionMap`, or both.
+
+```csharp
+// Called from any animation system at any time:
+actionBinding.PlayAction("dodge");
+actionBinding.PlayAction("heavyAttack", 0.6f);  // duration override
+actionBinding.StopAction("dodge");
+actionBinding.IsActionRunning("heavyAttack");   // query
+```
+
+#### Step 4 — Connect your animation system
+
+Choose the adapter that matches your project:
+
+**Unity Animator — Animation Events**
+
+Add `AnimatorCameraActionBridge` next to `CameraActionBinding`.
+In each animation clip, add an `AnimationEvent` calling one of:
+
+| Method                                    | Description                        |
+| ----------------------------------------- | ---------------------------------- |
+| `PlayCameraAction(string key)`            | Play preset registered under key   |
+| `PlayCameraActionTimed(string "key@0.6")` | Play with inline duration override |
+| `StopCameraAction(string key)`            | Stop by key                        |
+| `StopAllCameraActions()`                  | Stop all active presets            |
+
+**Unity Animator — State Machine Behaviour**
+
+Add `CameraActionStateBehaviour` as a Behaviour on any Animator state (`Add Behaviour` in the state Inspector):
+
+| Field                                  | Purpose                                                        |
+| -------------------------------------- | -------------------------------------------------------------- |
+| `On Enter Action Key`                  | Play when entering this state                                  |
+| `Allow Enter Trigger In Transition`    | Suppress entry trigger during blend-in                         |
+| `On Exit Mode`                         | `None` / `StopActionKey` / `PlayActionKey`                     |
+| `On Exit Action Key`                   | Key to stop on exit (`StopActionKey` mode)                     |
+| `On Exit Play Action Key`              | Key to play on exit (`PlayActionKey` mode)                     |
+| `On Progress Action Key`               | Key to play when animation crosses threshold                   |
+| `Trigger Normalized Time`              | 0–1 threshold where progress trigger fires                     |
+| `Trigger Every Loop`                   | Reset trigger every loop iteration or only once                |
+| `Allow Progress Trigger In Transition` | Suppress mid-state trigger during blend                        |
+| `Duration Override`                    | Applied to enter/exit/progress actions (≤0 = map/preset value) |
+
+**Unity Timeline**
+
+Add `TimelineCameraActionReceiver` to the same GameObject as `PlayableDirector`.
+In a Timeline Signal Track, place `SignalEmitter` markers and create `SignalAsset` files.
+Drag each `SignalAsset` into the component's mapping table and set its action key.
+No `com.unity.timeline` package reference required.
+
+**Animancer** (optional integration)
+
+Add `AnimancerCameraActionBridge` alongside `CameraActionBinding`.
+Configure the `EventToAction` mapping list:
+
+| Field                             | Purpose                                                       |
+| --------------------------------- | ------------------------------------------------------------- |
+| `EventName`                       | Matches an Animancer named event in your animation            |
+| `ActionKey`                       | Forwarded to `CameraActionBinding.PlayAction` or `StopAction` |
+| `StopAction`                      | Stop instead of play                                          |
+| `DurationOverride`                | Per-event duration override                                   |
+| `MinTriggerInterval`              | Minimum seconds between repeated triggers (throttle)          |
+| `RequiredCurrentStateKeyContains` | Fire only when layer's CurrentState key matches substring     |
+| `InvertCurrentStateKeyFilter`     | Invert the state key filter                                   |
+| `LayerIndex`                      | Animancer layer to inspect for state-key filtering            |
+| `AdditionalCommands`              | Batch: execute multiple play/stop commands from one event     |
+
+Each `AdditionalCommand` also supports a `RequireActionRunningKey`/`InvertRequirement` guard, so individual commands in a batch can be conditional.
+
+**Pure code / other systems**
+
+`CameraActionBinding.PlayAction` and `StopAction` are plain public methods callable from anywhere (PlayMaker, Bolt, custom ability systems, etc.).
+
+### Optional Animancer Integration
+
+If your project uses `com.kybernetik.animancer`, enable the integration assembly:
+
+- Integration path: `Runtime/Scripts/Integrations/Animancer`
+- The `AnimancerCameraActionBridge` bridge maps Animancer named events to `CameraActionBinding` action keys.
+- The integration assembly is optional and isolated from framework core contracts.
+- Delegate pre-allocation in `Awake` means repeated `OnEnable`/`OnDisable` cycles produce zero GC.
+
+### Camera Blend Curves
+
+**Purpose**: Control how quickly camera transitions accelerate or ease without changing the source and target poses.
+
+**Core contract**: `ICameraBlendCurve.Evaluate(float t)`
+
+**Built-in curve implementations**:
+
+- `LinearCameraBlendCurve`
+- `SmoothStepCameraBlendCurve`
+- `EaseInCameraBlendCurve`
+- `EaseOutCameraBlendCurve`
+- `CustomCameraBlendCurve`
+
+Use these with `CameraBlendState.Start(..., ICameraBlendCurve curve)` when different transitions need different visual pacing.
+
 ---
 
 ## Quick Start
@@ -802,26 +1602,26 @@ if (someActor.ActorHasTag("Enemy"))
 - Unity 2022.3+
 - Packages installed: `CycloneGames.GameplayFramework`, `Cinemachine`, `UniTask`, `CycloneGames.Factory`, `CycloneGames.Logger`
 
-### Minimal Setup (5 steps)
+### Minimal Setup
 
-**Step 1 — Create prefabs**
+#### 1. Create the required prefabs
 
 Create empty GameObjects, add the corresponding component, and save as prefabs:
 
-| Prefab | Component | Notes |
-|---|---|---|
-| `GM_MyGame` | `GameMode` (or your subclass) | Required |
-| `PC_MyGame` | `PlayerController` (or your subclass) | Required |
-| `Pawn_MyGame` | `Pawn` (or your subclass) | Required — add your character model/controller here |
-| `PS_MyGame` | `PlayerState` (or your subclass) | Required |
-| `CM_MyGame` | `CameraManager` | Optional — needed if using Cinemachine |
-| `SP_MyGame` | `SpectatorPawn` | Optional |
+| Prefab        | Component                             | Notes                                               |
+| ------------- | ------------------------------------- | --------------------------------------------------- |
+| `GM_MyGame`   | `GameMode` (or your subclass)         | Required                                            |
+| `PC_MyGame`   | `PlayerController` (or your subclass) | Required                                            |
+| `Pawn_MyGame` | `Pawn` (or your subclass)             | Required — add your character model/controller here |
+| `PS_MyGame`   | `PlayerState` (or your subclass)      | Required                                            |
+| `CM_MyGame`   | `CameraManager`                       | Optional — needed if using Cinemachine              |
+| `SP_MyGame`   | `SpectatorPawn`                       | Optional                                            |
 
-**Step 2 — Create WorldSettings**
+#### 2. Create and configure WorldSettings
 
 `Create -> CycloneGames -> GameplayFramework -> WorldSettings`. Assign all prefabs.
 
-**Step 3 — Create the bootstrap**
+#### 3. Create a bootstrap entry point
 
 ```csharp
 using Cysharp.Threading.Tasks;
@@ -856,19 +1656,35 @@ public class SimpleObjectSpawner : IUnityObjectSpawner
 }
 ```
 
-**Step 4 — Set up the scene**
+#### 4. Configure the scene
 
 1. Add a `PlayerStart` component to an empty GameObject and position it.
 2. Ensure the Main Camera has `CinemachineBrain` and the scene has at least one `CinemachineCamera`.
 3. Add the `GameBootstrap` component to a GameObject and assign your `WorldSettings`.
 
-**Step 5 — Press Play**
+If `CameraManager` is runtime-spawned and you want deterministic Brain binding, set it explicitly at runtime:
 
-The framework will: spawn PlayerController -> init PlayerState / CameraManager / SpectatorPawn -> find PlayerStart -> spawn Pawn -> possess.
+```csharp
+var pc = gameMode.GetPlayerController();
+var cm = pc != null ? pc.GetCameraManager() : null;
+if (cm != null)
+{
+    var brain = Camera.main != null ? Camera.main.GetComponent<CinemachineBrain>() : null;
+    cm.SetBootstrapBrain(brain, rebindImmediately: true);
+}
+```
+
+For multi-camera or multi-brain projects, avoid relying on `Camera.main`; inject the exact target `CinemachineBrain` from your own camera routing layer.
+
+#### 5. Validate the startup flow
+
+At runtime, the expected flow is: spawn `GameMode` -> spawn `PlayerController` -> initialize runtime components -> resolve a `PlayerStart` -> spawn a `Pawn` -> call `Possess()`.
 
 ---
 
 ## Advanced Usage
+
+The following examples focus on the extension points that projects most commonly customize: respawn timing, Pawn replacement, stacked input suppression, and damage-event observation.
 
 ### Respawn System
 
@@ -949,27 +1765,39 @@ target.OnTakeRadialDamage += (damage, damageEvent, instigator, causer) =>
 
 ---
 
-## Integration with Other Packages
+### Example — Navigathena bootstrap
 
-The framework is designed to work **alongside** other CycloneGames packages without compile-time dependencies:
+The key rule is simple: let Navigathena own navigation semantics, and let the framework own gameplay orchestration.
 
-| Package | How it integrates |
-|---|---|
-| **GameplayAbilities (GAS)** | Set `DamageEvent.EffectContext` to your `GameplayEffectSpec` or `IGameplayEffectContext`. Downstream handlers cast it back. |
-| **GameplayTags** | Actor's `tags` (simple strings) and `GameplayTagContainer` (hierarchical counted tags) serve different purposes and coexist on the same GameObject. |
-| **RPGFoundation** | Pawn calls `NotifyInitialRotation()` which broadcasts to `IInitialRotationSettable` components — RPGFoundation's movement components can implement this interface. |
-| **InputSystem** | PlayerController subclass reads from `CycloneGames.InputSystem` and calls `Pawn.AddMovementInput()`. |
-| **Networking (Mirror, etc.)** | Implement `IGameSession` in a network adapter. Pass to `GameMode.SetGameSession()`. Override `Actor.HasAuthority()` in networked Actor subclasses. |
-| **AIPerception** | High-performance AI perception system (sight, hearing) with Jobs/Burst optimization — pair with `AIController` for detection-driven AI. |
-| **BehaviorTree** | Visual behavior tree editor and runtime — drive `AIController.RunAI()` logic with composable nodes. |
-| **AssetManagement** | Interface-first, DI-friendly asset management (wraps YooAsset) — use for async Pawn/level loading. |
-| **Audio** | Enhanced audio management with async loading — trigger sound effects from Actor damage events or GameState transitions. |
-| **Services** | Graphics settings, camera services, and device settings management. |
-| **DeviceFeedback** | Multi-platform haptics/vibration/light bar — trigger from damage events or ability activations. |
-| **Cheat** | Lightweight cheat command system — useful during development for testing GameMode rules, spawning, etc. |
-| **UIFramework** | Simple UI framework — build HUD/menus that read from PlayerState, GameState, and match events. |
-| **Factory** | Object spawning/pooling abstraction — the framework's `IUnityObjectSpawner` is defined here (required dependency). |
-| **Logger** | Thread-safe logging with category filtering — the framework's `CLogger` calls go through this (required dependency). |
+```csharp
+using CycloneGames.GameplayFramework.Runtime;
+using CycloneGames.GameplayFramework.Runtime.Integrations.Navigathena;
+using MackySoft.Navigathena;
+using MackySoft.Navigathena.SceneManagement;
+using UnityEngine;
+
+public sealed class GameplaySceneInstaller : MonoBehaviour
+{
+    [SerializeField] private GameMode gameMode;
+    [SerializeField] private MonoBehaviour navigatorSource;
+
+    private void Awake()
+    {
+        var navigator = navigatorSource as ISceneNavigator;
+        if (gameMode == null || navigator == null)
+        {
+            return;
+        }
+
+        gameMode.SetSceneTransitionHandler(
+            new NavigathenaSceneTransitionHandler(
+                navigator,
+                TransitionDirector.Empty()));
+    }
+}
+```
+
+Attach this after your current scene has created or resolved its `GameMode`. When you later call `await gameMode.TravelToLevel("BattleScene");`, the framework handles shutdown and the Navigathena adapter forwards the navigation request.
 
 ---
 
@@ -979,28 +1807,11 @@ The framework is designed to work **alongside** other CycloneGames packages with
 2. **Use PlayerState for persistent data** — Score, inventory, stats belong on PlayerState, not Pawn. They survive respawn.
 3. **One GameMode per game type** — Deathmatch, CTF, Tutorial — each is a GameMode subclass. Swap by changing the WorldSettings prefab reference.
 4. **Override, don't modify** — Subclass `GameMode`, `PlayerController`, `Pawn`, etc. The framework's base classes handle the plumbing.
-5. **Use interfaces for testing** — `IGameMode`, `IGameSession`, `IWorldSettings`, `IUnityObjectSpawner` are all mockable for unit tests.
-6. **Let GameMode orchestrate** — Spawning, respawning, match flow all belong in GameMode. Don't scatter these across Pawn or Controller.
-7. **Prefer TakeDamage over direct health manipulation** — Route all damage through the Actor damage pipeline for consistent event firing and type routing.
+5. **Use inheritance for gameplay roles** — If behavior is part of the identity of an Actor, Pawn, Controller, or GameMode, prefer virtual methods and subclasses over service interfaces.
+6. **Use interfaces for infrastructure** — `IGameMode`, `IGameSession`, `IWorldSettings`, `IUnityObjectSpawner` and similar adapters are the right DI seam for tests, containers, and external systems.
+7. **Treat camera extensions as outer layers** — `SetViewTarget`, `GetViewTarget`, `GetActorEyesViewPoint`, and `CalcCamera` are the core contract. `IViewTargetPolicy` and `CameraMode` should refine that flow, not replace it.
+8. **Let GameMode orchestrate** — Spawning, respawning, match flow all belong in GameMode. Don't scatter these across Pawn or Controller.
+9. **Prefer TakeDamage over direct health manipulation** — Route all damage through the Actor damage pipeline for consistent event firing and type routing.
+10. **Keep feature packages outside the kernel** — Abilities, networking, advanced camera behaviors, UI, and authoring workflows should plug into the framework, not reshape its base class semantics.
 
 ---
-
-## FAQ
-
-**Q: Can I use this without Cinemachine?**
-Yes. Don't assign `CameraManagerClass` in WorldSettings. The framework works fine without it — implement your own camera system.
-
-**Q: How does respawning work?**
-Call `GameMode.RestartPlayer(playerController)`. It finds a PlayerStart, spawns a new Pawn, and possesses it. PlayerState is untouched.
-
-**Q: Can I have multiple players?**
-The framework provides single-player flow out of the box. For local multiplayer, subclass GameMode to spawn multiple PlayerControllers and manage them with player indices.
-
-**Q: How do I integrate with my DI container?**
-Implement `IUnityObjectSpawner` using your container's instantiate method. Pass it to `GameMode.Initialize()`.
-
-**Q: Does Actor.tags conflict with GameplayTags?**
-No. Actor.tags is a simple `List<string>` for lightweight labeling. GameplayTags is a hierarchical counted tag system for ability/effect queries. They serve different purposes and coexist.
-
-**Q: What is the inspiration behind this framework?**
-The architecture is inspired by Unreal Engine's GameFramework. Concepts like Actor, Pawn, Controller, GameMode, and PlayerState map directly to their Unreal counterparts. However, the implementation is built natively for Unity — leveraging MonoBehaviour, Cinemachine, UniTask, and Unity-specific patterns.

@@ -2,9 +2,9 @@ using System;
 using UnityEditor;
 using UnityEditor.IMGUI.Controls;
 using UnityEngine;
-using CycloneGames.GameplayTags.Runtime;
+using CycloneGames.GameplayTags.Core;
 
-namespace CycloneGames.GameplayTags.Editor 
+namespace CycloneGames.GameplayTags.Unity.Editor 
 {
     public class GameplayTagContainerTreeView : GameplayTagTreeViewBase
     {
@@ -20,12 +20,13 @@ namespace CycloneGames.GameplayTags.Editor
             UpdateIncludedTags();
         }
 
-        protected override void OnToolbarGUI()
+        protected override void OnToolbarGUI(ref float x, Rect toolbarRect, float rightLimit)
         {
-            if (ToolbarButton("Clear All"))
+            if (ToolbarButton(ref x, toolbarRect, rightLimit, 72f, "Clear All"))
             {
                 m_ExplicitTagsProperty.ClearArray();
                 m_ExplicitTagsProperty.serializedObject.ApplyModifiedProperties();
+                m_ExplicitTagsProperty.serializedObject.Update();
                 UpdateIncludedTags();
             }
         }

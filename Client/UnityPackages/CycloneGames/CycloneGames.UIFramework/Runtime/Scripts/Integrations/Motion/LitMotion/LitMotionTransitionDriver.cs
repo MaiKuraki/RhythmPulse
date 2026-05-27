@@ -149,7 +149,11 @@ namespace CycloneGames.UIFramework.Runtime
         /// <summary>Override to customize scale animation.</summary>
         protected virtual async UniTask AnimateScale(TransitionContext ctx, ScaleConfig config, bool isOpen, Ease ease, CancellationToken ct)
         {
-            float from = isOpen ? config.ScaleFrom : 1f;
+            // Read current scale factor relative to OriginalScale for seamless mid-interrupt
+            float currentScaleFactor = ctx.OriginalScale.x != 0f
+                ? ctx.Transform.localScale.x / ctx.OriginalScale.x
+                : 1f;
+            float from = isOpen ? config.ScaleFrom : currentScaleFactor;
             float to = isOpen ? 1f : config.ScaleFrom;
             var handle = LMotion.Create(from, to, config.Duration)
                 .WithEase(ease)
@@ -163,7 +167,8 @@ namespace CycloneGames.UIFramework.Runtime
         {
             if (ctx.RectTransform == null) return;
             Vector2 offset = GetSlideOffset(ctx.RectTransform, config);
-            Vector2 from = isOpen ? offset : ctx.OriginalPosition;
+            // Use current position as 'from' for close to handle mid-open interruption
+            Vector2 from = isOpen ? offset : ctx.RectTransform.anchoredPosition;
             Vector2 to = isOpen ? ctx.OriginalPosition : offset;
             var handle = LMotion.Create(from, to, config.Duration)
                 .WithEase(ease)
@@ -175,17 +180,20 @@ namespace CycloneGames.UIFramework.Runtime
         /// <summary>Override to customize composite animation.</summary>
         protected virtual async UniTask AnimateComposite(TransitionContext ctx, CompositeConfig config, bool isOpen, Ease ease, CancellationToken ct)
         {
-            var tasks = new System.Collections.Generic.List<UniTask>(3);
-            
+            int taskCount = (config.UseFade ? 1 : 0) + (config.Scale != null ? 1 : 0) + (config.Slide != null ? 1 : 0);
+            if (taskCount == 0) return;
+
+            var tasks = new UniTask[taskCount];
+            int idx = 0;
+
             if (config.UseFade)
-                tasks.Add(AnimateFade(ctx, config.Duration, isOpen, ease, ct));
+                tasks[idx++] = AnimateFade(ctx, config.Duration, isOpen, ease, ct);
             if (config.Scale != null)
-                tasks.Add(AnimateScale(ctx, config.Scale, isOpen, ease, ct));
+                tasks[idx++] = AnimateScale(ctx, config.Scale, isOpen, ease, ct);
             if (config.Slide != null)
-                tasks.Add(AnimateSlide(ctx, config.Slide, isOpen, ease, ct));
-            
-            if (tasks.Count > 0)
-                await UniTask.WhenAll(tasks);
+                tasks[idx] = AnimateSlide(ctx, config.Slide, isOpen, ease, ct);
+
+            await UniTask.WhenAll(tasks);
         }
 
         protected virtual void SetupInitialState(TransitionContext ctx, TransitionConfigBase config, bool isOpen)

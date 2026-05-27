@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
-using CycloneGames.GameplayTags.Runtime;
+using CycloneGames.GameplayTags.Core;
 using UnityEditor;
 using UnityEditor.IMGUI.Controls;
 using UnityEngine;
 
-namespace CycloneGames.GameplayTags.Editor
+namespace CycloneGames.GameplayTags.Unity.Editor
 {
     [CustomPropertyDrawer(typeof(GameplayTag))]
     public class GameplayTagPropertyDrawer : PropertyDrawer

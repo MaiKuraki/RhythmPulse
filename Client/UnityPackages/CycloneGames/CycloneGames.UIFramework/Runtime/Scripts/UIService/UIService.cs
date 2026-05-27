@@ -14,8 +14,8 @@ namespace CycloneGames.UIFramework.Runtime
         /// </summary>
         /// <param name="windowName">The name of the UI window to open.</param>
         /// <param name="onWindowCreated">Optional callback invoked when the window is created.</param>
-        void OpenUI(string windowName, System.Action<UIWindow> onWindowCreated = null);
-        UniTask<UIWindow> OpenUIAsync(string windowName, System.Threading.CancellationToken cancellationToken = default);
+        void OpenUI(string windowName, System.Action<UIWindow> onWindowCreated = null, bool? isSceneBoundOverride = null, UIAssetLoadContext assetLoadContext = default);
+        UniTask<UIWindow> OpenUIAsync(string windowName, System.Threading.CancellationToken cancellationToken = default, bool? isSceneBoundOverride = null, UIAssetLoadContext assetLoadContext = default);
 
         /// <summary>
         /// Closes a UI by its registered name.
@@ -44,14 +44,57 @@ namespace CycloneGames.UIFramework.Runtime
 
         (float, float) GetRootCanvasSize();
 
+        /// <summary>
+        /// Gets the UI Camera from the UIRoot.
+        /// </summary>
+        /// <returns>The UI Camera if available, otherwise null.</returns>
+        UnityEngine.Camera GetUICamera();
+
         void Initialize(IAssetPathBuilderFactory factory, IUnityObjectSpawner spawner, IMainCameraService cameraService);
         void Initialize(IAssetPathBuilderFactory factory, IUnityObjectSpawner spawner, IMainCameraService cameraService, IAssetPackage package);
+
+        /// <summary>
+        /// Returns the active navigation service, or null if none has been set.
+        /// </summary>
+        IUINavigationService NavigationService { get; }
+
+        /// <summary>
+        /// Attaches an IUINavigationService. The service will be notified automatically
+        /// when any window opens or closes through this UIService.
+        /// </summary>
+        void SetNavigationService(IUINavigationService nav);
+
+        /// <summary>Returns the active transition coordinator, or null if none.</summary>
+        IUITransitionCoordinator TransitionCoordinator { get; }
+
+        /// <summary>
+        /// Attaches a coordinator for simultaneous two-window transitions.
+        /// Pass null to fall back to sequential (independent) animations.
+        /// </summary>
+        void SetTransitionCoordinator(IUITransitionCoordinator coordinator);
+
+        /// <summary>
+        /// Sets the strategy for handling rapid sequential coordinated navigations.
+        /// <see cref="CoordinatedNavStrategy.DirectJump"/>: skip intermediate pages.
+        /// <see cref="CoordinatedNavStrategy.CardStack"/>: overlapping cascading transitions.
+        /// </summary>
+        void SetCoordinatedNavStrategy(CoordinatedNavStrategy strategy);
+
+        /// <summary>
+        /// Navigates from <paramref name="fromWindow"/> to <paramref name="toWindow"/> using the
+        /// active IUITransitionCoordinator. Falls back to sequential OpenUI when no coordinator is set.
+        /// </summary>
+        Cysharp.Threading.Tasks.UniTask CoordinatedNavigateAsync(
+            string fromWindow, string toWindow,
+            NavigationDirection direction = NavigationDirection.Forward,
+            System.Threading.CancellationToken ct = default);
     }
 
     public class UIService : IDisposable, IUIService
     {
         private const string DEBUG_FLAG = "[UIService]";
         private UIManager uiManagerInstance;
+        private bool _ownsUIManager; // true when UIService created the UIManager (DontDestroyOnLoad)
 
         // Dependencies
         private IAssetPathBuilderFactory assetPathBuilderFactory;
@@ -161,6 +204,7 @@ namespace CycloneGames.UIFramework.Runtime
                 UnityEngine.GameObject managerObject = new UnityEngine.GameObject("UIManager_RuntimeInstance");
                 uiManagerInstance = managerObject.AddComponent<UIManager>();
                 UnityEngine.Object.DontDestroyOnLoad(managerObject); // Make it persist across scene loads
+                _ownsUIManager = true;
                 CLogger.LogInfo($"{DEBUG_FLAG} UIManager instance created and marked DontDestroyOnLoad.");
             }
             else
@@ -189,20 +233,20 @@ namespace CycloneGames.UIFramework.Runtime
             return uiManagerInstance.IsUIWindowValid(windowName);
         }
 
-        public void OpenUI(string windowName, Action<UIWindow> onWindowCreated = null)
+        public void OpenUI(string windowName, Action<UIWindow> onWindowCreated = null, bool? isSceneBoundOverride = null, UIAssetLoadContext assetLoadContext = default)
         {
             if (!CheckInitialization())
             {
                 onWindowCreated?.Invoke(null); // Notify failure
                 return;
             }
-            uiManagerInstance.OpenUI(windowName, onWindowCreated);
+            uiManagerInstance.OpenUI(windowName, onWindowCreated, isSceneBoundOverride, assetLoadContext);
         }
 
-        public UniTask<UIWindow> OpenUIAsync(string windowName, System.Threading.CancellationToken cancellationToken = default)
+        public UniTask<UIWindow> OpenUIAsync(string windowName, System.Threading.CancellationToken cancellationToken = default, bool? isSceneBoundOverride = null, UIAssetLoadContext assetLoadContext = default)
         {
             if (!CheckInitialization()) return UniTask.FromResult<UIWindow>(null);
-            return uiManagerInstance.OpenUIAndWait(windowName, cancellationToken);
+            return uiManagerInstance.OpenUIAndWait(windowName, cancellationToken, isSceneBoundOverride, assetLoadContext);
         }
 
         public void CloseUI(string windowName)
@@ -220,12 +264,12 @@ namespace CycloneGames.UIFramework.Runtime
         /// <summary>
         /// Optionally open and await until the window reports Opened (strict sequencing use-cases).
         /// </summary>
-        public UniTask<UIWindow> OpenUIAndWait(string windowName, System.Threading.CancellationToken cancellationToken = default)
+        public UniTask<UIWindow> OpenUIAndWait(string windowName, System.Threading.CancellationToken cancellationToken = default, bool? isSceneBoundOverride = null, UIAssetLoadContext assetLoadContext = default)
         {
             if (!CheckInitialization()) return UniTask.FromResult<UIWindow>(null);
             // This method is now just a wrapper for OpenUIAsync.
             // The original implementation with UniTaskCompletionSource is redundant if OpenUIAsync is already awaitable.
-            return uiManagerInstance.OpenUIAndWait(windowName, cancellationToken);
+            return uiManagerInstance.OpenUIAndWait(windowName, cancellationToken, isSceneBoundOverride, assetLoadContext);
         }
 
         public UIWindow GetUIWindow(string windowName)
@@ -251,12 +295,15 @@ namespace CycloneGames.UIFramework.Runtime
         public void Dispose()
         {
             CLogger.LogInfo($"{DEBUG_FLAG} Disposing UIService.");
+            _navigationService?.Dispose();
+            _navigationService = null;
+            _transitionCoordinator = null;
             if (uiManagerInstance != null)
             {
-                // Decide if UIService disposing should destroy the UIManager GameObject.
-                // If UIManager is a persistent singleton, maybe not.
-                // If UIManager is tied to this UIService instance's lifetime, then yes.
-                // UnityEngine.Object.Destroy(uiManagerInstance.gameObject);
+                if (_ownsUIManager)
+                {
+                    UnityEngine.Object.Destroy(uiManagerInstance.gameObject);
+                }
                 uiManagerInstance = null;
             }
             isInitialized = false;
@@ -270,6 +317,51 @@ namespace CycloneGames.UIFramework.Runtime
                 return (0, 0);
             }
             return uiManagerInstance.GetRootCanvasSize();
+        }
+
+        public UnityEngine.Camera GetUICamera()
+        {
+            if (!CheckInitialization())
+            {
+                CLogger.LogError($"{DEBUG_FLAG} UIService is not initialized. Operation aborted.");
+                return null;
+            }
+            return uiManagerInstance.GetUICamera();
+        }
+
+        public IUINavigationService NavigationService => _navigationService;
+        private IUINavigationService _navigationService;
+
+        public void SetNavigationService(IUINavigationService nav)
+        {
+            _navigationService = nav;
+            if (uiManagerInstance != null)
+                uiManagerInstance.SetNavigationService(nav);
+        }
+
+        public IUITransitionCoordinator TransitionCoordinator => _transitionCoordinator;
+        private IUITransitionCoordinator _transitionCoordinator;
+
+        public void SetTransitionCoordinator(IUITransitionCoordinator coordinator)
+        {
+            _transitionCoordinator = coordinator;
+            if (uiManagerInstance != null)
+                uiManagerInstance.SetTransitionCoordinator(coordinator);
+        }
+
+        public void SetCoordinatedNavStrategy(CoordinatedNavStrategy strategy)
+        {
+            if (uiManagerInstance != null)
+                uiManagerInstance.SetCoordinatedNavStrategy(strategy);
+        }
+
+        public async Cysharp.Threading.Tasks.UniTask CoordinatedNavigateAsync(
+            string fromWindow, string toWindow,
+            NavigationDirection direction = NavigationDirection.Forward,
+            System.Threading.CancellationToken ct = default)
+        {
+            if (!CheckInitialization()) return;
+            await uiManagerInstance.CoordinatedNavigateAsync(fromWindow, toWindow, direction, _transitionCoordinator, ct);
         }
     }
 }

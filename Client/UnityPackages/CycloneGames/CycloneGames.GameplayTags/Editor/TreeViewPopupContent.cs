@@ -2,13 +2,14 @@
 using UnityEditor.IMGUI.Controls;
 using UnityEngine;
 
-namespace CycloneGames.GameplayTags.Editor
+namespace CycloneGames.GameplayTags.Unity.Editor
 {
    public static class TreeViewMethodExtensions
    {
-      public static void ShowPopupWindow(this TreeViewPopupContent.TreeView treeView, Rect activatorRect, float maxHeight)
+      public static void ShowPopupWindow(this TreeViewPopupContent.TreeView treeView, Rect activatorRect, float maxHeight, float minWidth = 360f, float maxWidth = 720f)
       {
-         TreeViewPopupContent treeViewPopupContent = new(activatorRect.width, maxHeight, treeView);
+         float width = Mathf.Clamp(Mathf.Max(activatorRect.width, minWidth), minWidth, maxWidth);
+         TreeViewPopupContent treeViewPopupContent = new(width, maxHeight, treeView);
          PopupWindow.Show(activatorRect, treeViewPopupContent);
       }
    }
