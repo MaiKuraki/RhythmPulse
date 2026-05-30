@@ -13,7 +13,7 @@ import 'ui/home/home_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
-  
+
   // Initialize Localization
   LocalJsonLocalization.delegate.directories = ['lib/i18n'];
 

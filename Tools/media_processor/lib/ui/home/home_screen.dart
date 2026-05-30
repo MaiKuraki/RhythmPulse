@@ -57,7 +57,7 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _taskStatus = TaskStatus.idle);
     
     try {
-      final result = await FilePicker.platform.pickFiles(
+      final result = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: _allowedExtensions,
       );

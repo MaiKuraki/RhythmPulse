@@ -30,14 +30,14 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  file_picker: ^10.3.8
+  file_picker: ^11.0.2
   flutter_localizations:
     sdk: flutter
   localization: ^2.1.1
   cupertino_icons: ^1.0.8
   path: ^1.9.1
   media_kit: ^1.1.0
-  media_kit_video: ^1.2.0
+  media_kit_video: ^2.0.1
   media_kit_libs_windows_video: ^1.0.0
 
 dev_dependencies:
