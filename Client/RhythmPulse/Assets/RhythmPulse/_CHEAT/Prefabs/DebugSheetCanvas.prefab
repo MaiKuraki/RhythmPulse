@@ -1142,8 +1142,7 @@ GameObject:
   - component: {fileID: 6564643838517370663}
   - component: {fileID: 6564643838517370656}
   - component: {fileID: 3939744926455960819}
-  - component: {fileID: 8969588042762631733}
-  - component: {fileID: 615660084339316441}
+  - component: {fileID: -8504871405550665809}
   m_Layer: 5
   m_Name: DebugSheetCanvas
   m_TagString: Untagged
@@ -1196,7 +1195,7 @@ Canvas:
   m_AdditionalShaderChannelsFlag: 0
   m_UpdateRectTransformForStandalone: 0
   m_SortingLayerID: 0
-  m_SortingOrder: 10001
+  m_SortingOrder: 10002
   m_TargetDisplay: 0
 --- !u!114 &6564643838517370660
 MonoBehaviour:
@@ -1304,19 +1303,7 @@ MonoBehaviour:
   flicked:
     m_PersistentCalls:
       m_Calls: []
---- !u!225 &8969588042762631733
-CanvasGroup:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6564643838517370666}
-  m_Enabled: 1
-  m_Alpha: 0
-  m_Interactable: 1
-  m_BlocksRaycasts: 1
-  m_IgnoreParentGroups: 0
---- !u!114 &615660084339316441
+--- !u!114 &-8504871405550665809
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -1328,7 +1315,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 10efa5258fa8ecd40a4e11cf18d9575a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: RhythmPulse.Cheat::RhythmPulse.Cheat.DebugSheetCanvasInitializer
-  canvasGroup: {fileID: 8969588042762631733}
+  canvasGroup: {fileID: 6564643838510006845}
 --- !u!1 &6564643838881343411
 GameObject:
   m_ObjectHideFlags: 0

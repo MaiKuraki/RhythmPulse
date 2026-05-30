@@ -68,11 +68,11 @@ MonoBehaviour:
   - DisplayName: IngameDebugConsole
     Prefab:
       m_Location: Assets/RhythmPulse/_CHEAT/Prefabs/IngameDebugConsole.prefab
-      m_GUID: 127bc8dff07fa284db9bcd1c8398032e
+      m_GUID: 9da9d4287bd254042a8d1ef56b4406eb
   - DisplayName: DebugSheetCanvas
     Prefab:
       m_Location: Assets/RhythmPulse/_CHEAT/Prefabs/DebugSheetCanvas.prefab
-      m_GUID: 429e0d672f263a841afa005f044d0ff5
+      m_GUID: 1ac37720eec266240b337441e1ff4afd
   - DisplayName: DebugSheetManager
     Prefab:
       m_Location: Assets/RhythmPulse/_CHEAT/Prefabs/DebugSheetManager.prefab
