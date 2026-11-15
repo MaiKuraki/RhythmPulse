@@ -60,15 +60,13 @@ namespace UnityDebugSheet.Runtime.Extensions.InGameDebugConsole
                 case State.Closed:
                     _isChangingState = true;
                     _debugLogManager.PopupEnabled = false;
-                    if (_debugLogManager.IsLogWindowVisible)
-                        _debugLogManager.HideLogWindow();
+                    _debugLogManager.HideLogWindow();
                     _isChangingState = false;
                     break;
                 case State.Minimized:
                     _isChangingState = true;
                     _debugLogManager.PopupEnabled = true;
-                    if (_debugLogManager.IsLogWindowVisible)
-                        _debugLogManager.HideLogWindow();
+                    _debugLogManager.HideLogWindow();
                     _isChangingState = false;
                     break;
                 case State.Open:

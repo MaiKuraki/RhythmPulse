@@ -1,12 +1,12 @@
 using UnityEngine;
 
-namespace UnityDebugSheet.Runtime.Foundation.Drawer
+namespace UnityDebugSheet
 {
     [RequireComponent(typeof(CanvasGroup))]
     public sealed class CanvasGroupDrawerBackdrop : DrawerBackdrop
     {
         private CanvasGroup _canvasGroup;
-
+        
         private void Awake()
         {
             _canvasGroup = GetComponent<CanvasGroup>();

@@ -4,8 +4,8 @@ using Cysharp.Threading.Tasks;
 using MackySoft.Navigathena;
 using MackySoft.Navigathena.SceneManagement;
 using MackySoft.Navigathena.SceneManagement.VContainer;
+using RhythmPulse.AssetManagement;
 using RhythmPulse.Audio;
-using RhythmPulse.Misc;
 using RhythmPulse.UI;
 using VContainer;
 
@@ -15,7 +15,7 @@ namespace RhythmPulse.Scene
     {
         [Inject] UIServiceHost uiServiceHost;
         [Inject][Key("Addressables")] IAssetModule assetModule;
-        [Inject] AddressableResolverForDontDestroy assetResolver;
+        [Inject] AssetResolver assetResolver;
         public UniTask OnEditorFirstPreInitialize(ISceneDataWriter writer, CancellationToken cancellationToken)
         {
             return UniTask.CompletedTask;
@@ -24,10 +24,12 @@ namespace RhythmPulse.Scene
         public async UniTask OnEnter(ISceneDataReader reader, CancellationToken cancellationToken)
         {
             var pkg = assetModule.GetPackage("DefaultPackage");
+            // AssetResolver instantiates every persistent prefab (EventSystem, camera, audio, UI, debug tools)
+            // according to its authored policy; afterwards AudioManager.Instance exists.
             await assetResolver.InitializeAsync(pkg);
 
-            // AudioManager is instantiated by AddressableResolverForDontDestroy above,
-            // so Instance is now available. Provide IAssetModule so it can finish initializing.
+            // AudioManager is instantiated by AssetResolver above, so Instance is now available.
+            // Provide IAssetModule so it can finish initializing.
             AudioManager.Instance?.SetAssetModule(assetModule);
 
             uiServiceHost.EnsureInitialized(pkg);

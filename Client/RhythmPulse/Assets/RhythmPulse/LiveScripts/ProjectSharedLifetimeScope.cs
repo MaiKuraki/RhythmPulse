@@ -5,6 +5,7 @@ using CycloneGames.UIFramework.Runtime;
 using CycloneGames.IO.Unity;
 using Cysharp.Threading.Tasks;
 using RhythmPulse.APIGateway;
+using RhythmPulse.AssetManagement;
 using RhythmPulse.Audio;
 using RhythmPulse.Gameplay;
 using RhythmPulse.Misc;
@@ -19,7 +20,7 @@ namespace RhythmPulse
     public class ProjectSharedLifetimeScope : LifetimeScope
     {
         public ProjectSharedLifetimeScope Instance { get; private set; }
-        [SerializeField] private AddressableResolverForDontDestroy assetResolver;
+        [SerializeField] private AssetResolver assetResolver;
         protected override void Awake()
         {
             base.Awake();
@@ -57,9 +58,9 @@ namespace RhythmPulse
 
             builder.RegisterBuildCallback(resolver =>
             {
-                var assetResolver = resolver.Resolve<AddressableResolverForDontDestroy>();
+                var assetResolver = resolver.Resolve<AssetResolver>();
                 // Note: Component initialization happens automatically via RegisterComponentInNewPrefab
-                // AudioManager will be instantiated by AddressableResolverForDontDestroy.InitializeAsync()
+                // AudioManager will be instantiated by AssetResolver.InitializeAsync()
                 // so SetAssetModule is called from LifecycleInitialScene.OnEnter() after initialization.
             });
 

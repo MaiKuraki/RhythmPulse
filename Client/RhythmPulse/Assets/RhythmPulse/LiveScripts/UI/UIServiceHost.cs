@@ -3,6 +3,7 @@ using CycloneGames.AssetManagement.Runtime;
 using CycloneGames.Logging;
 using CycloneGames.UIFramework.Runtime;
 using CycloneGames.UIFramework.Runtime.Integrations;
+using RhythmPulse.AssetManagement;
 using RhythmPulse.Misc;
 using RhythmPulse.Services;
 using UnityEngine;
@@ -22,13 +23,18 @@ namespace RhythmPulse.UI
 
         private readonly IMainCameraService _mainCameraService;
         private readonly SceneScopeResolver _sceneScopes;
+        private readonly AssetResolver _assetResolver;
         private IUIService _service;
 
-        public UIServiceHost(IMainCameraService mainCameraService, SceneScopeResolver sceneScopes)
+        public UIServiceHost(
+            IMainCameraService mainCameraService,
+            SceneScopeResolver sceneScopes,
+            AssetResolver assetResolver)
         {
             _mainCameraService = mainCameraService ??
                 throw new ArgumentNullException(nameof(mainCameraService));
             _sceneScopes = sceneScopes ?? throw new ArgumentNullException(nameof(sceneScopes));
+            _assetResolver = assetResolver;
         }
 
         /// <summary>Null until <see cref="EnsureInitialized"/> has run.</summary>
@@ -51,10 +57,12 @@ namespace RhythmPulse.UI
                 return null;
             }
 
-            UIRoot root = UnityEngine.Object.FindFirstObjectByType<UIRoot>(FindObjectsInactive.Include);
+            UIRoot root = ResolveUiRoot();
             if (root == null)
             {
-                Log.Error("UIRoot not found. Make sure the UIFramework prefab is instantiated before the initial scene enters.");
+                Log.Error(
+                    "UIRoot not found. Author the UI framework prefab as an AssetResolver entry with id '" +
+                    RhythmPulseAssetRuntimeLabels.Entries.UiFramework + "'.");
                 return null;
             }
 
@@ -87,6 +95,23 @@ namespace RhythmPulse.UI
 
             Log.Info($"UI service created for {root.LayerCount} layers.");
             return _service;
+        }
+
+        /// <summary>
+        /// Resolves the UI root through the AssetResolver entry that owns the UI framework prefab, so no
+        /// scene-wide lookup is needed. Falls back to a scene search for setups without that entry.
+        /// </summary>
+        private UIRoot ResolveUiRoot()
+        {
+            if (_assetResolver != null
+                && _assetResolver.TryGetEntryComponent(
+                    RhythmPulseAssetRuntimeLabels.Entries.UiFramework,
+                    out UIRoot resolved))
+            {
+                return resolved;
+            }
+
+            return UnityEngine.Object.FindFirstObjectByType<UIRoot>(FindObjectsInactive.Include);
         }
 
         public void Dispose()

@@ -1,0 +1,160 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &5356617988949109248
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 6058729334721074113}
+  - component: {fileID: 4961938545525435680}
+  m_Layer: 0
+  m_Name: AssetResolver
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &6058729334721074113
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5356617988949109248}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &4961938545525435680
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5356617988949109248}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1a591ee606d43f6469a1d83752212171, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  entries:
+  - EntryId: event-system
+    DisplayName: EventSystem
+    Prefab:
+      m_Location: Assets/RhythmPulse/LiveContent/Prefabs/Core/EventSystem.prefab
+      m_GUID: c42d6e36eb5c6bf4dbced3d750d90d1c
+    PreloadOnInitialize: 1
+    InstantiationMode: 0
+    DelaySeconds: 0
+    DelayStartMode: 0
+    DependsOnIds: 
+    DependencyMode: 0
+    AutoInstantiateDependencies: 0
+    DependencyWaitTimeoutSeconds: 0
+    DependencyMissingPolicy: 0
+  - EntryId: main-camera
+    DisplayName: MainCamera
+    Prefab:
+      m_Location: Assets/RhythmPulse/LiveContent/Prefabs/Core/MainCamera.prefab
+      m_GUID: 35e330a40aff17e4b986f8db3f94df8f
+    PreloadOnInitialize: 1
+    InstantiationMode: 0
+    DelaySeconds: 0
+    DelayStartMode: 0
+    DependsOnIds: 
+    DependencyMode: 0
+    AutoInstantiateDependencies: 0
+    DependencyWaitTimeoutSeconds: 0
+    DependencyMissingPolicy: 0
+  - EntryId: audio-manager
+    DisplayName: AudioManager
+    Prefab:
+      m_Location: Assets/RhythmPulse/LiveContent/Prefabs/Audio/AudioManager.prefab
+      m_GUID: 329cd189958c423479ab6be44860c72f
+    PreloadOnInitialize: 1
+    InstantiationMode: 0
+    DelaySeconds: 0
+    DelayStartMode: 0
+    DependsOnIds: 
+    DependencyMode: 0
+    AutoInstantiateDependencies: 0
+    DependencyWaitTimeoutSeconds: 0
+    DependencyMissingPolicy: 0
+  - EntryId: ui-framework
+    DisplayName: UIFramework
+    Prefab:
+      m_Location: Assets/RhythmPulse/LiveContent/Prefabs/UI/UIFramework.prefab
+      m_GUID: 77ece4faf69109748a184e5fb9e37ac3
+    PreloadOnInitialize: 1
+    InstantiationMode: 0
+    DelaySeconds: 0
+    DelayStartMode: 0
+    DependsOnIds: 
+    DependencyMode: 0
+    AutoInstantiateDependencies: 0
+    DependencyWaitTimeoutSeconds: 0
+    DependencyMissingPolicy: 0
+  - EntryId: fps-counter
+    DisplayName: FPSCounter
+    Prefab:
+      m_Location: Assets/RhythmPulse/_CHEAT/Prefabs/FPSCounter.prefab
+      m_GUID: fe729c870b8f3c2418a23279946da061
+    PreloadOnInitialize: 1
+    InstantiationMode: 0
+    DelaySeconds: 0
+    DelayStartMode: 0
+    DependsOnIds: 
+    DependencyMode: 0
+    AutoInstantiateDependencies: 0
+    DependencyWaitTimeoutSeconds: 0
+    DependencyMissingPolicy: 0
+  - EntryId: ingame-debug-console
+    DisplayName: IngameDebugConsole
+    Prefab:
+      m_Location: Assets/RhythmPulse/_CHEAT/Prefabs/IngameDebugConsole.prefab
+      m_GUID: b9bbec812645b9c4ebaf1cbc382b7e6b
+    PreloadOnInitialize: 1
+    InstantiationMode: 0
+    DelaySeconds: 0
+    DelayStartMode: 0
+    DependsOnIds: 
+    DependencyMode: 0
+    AutoInstantiateDependencies: 0
+    DependencyWaitTimeoutSeconds: 0
+    DependencyMissingPolicy: 0
+  - EntryId: debug-sheet-canvas
+    DisplayName: DebugSheetCanvas
+    Prefab:
+      m_Location: Assets/RhythmPulse/_CHEAT/Prefabs/DebugSheetCanvas.prefab
+      m_GUID: 2614e8b83011ce84e84da67bea9cc464
+    PreloadOnInitialize: 1
+    InstantiationMode: 0
+    DelaySeconds: 0
+    DelayStartMode: 0
+    DependsOnIds: 
+    DependencyMode: 0
+    AutoInstantiateDependencies: 0
+    DependencyWaitTimeoutSeconds: 0
+    DependencyMissingPolicy: 0
+  - EntryId: debug-sheet-manager
+    DisplayName: DebugSheetManager
+    Prefab:
+      m_Location: Assets/RhythmPulse/_CHEAT/Prefabs/DebugSheetManager.prefab
+      m_GUID: 664e11f799cb6eb4d96af679770edd1e
+    PreloadOnInitialize: 1
+    InstantiationMode: 0
+    DelaySeconds: 0
+    DelayStartMode: 0
+    DependsOnIds: 
+    DependencyMode: 0
+    AutoInstantiateDependencies: 0
+    DependencyWaitTimeoutSeconds: 0
+    DependencyMissingPolicy: 0
+  waitForDelayedEntries: 0

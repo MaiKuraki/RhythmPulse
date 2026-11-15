@@ -1,24 +1,23 @@
 ﻿using System;
 using System.Collections.Generic;
-using UnityDebugSheet.Runtime.Foundation.Drawer;
-using UnityDebugSheet.Runtime.Foundation.Gestures.Flicks;
-using UnityDebugSheet.Runtime.Foundation.Gestures.MultiClicks;
-using UnityDebugSheet.Runtime.Foundation.PageNavigator;
-using UnityDebugSheet.Runtime.Foundation.PageNavigator.Modules;
-using UnityDebugSheet.Runtime.Foundation.PageNavigator.Modules.AssetLoader;
 using UnityEngine;
 using UnityEngine.Serialization;
 using UnityEngine.UI;
+#if UNITY_6000_5_OR_NEWER
+using ObjectId = UnityEngine.EntityId;
+#else
+using ObjectId = System.Int32;
+#endif
 
-namespace UnityDebugSheet.Runtime.Core.Scripts
+namespace UnityDebugSheet
 {
     [DefaultExecutionOrder(int.MinValue)]
     public sealed class DebugSheet : MonoBehaviour, IPageContainerCallbackReceiver
     {
         private const float ThresholdInch = 0.24f;
 
-        private static readonly Dictionary<int, DebugSheet> InstanceCacheByTransform =
-            new Dictionary<int, DebugSheet>();
+        private static readonly Dictionary<ObjectId, DebugSheet> InstanceCacheByTransform =
+            new Dictionary<ObjectId, DebugSheet>();
 
         [SerializeField] private bool _singleton = true;
 
@@ -197,7 +196,11 @@ namespace UnityDebugSheet.Runtime.Core.Scripts
         /// <returns></returns>
         public static DebugSheet Of(RectTransform rectTransform, bool useCache = true)
         {
+#if UNITY_6000_5_OR_NEWER
+            var id = rectTransform.GetEntityId();
+#else
             var id = rectTransform.GetInstanceID();
+#endif
 
             if (useCache && InstanceCacheByTransform.TryGetValue(id, out var container)) return container;
 

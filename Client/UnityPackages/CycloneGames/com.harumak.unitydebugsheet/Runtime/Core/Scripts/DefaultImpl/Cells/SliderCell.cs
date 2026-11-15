@@ -1,9 +1,8 @@
 ﻿using System;
-using UnityDebugSheet.Runtime.Core.Scripts.DefaultImpl.CellParts;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace UnityDebugSheet.Runtime.Core.Scripts.DefaultImpl.Cells
+namespace UnityDebugSheet
 {
     public sealed class SliderCell : Cell<SliderCellModel>
     {
@@ -24,6 +23,7 @@ namespace UnityDebugSheet.Runtime.Core.Scripts.DefaultImpl.Cells
             
             // Cleanup
             valueField.onValueChanged.RemoveAllListeners();
+            valueField.onEndEdit.RemoveAllListeners();
             slider.onValueChanged.RemoveAllListeners();
 
             // Icon

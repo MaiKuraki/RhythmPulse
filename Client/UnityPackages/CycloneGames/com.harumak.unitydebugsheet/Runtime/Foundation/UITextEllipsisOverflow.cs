@@ -2,7 +2,7 @@
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
-namespace UnityDebugSheet.Runtime.Foundation
+namespace UnityDebugSheet
 {
     [ExecuteAlways]
     [RequireComponent(typeof(Text))]
@@ -15,24 +15,24 @@ namespace UnityDebugSheet.Runtime.Foundation
         [SerializeField] [Tooltip("If set to true, the text will actually be overwritten in EditMode.")]
         private bool _applyInEditMode = true;
 
-        private string _textValue;
+        private string _sourceText;
+        private string _displayedText;
 
         protected override void Awake()
         {
             base.Awake();
-            if (!Application.isPlaying)
-            {
+            if (_text == null)
                 _text = GetComponent<Text>();
-                _textValue = _text.text;
-            }
+
+            _sourceText = _text.text;
+            _displayedText = _text.text;
         }
 
         private void Update()
         {
-            if (_text.text == _textValue) 
+            if (_text == null || _text.text == _displayedText)
                 return;
-            
-            _textValue = _text.text;
+
             Apply();
         }
 
@@ -57,24 +57,39 @@ namespace UnityDebugSheet.Runtime.Foundation
 
             if (!IsActive() || _text == null) return;
 
-            var rectTransform = _text.rectTransform;
-            var generator = _text.cachedTextGenerator;
-            var settings = _text.GetGenerationSettings(rectTransform.rect.size);
-            generator.Populate(_text.text, settings);
+            if (_text.text != _displayedText)
+                _sourceText = _text.text;
 
-            var text = _text.text;
+            var rectTransform = _text.rectTransform;
 
             if (rectTransform.rect.width <= 0 || rectTransform.rect.height <= 0)
                 // Do nothing because the layout seems not to have been built yet.
+            {
+                _displayedText = _text.text;
                 return;
+            }
 
-            if (text.Length == 0) return;
+            var generator = _text.cachedTextGenerator;
+            var settings = _text.GetGenerationSettings(rectTransform.rect.size);
+            generator.Populate(_sourceText, settings);
+
+            var text = _sourceText;
+
+            if (text.Length == 0)
+            {
+                SetDisplayedText(text);
+                return;
+            }
 
             if (_text.horizontalOverflow == HorizontalWrapMode.Wrap)
             {
                 var height = generator.GetPreferredHeight(text, settings) / settings.scaleFactor;
 
-                if (rectTransform.rect.size.y >= height) return;
+                if (rectTransform.rect.size.y >= height)
+                {
+                    SetDisplayedText(text);
+                    return;
+                }
 
                 while (true)
                 {
@@ -95,7 +110,11 @@ namespace UnityDebugSheet.Runtime.Foundation
             {
                 var width = generator.GetPreferredWidth(text, settings) / settings.scaleFactor;
 
-                if (rectTransform.rect.size.x >= width) return;
+                if (rectTransform.rect.size.x >= width)
+                {
+                    SetDisplayedText(text);
+                    return;
+                }
 
                 while (true)
                 {
@@ -112,7 +131,15 @@ namespace UnityDebugSheet.Runtime.Foundation
                 }
             }
 
-            _text.text = text;
+            SetDisplayedText(text);
+        }
+
+        private void SetDisplayedText(string text)
+        {
+            if (_text.text != text)
+                _text.text = text;
+
+            _displayedText = text;
         }
     }
 }
