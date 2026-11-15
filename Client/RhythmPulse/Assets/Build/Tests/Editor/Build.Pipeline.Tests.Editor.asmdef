@@ -1,0 +1,24 @@
+{
+    "name": "Build.Pipeline.Tests.Editor",
+    "rootNamespace": "Build.Pipeline.Tests.Editor",
+    "references": [
+        "Build.Pipeline.Editor",
+        "Build.Data",
+        "Build.VersionControl.Editor",
+        "Build.Pipeline.Integrations.YooAsset3.Publication"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false,
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ]
+}
