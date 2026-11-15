@@ -1,17 +1,18 @@
 using CycloneGames.AssetManagement.Runtime;
 using CycloneGames.Factory.Runtime;
-using CycloneGames.Logger;
-using CycloneGames.Service.Runtime;
+using RhythmPulse.Services;
 using CycloneGames.UIFramework.Runtime;
-using CycloneGames.Utility.Runtime;
+using CycloneGames.IO.Unity;
 using Cysharp.Threading.Tasks;
 using RhythmPulse.APIGateway;
 using RhythmPulse.Audio;
 using RhythmPulse.Gameplay;
 using RhythmPulse.Misc;
+using RhythmPulse.UI;
 using UnityEngine;
 using VContainer;
 using VContainer.Unity;
+using CycloneGames.Logging;
 
 namespace RhythmPulse
 {
@@ -43,8 +44,16 @@ namespace RhythmPulse
             builder.Register<IAudioLoadService, AudioLoadService>(Lifetime.Singleton);
             builder.Register<IGraphicsSettingService, GraphicsSettingService>(Lifetime.Singleton);
             builder.Register<IAssetPathBuilderFactory, AssetPathBuilderFactory>(Lifetime.Singleton);
-            builder.Register<IUnityObjectSpawner, RhythmPulseObjectSpawner>(Lifetime.Singleton);
-            builder.Register<IUIService, UIService>(Lifetime.Singleton);
+            // One owner for the "scene scope first, project scope otherwise" injection rule.
+            builder.Register<SceneScopeResolver>(Lifetime.Singleton);
+            builder.Register<RhythmPulseObjectSpawner>(Lifetime.Singleton);
+            builder.Register<IUnityObjectSpawner>(resolver => resolver.Resolve<RhythmPulseObjectSpawner>(), Lifetime.Transient);
+            // The UI service is built lazily: it needs the instantiated UIRoot and the initialized
+            // asset package, both of which only exist after the initial scene has booted.
+            // Transient so an early resolve cannot cache a null instance; the host always hands out
+            // the same service after EnsureInitialized.
+            builder.Register<UIServiceHost>(Lifetime.Singleton);
+            builder.Register<IUIService>(resolver => resolver.Resolve<UIServiceHost>().Service, Lifetime.Transient);
 
             builder.RegisterBuildCallback(resolver =>
             {
@@ -99,9 +108,9 @@ namespace RhythmPulse
 
             public void Start()
             {
-                _mapStorage.AddBasePath("DownloadedMap", UnityPathSource.PersistentData);
+                _mapStorage.AddBasePath("DownloadedMap", UnityFileLocation.PersistentData);
                 _mapListManager.LoadAllMapsAsync(UnityEngine.Application.exitCancellationToken);
-                CLogger.LogInfo("[MapListGlobalInitializer] Initiated global map list");
+                RpLog.Channel.Info("[MapListGlobalInitializer] Initiated global map list");
             }
         }
     }

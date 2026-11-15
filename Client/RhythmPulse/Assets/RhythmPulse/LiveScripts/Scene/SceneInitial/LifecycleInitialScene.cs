@@ -1,24 +1,19 @@
 using System.Threading;
 using CycloneGames.AssetManagement.Runtime;
-using CycloneGames.Factory.Runtime;
-using CycloneGames.Service.Runtime;
-using CycloneGames.UIFramework.Runtime;
 using Cysharp.Threading.Tasks;
 using MackySoft.Navigathena;
 using MackySoft.Navigathena.SceneManagement;
 using MackySoft.Navigathena.SceneManagement.VContainer;
 using RhythmPulse.Audio;
 using RhythmPulse.Misc;
+using RhythmPulse.UI;
 using VContainer;
 
 namespace RhythmPulse.Scene
 {
     public class LifecycleInitialScene : ISceneLifecycle
     {
-        [Inject] IUIService uiService;
-        [Inject] IAssetPathBuilderFactory assetPathBuilderFactory;
-        [Inject] IUnityObjectSpawner objectSpawner;
-        [Inject] IMainCameraService cameraService;
+        [Inject] UIServiceHost uiServiceHost;
         [Inject][Key("Addressables")] IAssetModule assetModule;
         [Inject] AddressableResolverForDontDestroy assetResolver;
         public UniTask OnEditorFirstPreInitialize(ISceneDataWriter writer, CancellationToken cancellationToken)
@@ -35,8 +30,8 @@ namespace RhythmPulse.Scene
             // so Instance is now available. Provide IAssetModule so it can finish initializing.
             AudioManager.Instance?.SetAssetModule(assetModule);
 
-            uiService.Initialize(assetPathBuilderFactory, objectSpawner, cameraService, pkg);
-            
+            uiServiceHost.EnsureInitialized(pkg);
+
             await GlobalSceneNavigator.Instance.Push(SceneDefinitions.Splash);
         }
 

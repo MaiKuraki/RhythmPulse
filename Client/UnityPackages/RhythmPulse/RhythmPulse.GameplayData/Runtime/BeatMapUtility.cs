@@ -2,7 +2,7 @@ using System;
 using System.Text;
 using System.Reflection;
 using System.Collections.Generic;
-using CycloneGames.Logger;
+using CycloneGames.Logging;
 
 namespace RhythmPulse.GameplayData.Runtime
 {
@@ -99,7 +99,7 @@ namespace RhythmPulse.GameplayData.Runtime
             // Validate BeatMapType
             if (string.IsNullOrWhiteSpace(beatMapType))
             {
-                CLogger.LogError($"[MapInfo.GetBeatMapFile] BeatMapType cannot be null or whitespace.");
+                GameplayDataLog.Channel.Error($"[MapInfo.GetBeatMapFile] BeatMapType cannot be null or whitespace.");
                 return string.Empty;
             }
 
@@ -115,27 +115,27 @@ namespace RhythmPulse.GameplayData.Runtime
             }
             if (!isValidBeatMapType)
             {
-                CLogger.LogError($"[MapInfo.GetBeatMapFile] Invalid or unknown BeatMapType: '{beatMapType}'.");
+                GameplayDataLog.Channel.Error($"[MapInfo.GetBeatMapFile] Invalid or unknown BeatMapType: '{beatMapType}'.");
                 return string.Empty;
             }
 
             // Validate Difficulty
             if (difficulty < 0 || difficulty > 99)
             {
-                CLogger.LogError($"[MapInfo.GetBeatMapFile] Invalid Difficulty value: {difficulty}. Must be between 0 and 99.");
+                GameplayDataLog.Channel.Error($"[MapInfo.GetBeatMapFile] Invalid Difficulty value: {difficulty}. Must be between 0 and 99.");
                 return string.Empty;
             }
 
             // Validate Version string
             if (string.IsNullOrWhiteSpace(version))
             {
-                CLogger.LogError($"[MapInfo.GetBeatMapFile] Version string cannot be empty or whitespace.");
+                GameplayDataLog.Channel.Error($"[MapInfo.GetBeatMapFile] Version string cannot be empty or whitespace.");
                 return string.Empty;
             }
             // Ensure version string length does not exceed its defined max (VersionMaxLength)
             if (version.Length > VersionMaxLength)
             {
-                CLogger.LogError($"[MapInfo.GetBeatMapFile] Version string '{version}' exceeds maximum length of {VersionMaxLength} characters.");
+                GameplayDataLog.Channel.Error($"[MapInfo.GetBeatMapFile] Version string '{version}' exceeds maximum length of {VersionMaxLength} characters.");
                 return string.Empty;
             }
 
@@ -148,7 +148,7 @@ namespace RhythmPulse.GameplayData.Runtime
                                    c == '-';
                 if (!isValidChar)
                 {
-                    CLogger.LogError($"[MapInfo.GetBeatMapFile] Version string '{version}' contains invalid characters. Only alphanumeric characters and hyphens are allowed.");
+                    GameplayDataLog.Channel.Error($"[MapInfo.GetBeatMapFile] Version string '{version}' contains invalid characters. Only alphanumeric characters and hyphens are allowed.");
                     return string.Empty;
                 }
             }

@@ -4,13 +4,13 @@
  * Licensed under MIT (https://github.com/setchi/FancyScrollView/blob/master/LICENSE)
  */
 
-using CycloneGames.Logger;
 using FancyScrollView;
 using R3;
 using R3.Triggers;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using CycloneGames.Logging;
 
 namespace RhythmPulse.UI
 {
@@ -69,7 +69,7 @@ namespace RhythmPulse.UI
         {
             Context.OnCellClicked?.Invoke(Index);
             // cachedItemData.OnSelectedEvent?.Invoke();
-            // CLogger.LogInfo($"{DEBUG_FLAG} Selected {cachedItemData.MapInfo}, index: {Index}");
+            // RpLog.Channel.Info($"{DEBUG_FLAG} Selected {cachedItemData.MapInfo}, index: {Index}");
         }
 
         public override void UpdatePosition(float position)

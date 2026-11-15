@@ -1,19 +1,19 @@
 using UnityEngine.Networking;
 using System.Collections.Generic;
 using System.IO;
-using CycloneGames.Logger;
-using CycloneGames.Utility.Runtime;     // For FilePathUtility, UnityPathSource
+using CycloneGames.IO.Unity;
 using RhythmPulse.GameplayData.Runtime; // For MapInfo struct
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 using System.Threading;
 using System;
+using CycloneGames.Logging;
 
 namespace RhythmPulse.Gameplay
 {
     public interface IGameplayMapStorage
     {
-        void AddBasePath(string logicalPath, UnityPathSource source);
+        void AddBasePath(string logicalPath, UnityFileLocation source);
         UniTask UpdatePathDictionaryAsync(bool clearExisting = true, CancellationToken cancellationToken = default); // Added option to not clear
 
         string GetAudioPath(in MapInfo mapInfo);
@@ -27,7 +27,7 @@ namespace RhythmPulse.Gameplay
         string[] GetBackgroundPictures(in MapInfo mapInfo);
 
         IReadOnlyList<string> GetAllMapUniqueIDs();
-        bool TryGetMapPathInfo(string uniqueID, out string path, out UnityPathSource source);
+        bool TryGetMapPathInfo(string uniqueID, out string path, out UnityFileLocation source);
     }
 
     /// <summary>
@@ -53,9 +53,9 @@ namespace RhythmPulse.Gameplay
         private readonly struct BasePathKey
         {
             public readonly string LogicalPath;
-            public readonly UnityPathSource Source;
+            public readonly UnityFileLocation Source;
 
-            public BasePathKey(string logicalPath, UnityPathSource source)
+            public BasePathKey(string logicalPath, UnityFileLocation source)
             {
                 LogicalPath = logicalPath;
                 Source = source;
@@ -75,8 +75,8 @@ namespace RhythmPulse.Gameplay
 
         // Storing the full URI directly after construction might save repeated concatenations later.
         // Key: UniqueID, Value: (Full URI to map folder, PathSource)
-        private readonly Dictionary<string, (string mapRootUri, UnityPathSource pathSource)> _mapAssetRoots =
-            new Dictionary<string, (string, UnityPathSource)>();
+        private readonly Dictionary<string, (string mapRootUri, UnityFileLocation pathSource)> _mapAssetRoots =
+            new Dictionary<string, (string, UnityFileLocation)>();
 
         private List<string> _cachedUniqueIDs; // Cache for GetAllMapUniqueIDs to reduce allocations
 
@@ -84,7 +84,7 @@ namespace RhythmPulse.Gameplay
         {
             // By default, add the standard StreamingAssets location.
             // The user can choose to clear this or add more paths later.
-            AddBasePath(DEFAULT_STREAMING_ASSETS_MAP_SUBFOLDER, UnityPathSource.StreamingAssets);
+            AddBasePath(DEFAULT_STREAMING_ASSETS_MAP_SUBFOLDER, UnityFileLocation.StreamingAssets);
         }
 
         /// <summary>
@@ -96,16 +96,16 @@ namespace RhythmPulse.Gameplay
         /// An empty string for StreamingAssets/PersistentData refers to their root.
         /// </param>
         /// <param name="source">The source type of the path (StreamingAssets, PersistentData, AbsoluteOrFullUri).</param>
-        public void AddBasePath(string logicalPath, UnityPathSource source)
+        public void AddBasePath(string logicalPath, UnityFileLocation source)
         {
-            if (string.IsNullOrEmpty(logicalPath) && source != UnityPathSource.AbsoluteOrFullUri)
+            if (string.IsNullOrEmpty(logicalPath) && source != UnityFileLocation.AbsolutePathOrUri)
             {
                 logicalPath = ""; // Normalize for root of SA/PD.
             }
             // For AbsoluteOrFullUri, ensure logicalPath is not null/empty if it's truly meant to be a path.
-            else if (string.IsNullOrEmpty(logicalPath) && source == UnityPathSource.AbsoluteOrFullUri)
+            else if (string.IsNullOrEmpty(logicalPath) && source == UnityFileLocation.AbsolutePathOrUri)
             {
-                CLogger.LogWarning($"{DEBUG_FLAG} Attempted to add an empty absolute path. This is usually an error. Path ignored.");
+                RpLog.Channel.Warning($"{DEBUG_FLAG} Attempted to add an empty absolute path. This is usually an error. Path ignored.");
                 return;
             }
 
@@ -114,12 +114,12 @@ namespace RhythmPulse.Gameplay
             if (_addedBasePaths.Add(basePathKey)) // HashSet.Add returns true if the item was added (not a duplicate)
             {
                 _basePathEntries.Add(basePathKey);
-                CLogger.LogInfo($"{DEBUG_FLAG} Added base path: '{logicalPath}' (Source: {source})");
+                RpLog.Channel.Info($"{DEBUG_FLAG} Added base path: '{logicalPath}' (Source: {source})");
                 _cachedUniqueIDs = null; // Invalidate cache
             }
             else
             {
-                CLogger.LogWarning($"{DEBUG_FLAG} Attempted to add duplicate base path: '{logicalPath}' (Source: {source}). Ignored.");
+                RpLog.Channel.Warning($"{DEBUG_FLAG} Attempted to add duplicate base path: '{logicalPath}' (Source: {source}). Ignored.");
             }
         }
 
@@ -136,15 +136,15 @@ namespace RhythmPulse.Gameplay
                 _mapAssetRoots.Clear();
                 _cachedUniqueIDs = null;
             }
-            CLogger.LogInfo($"{DEBUG_FLAG} Starting to update path dictionary... (Clear existing: {clearExisting})");
+            RpLog.Channel.Info($"{DEBUG_FLAG} Starting to update path dictionary... (Clear existing: {clearExisting})");
 
             foreach (var basePathEntry in _basePathEntries)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 string logicalBasePath = basePathEntry.LogicalPath;
-                UnityPathSource currentSource = basePathEntry.Source;
+                UnityFileLocation currentSource = basePathEntry.Source;
 
-                if (currentSource == UnityPathSource.StreamingAssets)
+                if (currentSource == UnityFileLocation.StreamingAssets)
                 {
                     await ProcessStreamingAssetsPathAsync(logicalBasePath, currentSource, cancellationToken);
                 }
@@ -154,29 +154,29 @@ namespace RhythmPulse.Gameplay
                     // For WebGL, PersistentData is emulated via IndexedDB and direct file system access is not possible.
                     // This part needs careful handling for WebGL, possibly by pre-generating all paths or using alternative loading.
 #if UNITY_WEBGL && !UNITY_EDITOR // System.IO not available on WebGL
-                    if (currentSource == UnityPathSource.PersistentData || currentSource == UnityPathSource.AbsoluteOrFullUri)
+                    if (currentSource == UnityFileLocation.PersistentData || currentSource == UnityFileLocation.AbsolutePathOrUri)
                     {
-                        CLogger.LogWarning($"{DEBUG_FLAG} System.IO scanning for {currentSource} is not supported on WebGL. Path '{logicalBasePath}' will be skipped. Consider using StreamingAssets with a manifest for WebGL maps.");
+                        RpLog.Channel.Warning($"{DEBUG_FLAG} System.IO scanning for {currentSource} is not supported on WebGL. Path '{logicalBasePath}' will be skipped. Consider using StreamingAssets with a manifest for WebGL maps.");
                         continue;
                     }
 #endif
                     ProcessFileSystemPath(logicalBasePath, currentSource);
                 }
             }
-            CLogger.LogInfo($"{DEBUG_FLAG} Path dictionary update finished. Total unique maps found: {_mapAssetRoots.Count}");
+            RpLog.Channel.Info($"{DEBUG_FLAG} Path dictionary update finished. Total unique maps found: {_mapAssetRoots.Count}");
             if (_cachedUniqueIDs == null && _mapAssetRoots.Count > 0) // Rebuild cache if invalidated and maps exist
             {
                 // Handled by GetAllMapUniqueIDs when first requested
             }
         }
 
-        private async UniTask ProcessStreamingAssetsPathAsync(string logicalBasePath, UnityPathSource source, CancellationToken cancellationToken)
+        private async UniTask ProcessStreamingAssetsPathAsync(string logicalBasePath, UnityFileLocation source, CancellationToken cancellationToken)
         {
             // Normalize path separators for URI construction
             string manifestRelativePath = Path.Combine(logicalBasePath, STREAMING_ASSETS_MANIFEST_FILENAME).Replace(Path.DirectorySeparatorChar, '/');
-            string manifestUri = FilePathUtility.GetUnityWebRequestUri(manifestRelativePath, UnityPathSource.StreamingAssets);
+            string manifestUri = UnityPathUtility.GetUnityWebRequestUri(manifestRelativePath, UnityFileLocation.StreamingAssets);
 
-            CLogger.LogInfo($"{DEBUG_FLAG} Attempting to load StreamingAssets manifest: {manifestUri}");
+            RpLog.Channel.Info($"{DEBUG_FLAG} Attempting to load StreamingAssets manifest: {manifestUri}");
 
             using (UnityWebRequest www = UnityWebRequest.Get(manifestUri))
             {
@@ -186,7 +186,7 @@ namespace RhythmPulse.Gameplay
                 }
                 catch (System.OperationCanceledException)
                 {
-                    CLogger.LogWarning($"{DEBUG_FLAG} Manifest loading cancelled for: {manifestUri}");
+                    RpLog.Channel.Warning($"{DEBUG_FLAG} Manifest loading cancelled for: {manifestUri}");
                     return;
                 }
                 catch (UnityWebRequestException ex) // Catch specific UWR exceptions
@@ -194,11 +194,11 @@ namespace RhythmPulse.Gameplay
                     // This typically covers network errors, but also local file access errors on some platforms.
                     if (ex.ResponseCode == 404 || (www.error != null && (www.error.Contains("Cannot connect to destination host") || www.error.Contains("Unable to_Complete_Login")))) // Common errors for missing files
                     {
-                        CLogger.LogWarning($"{DEBUG_FLAG} Manifest not found at '{manifestUri}' (or network issue). This might be intentional if no maps are bundled here. Skipping this StreamingAssets path.");
+                        RpLog.Channel.Warning($"{DEBUG_FLAG} Manifest not found at '{manifestUri}' (or network issue). This might be intentional if no maps are bundled here. Skipping this StreamingAssets path.");
                     }
                     else
                     {
-                        CLogger.LogWarning($"{DEBUG_FLAG} Failed to load manifest from '{manifestUri}': {www.error} (Code: {www.responseCode}). Details: {ex.Message}");
+                        RpLog.Channel.Warning($"{DEBUG_FLAG} Failed to load manifest from '{manifestUri}': {www.error} (Code: {www.responseCode}). Details: {ex.Message}");
                     }
                     return; // Stop processing this manifest if there's an error
                 }
@@ -206,7 +206,7 @@ namespace RhythmPulse.Gameplay
 
                 if (www.result == UnityWebRequest.Result.Success)
                 {
-                    CLogger.LogInfo($"{DEBUG_FLAG} Successfully loaded manifest for SA base '{logicalBasePath}'.");
+                    RpLog.Channel.Info($"{DEBUG_FLAG} Successfully loaded manifest for SA base '{logicalBasePath}'.");
                     MapManifest manifestData = null;
                     try
                     {
@@ -214,7 +214,7 @@ namespace RhythmPulse.Gameplay
                     }
                     catch (System.Exception ex)
                     {
-                        CLogger.LogError($"{DEBUG_FLAG} Failed to parse manifest JSON from '{manifestUri}': {ex.Message}. Content snippet: {www.downloadHandler.text.Substring(0, Mathf.Min(www.downloadHandler.text.Length, 200))}");
+                        RpLog.Channel.Error($"{DEBUG_FLAG} Failed to parse manifest JSON from '{manifestUri}': {ex.Message}. Content snippet: {www.downloadHandler.text.Substring(0, Mathf.Min(www.downloadHandler.text.Length, 200))}");
                         return; // Stop if manifest is malformed
                     }
 
@@ -226,14 +226,14 @@ namespace RhythmPulse.Gameplay
 
                         if (string.IsNullOrEmpty(manifestData.basePathInStreamingAssets) && !string.IsNullOrEmpty(logicalBasePath))
                         {
-                            CLogger.LogWarning($"{DEBUG_FLAG} Manifest for '{logicalBasePath}' has empty 'basePathInStreamingAssets'. Using provided logicalBasePath '{logicalBasePath}' as effective base.");
+                            RpLog.Channel.Warning($"{DEBUG_FLAG} Manifest for '{logicalBasePath}' has empty 'basePathInStreamingAssets'. Using provided logicalBasePath '{logicalBasePath}' as effective base.");
                         }
 
                         foreach (string mapFolderUniqueID in manifestData.mapUniqueIDs)
                         {
                             if (string.IsNullOrEmpty(mapFolderUniqueID))
                             {
-                                CLogger.LogWarning($"{DEBUG_FLAG} Manifest contains an empty or null map UniqueID. Skipping.");
+                                RpLog.Channel.Warning($"{DEBUG_FLAG} Manifest contains an empty or null map UniqueID. Skipping.");
                                 continue;
                             }
 
@@ -242,40 +242,40 @@ namespace RhythmPulse.Gameplay
 
                             if (_mapAssetRoots.TryAdd(mapFolderUniqueID, (songDirRelativePath, source)))
                             {
-                                CLogger.LogInfo($"{DEBUG_FLAG} (Manifest) Added map '{mapFolderUniqueID}', SA relative path: '{songDirRelativePath}'");
+                                RpLog.Channel.Info($"{DEBUG_FLAG} (Manifest) Added map '{mapFolderUniqueID}', SA relative path: '{songDirRelativePath}'");
                             }
                             else
                             {
-                                CLogger.LogWarning($"{DEBUG_FLAG} (Manifest) Duplicate UniqueID '{mapFolderUniqueID}' encountered. Path from manifest: '{songDirRelativePath}'. Keeping first found entry: '{_mapAssetRoots[mapFolderUniqueID].mapRootUri}'.");
+                                RpLog.Channel.Warning($"{DEBUG_FLAG} (Manifest) Duplicate UniqueID '{mapFolderUniqueID}' encountered. Path from manifest: '{songDirRelativePath}'. Keeping first found entry: '{_mapAssetRoots[mapFolderUniqueID].mapRootUri}'.");
                             }
                         }
                         _cachedUniqueIDs = null; // Invalidate cache
                     }
                     else
                     {
-                        CLogger.LogInfo($"{DEBUG_FLAG} Manifest from '{manifestUri}' loaded but contains no map entries or data is null. This is acceptable.");
+                        RpLog.Channel.Info($"{DEBUG_FLAG} Manifest from '{manifestUri}' loaded but contains no map entries or data is null. This is acceptable.");
                     }
                 }
                 // Removed the generic "Failed to load manifest" warning here as specific cases (like 404) are handled above as non-critical.
                 // Only log actual errors not covered by specific checks.
                 else if (www.responseCode != 404 && !(www.error != null && (www.error.Contains("Cannot connect to destination host") || www.error.Contains("Unable to_Complete_Login"))))
                 {
-                    CLogger.LogWarning($"{DEBUG_FLAG} Failed to load manifest from '{manifestUri}'. Result: {www.result}, Error: {www.error}, Response Code: {www.responseCode}");
+                    RpLog.Channel.Warning($"{DEBUG_FLAG} Failed to load manifest from '{manifestUri}'. Result: {www.result}, Error: {www.error}, Response Code: {www.responseCode}");
                 }
             }
         }
 
-        private void ProcessFileSystemPath(string logicalBasePath, UnityPathSource currentSource)
+        private void ProcessFileSystemPath(string logicalBasePath, UnityFileLocation currentSource)
         {
             // This method uses System.IO and is not WebGL compatible.
             // A UniTask version might be needed if async file operations become critical here,
             // but for initial scan, synchronous can be acceptable on non-WebGL platforms.
 #if UNITY_WEBGL && !UNITY_EDITOR
-            CLogger.LogError($"{DEBUG_FLAG} ProcessFileSystemPath called on WebGL. This should not happen. Path: {logicalBasePath}");
+            RpLog.Channel.Error($"{DEBUG_FLAG} ProcessFileSystemPath called on WebGL. This should not happen. Path: {logicalBasePath}");
             return;
 #else
             string actualSystemBasePathToScan;
-            if (currentSource == UnityPathSource.PersistentData)
+            if (currentSource == UnityFileLocation.PersistentData)
             {
                 actualSystemBasePathToScan = Path.Combine(Application.persistentDataPath, logicalBasePath);
             }
@@ -287,11 +287,11 @@ namespace RhythmPulse.Gameplay
                 // If remote URIs need to be "scanned" for a list of maps, a different mechanism (like a manifest at that URI) is required.
             }
 
-            CLogger.LogInfo($"{DEBUG_FLAG} System.IO Scanning: '{actualSystemBasePathToScan}' (Logical: '{logicalBasePath}', Source: {currentSource})");
+            RpLog.Channel.Info($"{DEBUG_FLAG} System.IO Scanning: '{actualSystemBasePathToScan}' (Logical: '{logicalBasePath}', Source: {currentSource})");
 
             if (!Directory.Exists(actualSystemBasePathToScan))
             {
-                CLogger.LogWarning($"{DEBUG_FLAG} System.IO Base path '{actualSystemBasePathToScan}' does not exist or is not a directory. Skipping.");
+                RpLog.Channel.Warning($"{DEBUG_FLAG} System.IO Base path '{actualSystemBasePathToScan}' does not exist or is not a directory. Skipping.");
                 return;
             }
 
@@ -302,23 +302,23 @@ namespace RhythmPulse.Gameplay
                 songDirectories = Directory.GetDirectories(actualSystemBasePathToScan);
                 if (songDirectories.Length == 0)
                 {
-                    CLogger.LogInfo($"{DEBUG_FLAG} No subdirectories found in '{actualSystemBasePathToScan}'. This may be intentional.");
+                    RpLog.Channel.Info($"{DEBUG_FLAG} No subdirectories found in '{actualSystemBasePathToScan}'. This may be intentional.");
                     // return; // Don't return, allow processing other paths.
                 }
             }
             catch (System.UnauthorizedAccessException ex)
             {
-                CLogger.LogError($"{DEBUG_FLAG} Access denied while scanning '{actualSystemBasePathToScan}': {ex.Message}");
+                RpLog.Channel.Error($"{DEBUG_FLAG} Access denied while scanning '{actualSystemBasePathToScan}': {ex.Message}");
                 return; // Cannot proceed with this path
             }
             catch (System.IO.IOException ex) // Catch more specific IO errors
             {
-                CLogger.LogError($"{DEBUG_FLAG} IO error while scanning '{actualSystemBasePathToScan}': {ex.Message}");
+                RpLog.Channel.Error($"{DEBUG_FLAG} IO error while scanning '{actualSystemBasePathToScan}': {ex.Message}");
                 return; // Cannot proceed with this path
             }
             catch (System.Exception ex) // Catch-all for other unexpected errors
             {
-                CLogger.LogError($"{DEBUG_FLAG} Unexpected error during System.IO directory scan of '{actualSystemBasePathToScan}': {ex.Message}");
+                RpLog.Channel.Error($"{DEBUG_FLAG} Unexpected error during System.IO directory scan of '{actualSystemBasePathToScan}': {ex.Message}");
                 return; // Cannot proceed with this path
             }
 
@@ -331,7 +331,7 @@ namespace RhythmPulse.Gameplay
                     string uniqueID = Path.GetFileName(songDirPathAbsolute); // Folder name is the UniqueID
                     if (string.IsNullOrEmpty(uniqueID))
                     {
-                        CLogger.LogWarning($"{DEBUG_FLAG} Could not determine UniqueID from directory path '{songDirPathAbsolute}'. Skipping.");
+                        RpLog.Channel.Warning($"{DEBUG_FLAG} Could not determine UniqueID from directory path '{songDirPathAbsolute}'. Skipping.");
                         continue;
                     }
 
@@ -339,11 +339,11 @@ namespace RhythmPulse.Gameplay
                     // FilePathUtility.GetUnityWebRequestUri will later convert this to a file:/// URI if needed.
                     if (_mapAssetRoots.TryAdd(uniqueID, (songDirPathAbsolute, currentSource)))
                     {
-                        CLogger.LogInfo($"{DEBUG_FLAG} (System.IO) Added map '{uniqueID}', Absolute path: '{songDirPathAbsolute}'");
+                        RpLog.Channel.Info($"{DEBUG_FLAG} (System.IO) Added map '{uniqueID}', Absolute path: '{songDirPathAbsolute}'");
                     }
                     else
                     {
-                        CLogger.LogWarning($"{DEBUG_FLAG} (System.IO) Duplicate UniqueID '{uniqueID}' found at '{songDirPathAbsolute}'. Keeping first found entry: '{_mapAssetRoots[uniqueID].mapRootUri}'.");
+                        RpLog.Channel.Warning($"{DEBUG_FLAG} (System.IO) Duplicate UniqueID '{uniqueID}' found at '{songDirPathAbsolute}'. Keeping first found entry: '{_mapAssetRoots[uniqueID].mapRootUri}'.");
                     }
                 }
                 // else: It's a directory but not a map folder (no MapInfo.yaml), so ignore it.
@@ -356,20 +356,20 @@ namespace RhythmPulse.Gameplay
         // Helper for constructing final asset URIs.
         // `mapRootPathInSource` is the relative path for SA, or absolute path for PD/Absolute.
         // `assetFilenameWithExtension` is the name of the asset file, e.g., "audio.ogg".
-        private string GetFinalAssetUri(string mapUniqueID, string mapRootPathInSource, UnityPathSource pathSource, string assetFilenameWithExtension)
+        private string GetFinalAssetUri(string mapUniqueID, string mapRootPathInSource, UnityFileLocation pathSource, string assetFilenameWithExtension)
         {
             if (string.IsNullOrEmpty(assetFilenameWithExtension)) return string.Empty;
 
             string relativeAssetPath; // Path relative to SA root, or PD root, or the full path for Absolute
             string finalUri;
 
-            if (pathSource == UnityPathSource.StreamingAssets)
+            if (pathSource == UnityFileLocation.StreamingAssets)
             {
                 // mapRootPathInSource is already relative to SA root (e.g., "MusicGameMap/MyCoolSong")
                 // assetFilenameWithExtension is e.g., "audio.ogg"
                 // Resulting pathForFilePathUtility needs to be "MusicGameMaps/MyCoolSong/audio.ogg"
                 relativeAssetPath = Path.Combine(mapRootPathInSource, assetFilenameWithExtension).Replace(Path.DirectorySeparatorChar, '/');
-                finalUri = FilePathUtility.GetUnityWebRequestUri(relativeAssetPath, UnityPathSource.StreamingAssets);
+                finalUri = UnityPathUtility.GetUnityWebRequestUri(relativeAssetPath, UnityFileLocation.StreamingAssets);
             }
             else // PersistentData or AbsoluteOrFullUri
             {
@@ -381,33 +381,33 @@ namespace RhythmPulse.Gameplay
                 // For other platforms, it's a good check.
                 if (!File.Exists(fullAbsoluteAssetSystemPath))
                 {
-                    CLogger.LogWarning($"{DEBUG_FLAG} Asset file not found on disk: '{fullAbsoluteAssetSystemPath}' (Map: '{mapUniqueID}', Asset: '{assetFilenameWithExtension}').");
+                    RpLog.Channel.Warning($"{DEBUG_FLAG} Asset file not found on disk: '{fullAbsoluteAssetSystemPath}' (Map: '{mapUniqueID}', Asset: '{assetFilenameWithExtension}').");
                     return string.Empty;
                 }
 #endif
 
-                if (pathSource == UnityPathSource.PersistentData)
+                if (pathSource == UnityFileLocation.PersistentData)
                 {
                     // FilePathUtility needs a path *relative* to Application.persistentDataPath for PersistentData source.
                     string persistentDataRoot = Application.persistentDataPath;
                     if (!fullAbsoluteAssetSystemPath.StartsWith(persistentDataRoot, System.StringComparison.OrdinalIgnoreCase))
                     {
                         // This should ideally not happen if paths are constructed correctly.
-                        CLogger.LogError($"{DEBUG_FLAG} Asset path '{fullAbsoluteAssetSystemPath}' for map '{mapUniqueID}' (PersistentData) is not under PersistentData root '{persistentDataRoot}'. This indicates an internal logic error.");
+                        RpLog.Channel.Error($"{DEBUG_FLAG} Asset path '{fullAbsoluteAssetSystemPath}' for map '{mapUniqueID}' (PersistentData) is not under PersistentData root '{persistentDataRoot}'. This indicates an internal logic error.");
                         return string.Empty;
                     }
                     // Get the part of the path after persistentDataRoot.
                     relativeAssetPath = fullAbsoluteAssetSystemPath.Substring(persistentDataRoot.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-                    finalUri = FilePathUtility.GetUnityWebRequestUri(relativeAssetPath, UnityPathSource.PersistentData);
+                    finalUri = UnityPathUtility.GetUnityWebRequestUri(relativeAssetPath, UnityFileLocation.PersistentData);
                 }
                 else // AbsoluteOrFullUri
                 {
                     // For AbsoluteOrFullUri, FilePathUtility expects the full path directly.
                     relativeAssetPath = fullAbsoluteAssetSystemPath; // In this context, 'relative' is a bit of a misnomer; it's the direct path.
-                    finalUri = FilePathUtility.GetUnityWebRequestUri(relativeAssetPath, UnityPathSource.AbsoluteOrFullUri);
+                    finalUri = UnityPathUtility.GetUnityWebRequestUri(relativeAssetPath, UnityFileLocation.AbsolutePathOrUri);
                 }
             }
-            // CLogger.LogDebug($"{DEBUG_FLAG} Asset URI for '{mapUniqueID}/{assetFilenameWithExtension}': Source='{pathSource}', Root='{mapRootPathInSource}', RelativeToUtil='{relativeAssetPath}', Final='{finalUri}'");
+            // RpLog.Channel.Debug($"{DEBUG_FLAG} Asset URI for '{mapUniqueID}/{assetFilenameWithExtension}': Source='{pathSource}', Root='{mapRootPathInSource}', RelativeToUtil='{relativeAssetPath}', Final='{finalUri}'");
             return finalUri;
         }
 
@@ -454,7 +454,7 @@ namespace RhythmPulse.Gameplay
             }
             else
             {
-                CLogger.LogWarning($"{DEBUG_FLAG} Map with UniqueID '{mapInfo.UniqueID}' not found in asset roots when trying to get asset '{assetFilenameFromYaml}'. Call UpdatePathDictionaryAsync() if maps were recently added.");
+                RpLog.Channel.Warning($"{DEBUG_FLAG} Map with UniqueID '{mapInfo.UniqueID}' not found in asset roots when trying to get asset '{assetFilenameFromYaml}'. Call UpdatePathDictionaryAsync() if maps were recently added.");
                 return string.Empty;
             }
         }
@@ -493,7 +493,7 @@ namespace RhythmPulse.Gameplay
 
             if (!_mapAssetRoots.TryGetValue(mapInfo.UniqueID, out var rootInfo))
             {
-                CLogger.LogWarning($"{DEBUG_FLAG} Map with UniqueID '{mapInfo.UniqueID}' not found when trying to get background pictures.");
+                RpLog.Channel.Warning($"{DEBUG_FLAG} Map with UniqueID '{mapInfo.UniqueID}' not found when trying to get background pictures.");
                 return System.Array.Empty<string>();
             }
 
@@ -511,7 +511,7 @@ namespace RhythmPulse.Gameplay
                 if (string.IsNullOrEmpty(bgPicUris[i]))
                 {
                     // GetFinalAssetUri already logs warnings for missing files if applicable.
-                    CLogger.LogWarning($"{DEBUG_FLAG} Failed to resolve URI for BG picture '{bgFileNameInYaml}' in map '{mapInfo.UniqueID}'. It might be missing or incorrectly listed.");
+                    RpLog.Channel.Warning($"{DEBUG_FLAG} Failed to resolve URI for BG picture '{bgFileNameInYaml}' in map '{mapInfo.UniqueID}'. It might be missing or incorrectly listed.");
                 }
             }
             return bgPicUris;
@@ -536,7 +536,7 @@ namespace RhythmPulse.Gameplay
         /// For StreamingAssets, 'path' is relative to StreamingAssets root.
         /// For PersistentData and AbsoluteOrFullUri, 'path' is the absolute system path to the map folder.
         /// </summary>
-        public bool TryGetMapPathInfo(string uniqueID, out string path, out UnityPathSource source)
+        public bool TryGetMapPathInfo(string uniqueID, out string path, out UnityFileLocation source)
         {
             if (string.IsNullOrEmpty(uniqueID))
             {

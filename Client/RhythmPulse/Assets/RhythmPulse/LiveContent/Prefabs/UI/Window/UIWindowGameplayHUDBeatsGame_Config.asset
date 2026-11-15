@@ -12,6 +12,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e0ed2f4a7fe492f449faba41c737e4b7, type: 3}
   m_Name: UIWindowGameplayHUDBeatsGame_Config
   m_EditorClassIdentifier: 
+  windowId: UIWindowGameplayHUDBeatsGame
+  source: 0
   windowPrefab: {fileID: 8659091355746603832, guid: ea93833612401464b9cb8440402b985a,
     type: 3}
   layer: {fileID: 11400000, guid: ba5952d225fc36646a190ee3fda7c68a, type: 2}

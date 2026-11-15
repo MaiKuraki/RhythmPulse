@@ -1,8 +1,8 @@
 using System;
-using CycloneGames.Logger;
 using R3;
 using UnityEngine;
 using UnityEngine.UI;
+using CycloneGames.Logging;
 
 namespace RhythmPulse.UI
 {
@@ -31,11 +31,11 @@ namespace RhythmPulse.UI
             switch (gameMode)
             {
                 case EGameMode.Beats:
-                    CLogger.LogInfo("[UIWindowLobby] Enter Beats Game");
+                    RpLog.Channel.Info("[UIWindowLobby] Enter Beats Game");
                     EnterTraditionalBeatsGame?.Invoke();
                     break;
                 case EGameMode.Dance:
-                    CLogger.LogInfo("[UIWindowLobby] Enter Dance Game");
+                    RpLog.Channel.Info("[UIWindowLobby] Enter Dance Game");
                     EnterDanceGame?.Invoke();
                     break;
             }

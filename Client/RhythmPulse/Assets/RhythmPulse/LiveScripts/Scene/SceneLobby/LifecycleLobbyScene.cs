@@ -29,16 +29,14 @@ namespace RhythmPulse.Scene
             return UniTask.CompletedTask;
         }
 
-        public UniTask OnFinalize(ISceneDataWriter writer, IProgress<IProgressDataStore> progress, CancellationToken cancellationToken)
+        public async UniTask OnFinalize(ISceneDataWriter writer, IProgress<IProgressDataStore> progress, CancellationToken cancellationToken)
         {
-            uiService.CloseUI(UIWindowName.Lobby);
-            return UniTask.CompletedTask;
+            await uiService.CloseAsync(UIWindowName.Lobby, cancellationToken: cancellationToken);
         }
 
-        public UniTask OnInitialize(ISceneDataReader reader, IProgress<IProgressDataStore> progress, CancellationToken cancellationToken)
+        public async UniTask OnInitialize(ISceneDataReader reader, IProgress<IProgressDataStore> progress, CancellationToken cancellationToken)
         {
-            uiService.OpenUI(UIWindowName.Lobby);
-            return UniTask.CompletedTask;
+            await uiService.OpenAsync(UIWindowName.Lobby, cancellationToken: cancellationToken);
         }
     }
 }

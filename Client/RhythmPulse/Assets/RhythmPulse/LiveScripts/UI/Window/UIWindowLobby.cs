@@ -1,19 +1,18 @@
 using System.Threading;
-using CycloneGames.Logger;
 using CycloneGames.UIFramework.Runtime;
 using Cysharp.Threading.Tasks;
 using RhythmPulse.APIGateway;
+using RhythmPulse.Misc;
 using RhythmPulse.Scene;
 using UnityEngine;
 using VContainer;
-using VContainer.Unity;
+using CycloneGames.Logging;
 
 namespace RhythmPulse.UI
 {
     public class UIWindowLobby : UIWindow
     {
         private const string DEBUG_FLAG = "[UIWindowLobby]";
-        [Inject] private IObjectResolver objectResolver;
         [Inject] private ISceneManagementAPIGateway sceneManagementAPIGateway;
 
         [SerializeField] Transform GameModeSelectionTF;
@@ -59,61 +58,20 @@ namespace RhythmPulse.UI
             RegisterElementsAfterDIInitialized(destroyCancellationToken);
         }
 
-        protected override void OnFinishedOpen()
+        protected override void OnOpened()
         {
-            base.OnFinishedOpen();
+            base.OnOpened();
 
             EnterGameModeSelection();
         }
 
-        // Cached scene resolver to avoid repeated lookups (0GC after initial cache)
-        private LifetimeScope cachedSceneScope;
-        private IObjectResolver cachedSceneResolver;
-        private int cachedSceneHandle = -1;
+        // Resolves the active scene scope; shared with the spawner and the window binder so the
+        // "which container injects this" rule lives in exactly one place.
+        [Inject] private readonly SceneScopeResolver sceneScopeResolver;
 
         private IObjectResolver GetSceneResolver()
         {
-            if (cachedSceneResolver != null && cachedSceneScope != null)
-            {
-                if (cachedSceneScope.Container != null &&
-                    cachedSceneScope.gameObject.scene.isLoaded &&
-                    cachedSceneScope.gameObject.scene.handle == cachedSceneHandle)
-                {
-                    return cachedSceneResolver;
-                }
-
-                cachedSceneScope = null;
-                cachedSceneResolver = null;
-                cachedSceneHandle = -1;
-            }
-
-            var allLifetimeScopes = Object.FindObjectsByType<LifetimeScope>(FindObjectsInactive.Include, FindObjectsSortMode.None);
-
-            for (int i = 0; i < allLifetimeScopes.Length; i++)
-            {
-                var scope = allLifetimeScopes[i];
-
-                if (scope.Container == null || !scope.gameObject.scene.isLoaded)
-                    continue;
-
-                if (scope.IsRoot)
-                    continue;
-
-                if (scope is ProjectSharedLifetimeScope)
-                    continue;
-
-                if (scope.Parent != null)
-                {
-                    // Cache for future use
-                    cachedSceneScope = scope;
-                    cachedSceneResolver = scope.Container;
-                    cachedSceneHandle = scope.gameObject.scene.handle;
-                    return cachedSceneResolver;
-                }
-            }
-
-            // Fallback to injected resolver
-            return objectResolver;
+            return sceneScopeResolver.Resolve();
         }
 
         private void RegisterElementsAfterDIInitialized(CancellationToken cancellationToken)
@@ -133,7 +91,7 @@ namespace RhythmPulse.UI
             }
             else
             {
-                CLogger.LogWarning($"{DEBUG_FLAG} Invalid GamplayData");
+                RpLog.Channel.Warning($"{DEBUG_FLAG} Invalid GamplayData");
             }
         }
 

@@ -3,8 +3,8 @@ using UnityEngine;
 using UnityEditor;
 using System.IO;
 using System.Collections.Generic;
+using CycloneGames.Logging;
 using RhythmPulse.Gameplay; // For GameplayMapStorage constants
-using CycloneGames.Logger;
 
 namespace RhythmPulse.Editor
 {
@@ -44,15 +44,15 @@ namespace RhythmPulse.Editor
             // Ensure the base StreamingAssets subfolder for maps exists.
             if (!Directory.Exists(fullMusicFolderPath))
             {
-                CLogger.LogWarning($"{DEBUG_FLAG} Music folder not found at: {fullMusicFolderPath}. Attempting to create it.");
+                EditorToolsLog.Channel.Warning($"{DEBUG_FLAG} Music folder not found at: {fullMusicFolderPath}. Attempting to create it.");
                 try
                 {
                     Directory.CreateDirectory(fullMusicFolderPath);
-                    CLogger.LogInfo($"{DEBUG_FLAG} Created directory: {fullMusicFolderPath}");
+                    EditorToolsLog.Channel.Info($"{DEBUG_FLAG} Created directory: {fullMusicFolderPath}");
                 }
                 catch (System.Exception ex)
                 {
-                    CLogger.LogError($"{DEBUG_FLAG} Failed to create directory {fullMusicFolderPath}: {ex.Message}");
+                    EditorToolsLog.Channel.Error($"{DEBUG_FLAG} Failed to create directory {fullMusicFolderPath}: {ex.Message}");
                     // If directory creation fails, we cannot write the manifest there.
                     EditorUtility.DisplayDialog("Manifest Generation Error", $"Failed to create directory: {fullMusicFolderPath}\n{ex.Message}", "OK");
                     return;
@@ -75,7 +75,7 @@ namespace RhythmPulse.Editor
             }
             catch (System.Exception ex)
             {
-                CLogger.LogError($"{DEBUG_FLAG} Error scanning directories in {fullMusicFolderPath}: {ex.Message}");
+                EditorToolsLog.Channel.Error($"{DEBUG_FLAG} Error scanning directories in {fullMusicFolderPath}: {ex.Message}");
                 EditorUtility.DisplayDialog("Manifest Generation Error", $"Error scanning directories: {fullMusicFolderPath}\n{ex.Message}", "OK");
                 return;
             }
@@ -92,11 +92,11 @@ namespace RhythmPulse.Editor
             {
                 string json = JsonUtility.ToJson(manifest, true); // Pretty print for readability
                 File.WriteAllText(manifestFilePath, json);
-                CLogger.LogInfo($"{DEBUG_FLAG} Map manifest generated/updated at: {manifestFilePath} with {mapUniqueIDs.Count} maps for subfolder '{musicMapsSubfolderInSA}'.");
+                EditorToolsLog.Channel.Info($"{DEBUG_FLAG} Map manifest generated/updated at: {manifestFilePath} with {mapUniqueIDs.Count} maps for subfolder '{musicMapsSubfolderInSA}'.");
             }
             catch (System.Exception ex)
             {
-                CLogger.LogError($"{DEBUG_FLAG} Failed to write manifest file {manifestFilePath}: {ex.Message}");
+                EditorToolsLog.Channel.Error($"{DEBUG_FLAG} Failed to write manifest file {manifestFilePath}: {ex.Message}");
                 EditorUtility.DisplayDialog("Manifest Generation Error", $"Failed to write manifest file: {manifestFilePath}\n{ex.Message}", "OK");
                 return;
             }

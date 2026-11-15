@@ -2,9 +2,8 @@
 using System.Collections.Generic;
 using System.Text;
 using System.Threading;
-using CycloneGames.Logger;
 using CycloneGames.UIFramework.Runtime;
-using CycloneGames.Utility.Runtime;
+using CycloneGames.IO.Unity;
 using Cysharp.Threading.Tasks;
 using R3;
 using RhythmPulse.Audio;
@@ -15,6 +14,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 using VContainer;
+using CycloneGames.Logging;
 
 namespace RhythmPulse.UI
 {
@@ -114,7 +114,7 @@ namespace RhythmPulse.UI
             this.musicPlayer = musicPlayer;
             this._unityVideoPlayer = unityVideoPlayer;
 
-            scrollView.SetCellInterval(1 / (uiService.GetRootCanvasSize().Item2 / 140.0f));
+            scrollView.SetCellInterval(1 / (uiService.GetRootCanvasSize().y / 140.0f));
 
             IsDIInitialized = true;
             UnityEngine.Debug.Log($"Construct MapSelection");
@@ -204,7 +204,7 @@ namespace RhythmPulse.UI
             }
             else
             {
-                CLogger.LogWarning($"{DEBUG_FLAG} Cannot enter gameplay, GameplayData is invalid. Likely no valid difficulty selected.");
+                RpLog.Channel.Warning($"{DEBUG_FLAG} Cannot enter gameplay, GameplayData is invalid. Likely no valid difficulty selected.");
             }
         }
 
@@ -279,7 +279,7 @@ namespace RhythmPulse.UI
             string audioPath = bHasOverrideMedia
                 ? mapStorage.GetPreviewAudioPath(itemData.MapInfo, currentContext.FilterBeatMapType)
                 : mapStorage.GetPreviewAudioPath(itemData.MapInfo);
-            previewAudioName.Append(FilePathUtility.GetUnityWebRequestUri(audioPath, UnityPathSource.AbsoluteOrFullUri));
+            previewAudioName.Append(UnityPathUtility.GetUnityWebRequestUri(audioPath, UnityFileLocation.AbsolutePathOrUri));
 
             // Load audio
             await audioLoadService.LoadAudioAsync(previewAudioName.ToString());
@@ -299,7 +299,7 @@ namespace RhythmPulse.UI
             // Initialize video player
             if (!string.IsNullOrEmpty(videoPath))
             {
-                previewVideoName.Append(FilePathUtility.GetUnityWebRequestUri(videoPath, UnityPathSource.AbsoluteOrFullUri));
+                previewVideoName.Append(UnityPathUtility.GetUnityWebRequestUri(videoPath, UnityFileLocation.AbsolutePathOrUri));
                 _unityVideoPlayer?.InitializeVideoPlayer(
                     videoUrl: previewVideoName.ToString(),
                     bLoop: true,

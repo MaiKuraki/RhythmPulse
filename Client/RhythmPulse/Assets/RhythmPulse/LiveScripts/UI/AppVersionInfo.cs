@@ -39,9 +39,15 @@ namespace RhythmPulse.UI
             if (assetModule != null)
             {
                 var pkg = assetModule.GetPackage("DefaultPackage");
-                if (pkg != null)
+                // Addressables exposes no provider-neutral package version; the optional
+                // maintenance capability reads product-owned release metadata instead.
+                if (pkg is IAddressablesCatalogMaintenance catalogMaintenance)
                 {
-                    resVersion = await pkg.RequestPackageVersionAsync(appendTimeTicks: false, cancellationToken: destroyCancellationToken);
+                    string releaseVersion = await catalogMaintenance.ReadReleaseMetadataVersionAsync(destroyCancellationToken);
+                    if (!string.IsNullOrEmpty(releaseVersion))
+                    {
+                        resVersion = releaseVersion;
+                    }
                 }
             }
 

@@ -5,6 +5,7 @@ using FancyScrollView;
 using Cysharp.Threading.Tasks;
 using System.Threading;
 using System;
+using CycloneGames.Logging;
 
 namespace RhythmPulse.UI
 {
@@ -70,7 +71,7 @@ namespace RhythmPulse.UI
         {
             Refresh();
             await OnSelectionChangedAsync(index, cancellationTokenSource);
-            // CLogger.LogInfo($"{DEBUG_FLAG} ForceUpdateSelection {index}, data: {data.Message}");
+            // RpLog.Channel.Info($"{DEBUG_FLAG} ForceUpdateSelection {index}, data: {data.Message}");
         }
 
         private async UniTask OnSelectionChangedAsync(int index, CancellationTokenSource cancellationTokenSource)

@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using CycloneGames.AssetManagement.Runtime;
-using CycloneGames.Logger;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
+using CycloneGames.Logging;
 
 namespace RhythmPulse.Misc
 {
@@ -28,13 +28,13 @@ namespace RhythmPulse.Misc
             // Idempotency guard: prevent double-init (re-entry during async load leaks handles)
             if (Initialized || _loadedHandles != null)
             {
-                CLogger.LogWarning($"{DEBUG_FLAG} Already initialized or initializing. Skipping.");
+                RpLog.Channel.Warning($"{DEBUG_FLAG} Already initialized or initializing. Skipping.");
                 return;
             }
 
             if (assetPackage == null)
             {
-                CLogger.LogError($"{DEBUG_FLAG} Invalid asset package.");
+                RpLog.Channel.Error($"{DEBUG_FLAG} Invalid asset package.");
                 return;
             }
 
@@ -49,7 +49,7 @@ namespace RhythmPulse.Misc
                 var entry = entries[i];
                 if (!entry.Prefab.IsValid)
                 {
-                    CLogger.LogWarning($"{DEBUG_FLAG} Skipping invalid entry: {entry.DisplayName}");
+                    RpLog.Channel.Warning($"{DEBUG_FLAG} Skipping invalid entry: {entry.DisplayName}");
                     tasks[i] = UniTask.CompletedTask;
                     _loadedHandles.Add(null);
                     continue;
@@ -72,16 +72,16 @@ namespace RhythmPulse.Misc
                 {
                     var instance = Instantiate(prefab);
                     DontDestroyOnLoad(instance);
-                    CLogger.LogInfo($"{DEBUG_FLAG} Instantiate: {prefab.name}");
+                    RpLog.Channel.Info($"{DEBUG_FLAG} Instantiate: {prefab.name}");
                 }
                 else
                 {
-                    CLogger.LogError($"{DEBUG_FLAG} Failed to load: {entries[i].Prefab.Location}, Error: {handle.Error}");
+                    RpLog.Channel.Error($"{DEBUG_FLAG} Failed to load: {entries[i].Prefab.Location}, Error: {handle.Error}");
                 }
             }
 
             Initialized = true;
-            CLogger.LogInfo($"{DEBUG_FLAG} Initialization complete. {count} entries processed.");
+            RpLog.Channel.Info($"{DEBUG_FLAG} Initialization complete. {count} entries processed.");
         }
 
         private void OnDestroy()
@@ -93,7 +93,7 @@ namespace RhythmPulse.Misc
 
             // Null out the list reference; the List object itself is GC'd with this MonoBehaviour.
             _loadedHandles = null;
-            CLogger.LogInfo($"{DEBUG_FLAG} All handles disposed.");
+            RpLog.Channel.Info($"{DEBUG_FLAG} All handles disposed.");
         }
     }
 

@@ -7,6 +7,7 @@ using RhythmPulse.Scene;
 using UnityEngine;
 using UnityEngine.UI;
 using VContainer;
+using CycloneGames.Logging;
 
 namespace RhythmPulse.UI
 {
@@ -33,7 +34,7 @@ namespace RhythmPulse.UI
 
         void ClickStart()
         {
-            // CLogger.LogInfo("[UIWindowTitle] ClickStart");
+            // RpLog.Channel.Info("[UIWindowTitle] ClickStart");
             sceneManagementAPIGateway.Push(SceneDefinitions.Lobby);
         }
     }

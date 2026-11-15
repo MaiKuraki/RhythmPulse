@@ -12,6 +12,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e0ed2f4a7fe492f449faba41c737e4b7, type: 3}
   m_Name: UIWindowLobby_Config
   m_EditorClassIdentifier: 
+  windowId: UIWindowLobby
+  source: 0
   windowPrefab: {fileID: 1131824175214225871, guid: 99280eea2bac91042b1e844ea2434475,
     type: 3}
   layer: {fileID: 11400000, guid: 3bfe720be49edf0479c8d207b282b353, type: 2}

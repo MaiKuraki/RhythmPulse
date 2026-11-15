@@ -1,10 +1,9 @@
 using System;
 using System.Text;
 using System.Threading;
-using CycloneGames.Logger;
-using CycloneGames.Service.Runtime;
+using RhythmPulse.Services;
 using CycloneGames.UIFramework.Runtime;
-using CycloneGames.Utility.Runtime;
+using CycloneGames.IO.Unity;
 using Cysharp.Threading.Tasks;
 using RhythmPulse.APIGateway;
 using RhythmPulse.Audio;
@@ -13,6 +12,7 @@ using RhythmPulse.Scene;
 using RhythmPulse.UI;
 using UnityEngine;
 using VContainer;
+using CycloneGames.Logging;
 
 namespace RhythmPulse.Gameplay
 {
@@ -88,23 +88,39 @@ namespace RhythmPulse.Gameplay
 
                 if (GameplayTimeline.State == GameplayTimeline.PlayingState)
                 {
-                    // CLogger.LogInfo($"CurrentAudioLength: {GameplayTimeline.GameplayMusicPlayer?.GetCurrentMusicLengthMSec()}");
+                    // RpLog.Channel.Info($"CurrentAudioLength: {GameplayTimeline.GameplayMusicPlayer?.GetCurrentMusicLengthMSec()}");
                     OnUpdatePlaybackProgress?.Invoke(GetCurrentMusicPlaybackProgress());
 
                     if (GetPlaybackTimeRemainingMSec() <= 50)
                     {
                         StopGameplay();
-                        uiService.OpenUI(UIWindowName.UIWindowGameplayResult);
+                        OpenResultWindowAsync(destroyCancellationToken).Forget();
                     }
                 }
+            }
+        }
+
+        private async UniTaskVoid OpenResultWindowAsync(CancellationToken cancellationToken)
+        {
+            try
+            {
+                await uiService.OpenAsync(UIWindowName.UIWindowGameplayResult, cancellationToken: cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                // Owner is being destroyed; nothing to report.
+            }
+            catch (Exception exception)
+            {
+                RpLog.Channel.Error(exception, $"{DEBUG_FLAG} Failed to open the gameplay result window.");
             }
         }
 
         public async UniTask InitializeMedias(Gameplay.GameplayData gameplayData, CancellationTokenSource cancel)
         {
             audioFileName.Clear();
-            if (gameplayData.HasOverrideMedia) audioFileName.Append(FilePathUtility.GetUnityWebRequestUri(mapStorage.GetAudioPath(gameplayData.MapInfo, gameplayData.BeatMapType), UnityPathSource.AbsoluteOrFullUri));
-            else audioFileName.Append(FilePathUtility.GetUnityWebRequestUri(mapStorage.GetAudioPath(gameplayData.MapInfo), UnityPathSource.AbsoluteOrFullUri));
+            if (gameplayData.HasOverrideMedia) audioFileName.Append(UnityPathUtility.GetUnityWebRequestUri(mapStorage.GetAudioPath(gameplayData.MapInfo, gameplayData.BeatMapType), UnityFileLocation.AbsolutePathOrUri));
+            else audioFileName.Append(UnityPathUtility.GetUnityWebRequestUri(mapStorage.GetAudioPath(gameplayData.MapInfo), UnityFileLocation.AbsolutePathOrUri));
             await audioLoadService.LoadAudioAsync(audioFileName.ToString());
             if (cancel.IsCancellationRequested)
             {
@@ -113,8 +129,8 @@ namespace RhythmPulse.Gameplay
             _unityMusicPlayer.InitializeMusicPlayer(audioFileName.ToString());
             bool isVideoPrepared = false;
             videoFileName.Clear();
-            if (gameplayData.HasOverrideMedia) videoFileName.Append(FilePathUtility.GetUnityWebRequestUri(mapStorage.GetVideoPath(gameplayData.MapInfo, gameplayData.BeatMapType), UnityPathSource.AbsoluteOrFullUri));
-            else videoFileName.Append(FilePathUtility.GetUnityWebRequestUri(mapStorage.GetVideoPath(gameplayData.MapInfo), UnityPathSource.AbsoluteOrFullUri));
+            if (gameplayData.HasOverrideMedia) videoFileName.Append(UnityPathUtility.GetUnityWebRequestUri(mapStorage.GetVideoPath(gameplayData.MapInfo, gameplayData.BeatMapType), UnityFileLocation.AbsolutePathOrUri));
+            else videoFileName.Append(UnityPathUtility.GetUnityWebRequestUri(mapStorage.GetVideoPath(gameplayData.MapInfo), UnityFileLocation.AbsolutePathOrUri));
             _unityVideoPlayer.InitializeVideoPlayer(
                                     videoUrl: videoFileName.ToString(),
                                     bLoop: false,

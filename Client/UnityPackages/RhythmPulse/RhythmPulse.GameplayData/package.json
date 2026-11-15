@@ -8,7 +8,7 @@
   "dependencies": {
     "jp.hadashikick.vyaml": "1.0.0",
     "com.github.messagepack-csharp": "3.1.0",
-    "com.cyclone-games.logger": "1.0.0",
+    "com.cyclone-games.logging": "1.0.0",
     "com.cyclone-games.utility": "1.0.0"
   },
   "keywords": [

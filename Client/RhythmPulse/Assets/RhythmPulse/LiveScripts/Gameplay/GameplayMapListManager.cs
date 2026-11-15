@@ -1,6 +1,5 @@
 using Cysharp.Threading.Tasks;
-using CycloneGames.Logger;
-using CycloneGames.Utility.Runtime;
+using CycloneGames.IO.Unity;
 using RhythmPulse.GameplayData.Runtime;
 using System.Collections.Generic;
 using System.Threading;
@@ -8,6 +7,7 @@ using UnityEngine.Networking;
 using System.IO;
 using System;
 using VYaml.Serialization;
+using CycloneGames.Logging;
 
 namespace RhythmPulse.Gameplay
 {
@@ -76,7 +76,7 @@ namespace RhythmPulse.Gameplay
         {
             if (IsLoading)
             {
-                CLogger.LogWarning($"{DEBUG_FLAG} Map loading is already in progress.");
+                RpLog.Channel.Warning($"{DEBUG_FLAG} Map loading is already in progress.");
                 return;
             }
 
@@ -89,7 +89,7 @@ namespace RhythmPulse.Gameplay
             _globalMapsByVocalist.Clear();
             _globalMapsByDifficulty.Clear();
 
-            CLogger.LogInfo($"{DEBUG_FLAG} Starting map loading process...");
+            RpLog.Channel.Info($"{DEBUG_FLAG} Starting map loading process...");
 
             try
             {
@@ -102,16 +102,16 @@ namespace RhythmPulse.Gameplay
                 PrecomputeAllFilterCaches();
 
                 IsLoaded = true;
-                CLogger.LogInfo($"{DEBUG_FLAG} Map loading finished. Total maps: {_availableMaps.Count}. All filter caches generated.");
+                RpLog.Channel.Info($"{DEBUG_FLAG} Map loading finished. Total maps: {_availableMaps.Count}. All filter caches generated.");
                 OnMapsLoaded?.Invoke();
             }
             catch (OperationCanceledException)
             {
-                CLogger.LogWarning($"{DEBUG_FLAG} Map loading was cancelled.");
+                RpLog.Channel.Warning($"{DEBUG_FLAG} Map loading was cancelled.");
             }
             catch (Exception ex)
             {
-                CLogger.LogError($"{DEBUG_FLAG} An error occurred during map loading: {ex.Message}");
+                RpLog.Channel.Error($"{DEBUG_FLAG} An error occurred during map loading: {ex.Message}");
                 IsLoaded = false;
             }
             finally
@@ -320,9 +320,9 @@ namespace RhythmPulse.Gameplay
             foreach (string id in mapIDs)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (!gameplayMapStorage.TryGetMapPathInfo(id, out string mapRootPath, out UnityPathSource source))
+                if (!gameplayMapStorage.TryGetMapPathInfo(id, out string mapRootPath, out UnityFileLocation source))
                 {
-                    CLogger.LogWarning($"{DEBUG_FLAG} Could not get path info for map ID '{id}'.");
+                    RpLog.Channel.Warning($"{DEBUG_FLAG} Could not get path info for map ID '{id}'.");
                     continue;
                 }
 
@@ -331,16 +331,16 @@ namespace RhythmPulse.Gameplay
 
                 try
                 {
-                    if (source == UnityPathSource.StreamingAssets)
+                    if (source == UnityFileLocation.StreamingAssets)
                     {
                         string relativePath = Path.Combine(mapRootPath, mapInfoFileName).Replace('\\', '/');
-                        string uri = FilePathUtility.GetUnityWebRequestUri(relativePath, source);
+                        string uri = UnityPathUtility.GetUnityWebRequestUri(relativePath, source);
                         yamlBytes = await LoadBytesViaWebRequestAsync(uri, cancellationToken);
                     }
                     else
                     {
 #if UNITY_WEBGL && !UNITY_EDITOR
-                        CLogger.LogWarning($"{DEBUG_FLAG} Direct file access is not supported on WebGL. Skipping non-StreamingAssets map: {id}");
+                        RpLog.Channel.Warning($"{DEBUG_FLAG} Direct file access is not supported on WebGL. Skipping non-StreamingAssets map: {id}");
                         continue;
 #else
                         string absolutePath = Path.Combine(mapRootPath, mapInfoFileName);
@@ -350,7 +350,7 @@ namespace RhythmPulse.Gameplay
                         }
                         else
                         {
-                            CLogger.LogWarning($"{DEBUG_FLAG} MapInfo file not found at path: {absolutePath}");
+                            RpLog.Channel.Warning($"{DEBUG_FLAG} MapInfo file not found at path: {absolutePath}");
                         }
 #endif
                     }
@@ -364,7 +364,7 @@ namespace RhythmPulse.Gameplay
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
-                    CLogger.LogError($"{DEBUG_FLAG} Failed to load or parse MapInfo for ID '{id}'. Reason: {ex.Message}");
+                    RpLog.Channel.Error($"{DEBUG_FLAG} Failed to load or parse MapInfo for ID '{id}'. Reason: {ex.Message}");
                 }
             }
         }

@@ -21,7 +21,7 @@ namespace RhythmPulse.Scene
             return UniTask.CompletedTask;
         }
 
-        public UniTask OnEnter(ISceneDataReader reader, CancellationToken cancellationToken)
+        public async UniTask OnEnter(ISceneDataReader reader, CancellationToken cancellationToken)
         {
             Gameplay.GameplayData musicGameplayData = reader.Read<Gameplay.GameplayData>();
             if (cancelLoadGameplayMedias != null)
@@ -31,8 +31,7 @@ namespace RhythmPulse.Scene
             }
             cancelLoadGameplayMedias = new CancellationTokenSource();
             gameplayManager.InitializeMedias(musicGameplayData, cancelLoadGameplayMedias).Forget();
-            uiService.OpenUI(UIWindowName.GameplayHUDBeatsGame);
-            return UniTask.CompletedTask;
+            await uiService.OpenAsync(UIWindowName.GameplayHUDBeatsGame, cancellationToken: cancellationToken);
         }
         public async UniTask OnExit(ISceneDataWriter writer, CancellationToken cancellationToken)
         {
@@ -40,7 +39,7 @@ namespace RhythmPulse.Scene
             // This prevents duplicate close operations during scene transitions
             try
             {
-                await uiService.CloseUIAsync(UIWindowName.GameplayHUDBeatsGame, cancellationToken);
+                await uiService.CloseAsync(UIWindowName.GameplayHUDBeatsGame, cancellationToken: cancellationToken);
             }
             catch (System.Exception ex)
             {
@@ -49,7 +48,7 @@ namespace RhythmPulse.Scene
 
             try
             {
-                await uiService.CloseUIAsync(UIWindowName.UIWindowGameplayResult, cancellationToken);
+                await uiService.CloseAsync(UIWindowName.UIWindowGameplayResult, cancellationToken: cancellationToken);
             }
             catch (System.Exception ex)
             {

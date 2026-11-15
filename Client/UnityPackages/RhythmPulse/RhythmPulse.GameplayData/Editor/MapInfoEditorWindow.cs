@@ -9,9 +9,10 @@ using VYaml.Parser;
 using System.Reflection;
 using System.Threading.Tasks;
 using CycloneGames.Utility.Runtime;
+using CycloneGames.IO;
 using System;
 using System.Text.RegularExpressions;
-using CycloneGames.Logger;
+using CycloneGames.Logging;
 
 namespace RhythmPulse.GameplayData.Editor
 {
@@ -557,12 +558,12 @@ namespace RhythmPulse.GameplayData.Editor
                 try
                 {
                     Directory.CreateDirectory(directory);
-                    CLogger.LogInfo($"[MapInfoEditorWindow] Created directory: {directory}");
+                    GameplayDataEditorLog.Channel.Info($"[MapInfoEditorWindow] Created directory: {directory}");
                 }
                 catch (Exception e)
                 {
                     EditorUtility.DisplayDialog("Error Creating Directory", $"Failed to create directory '{directory}': {e.Message}", "OK");
-                    CLogger.LogError($"[MapInfoEditorWindow] Failed to create directory '{directory}': {e.Message}");
+                    GameplayDataEditorLog.Channel.Error($"[MapInfoEditorWindow] Failed to create directory '{directory}': {e.Message}");
                     return;
                 }
             }
@@ -581,7 +582,7 @@ namespace RhythmPulse.GameplayData.Editor
                 // Create an empty YAML file. You might want to put a minimal YAML structure here.
                 File.WriteAllText(fullPath, "# Empty Beatmap File\n", System.Text.Encoding.UTF8);
                 AssetDatabase.Refresh(); // Refresh Project window to show the new file
-                CLogger.LogInfo($"[MapInfoEditorWindow] Created beatmap file: {fullPath}");
+                GameplayDataEditorLog.Channel.Info($"[MapInfoEditorWindow] Created beatmap file: {fullPath}");
                 EditorUtility.DisplayDialog("File Created", $"Beatmap file created successfully:\n{fullPath}", "OK");
 
                 // Clear any previous "file not found" messages for this entry
@@ -594,7 +595,7 @@ namespace RhythmPulse.GameplayData.Editor
             catch (Exception e)
             {
                 EditorUtility.DisplayDialog("Error Creating File", $"Failed to create file '{fullPath}': {e.Message}", "OK");
-                CLogger.LogError($"[MapInfoEditorWindow] Failed to create file '{fullPath}': {e.Message}");
+                GameplayDataEditorLog.Channel.Error($"[MapInfoEditorWindow] Failed to create file '{fullPath}': {e.Message}");
             }
         }
 
@@ -630,27 +631,16 @@ namespace RhythmPulse.GameplayData.Editor
 
             try
             {
-                byte[] hashBytes = new byte[FileUtility.GetHashSizeInBytes(HashAlgorithmType.MD5)];
-                Memory<byte> hashMemory = new Memory<byte>(hashBytes);
+                string md5Hex = await FileHasher.ComputeHexAsync(
+                    fullPath,
+                    FileHashAlgorithm.Md5,
+                    cancellationToken: System.Threading.CancellationToken.None);
 
-                bool success = await FileUtility.ComputeFileHashAsync(fullPath, HashAlgorithmType.MD5, hashMemory, System.Threading.CancellationToken.None);
-
-                if (success)
-                {
-                    string md5Hex = FileUtility.ToHexString(hashBytes);
-                    BeatMapInfo tempBeatmap = mapInfo.BeatmapDifficultyFiles[beatmapIndex];
-                    tempBeatmap.MD5 = md5Hex;
-                    mapInfo.BeatmapDifficultyFiles[beatmapIndex] = tempBeatmap;
-                    CLogger.LogInfo($"[MapInfoEditorWindow] MD5 for '{difficultyFileName}' (Entry #{beatmapIndex + 1}): {md5Hex}");
-                    SetValidationMessage($"DifficultyFile_{beatmapIndex}_MD5", "", MessageType.None); // Clear message
-                }
-                else
-                {
-                    SetValidationMessage($"DifficultyFile_{beatmapIndex}_MD5", $"Failed to compute MD5 for: {fullPath}.", MessageType.Error);
-                    BeatMapInfo tempBeatmap = mapInfo.BeatmapDifficultyFiles[beatmapIndex];
-                    tempBeatmap.MD5 = "Error computing";
-                    mapInfo.BeatmapDifficultyFiles[beatmapIndex] = tempBeatmap;
-                }
+                BeatMapInfo tempBeatmap = mapInfo.BeatmapDifficultyFiles[beatmapIndex];
+                tempBeatmap.MD5 = md5Hex;
+                mapInfo.BeatmapDifficultyFiles[beatmapIndex] = tempBeatmap;
+                GameplayDataEditorLog.Channel.Info($"[MapInfoEditorWindow] MD5 for '{difficultyFileName}' (Entry #{beatmapIndex + 1}): {md5Hex}");
+                SetValidationMessage($"DifficultyFile_{beatmapIndex}_MD5", "", MessageType.None); // Clear message
             }
             catch (System.Exception ex)
             {
@@ -753,7 +743,7 @@ namespace RhythmPulse.GameplayData.Editor
                         // Validate loaded LastModifiedTime format (optional, but good for consistency)
                         if (!System.DateTime.TryParse(mapInfo.LastModifiedTime, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out _))
                         {
-                            CLogger.LogWarning($"[MapInfoEditorWindow] Loaded LastModifiedTime '{mapInfo.LastModifiedTime}' is not in a valid ISO 8601 format. It will be updated on save.");
+                            GameplayDataEditorLog.Channel.Warning($"[MapInfoEditorWindow] Loaded LastModifiedTime '{mapInfo.LastModifiedTime}' is not in a valid ISO 8601 format. It will be updated on save.");
                             mapInfo.LastModifiedTime = "Invalid format"; // Indicate invalid format in UI
                         }
                     }
@@ -765,7 +755,7 @@ namespace RhythmPulse.GameplayData.Editor
                     // NEW: Post-load validation for difficulty files existence
                     PerformPostLoadBeatmapFileValidation();
 
-                    CLogger.LogInfo($"[MapInfoEditorWindow] MapInfo loaded from: {path}");
+                    GameplayDataEditorLog.Channel.Info($"[MapInfoEditorWindow] MapInfo loaded from: {path}");
                     EditorUtility.DisplayDialog("Load Successful", $"MapInfo data loaded from:\n{path}", "OK");
                     GUI.FocusControl(null);
                     Repaint();
@@ -773,20 +763,20 @@ namespace RhythmPulse.GameplayData.Editor
                 catch (VYaml.Parser.YamlParserException ype)
                 {
                     string detailedMessage = $"Error: {ype.Message}\n\nThis typically indicates a problem with the YAML file's formatting. Please check the file structure around the location indicated in the error message.";
-                    CLogger.LogError($"[MapInfoEditorWindow] Error parsing YAML syntax in file: {path}\n{ype.Message}\nDetails: {ype.ToString()}");
+                    GameplayDataEditorLog.Channel.Error($"[MapInfoEditorWindow] Error parsing YAML syntax in file: {path}\n{ype.Message}\nDetails: {ype.ToString()}");
                     EditorUtility.DisplayDialog("YAML Syntax Error",
                         $"Failed to parse YAML file: {Path.GetFileName(path)}\n\n{detailedMessage}\n\nCheck the console for the full file path and more details.", "OK");
                 }
                 catch (VYaml.Serialization.YamlSerializerException yse)
                 {
                     string detailedMessage = $"Error: {yse.Message}\n\nThis error often occurs if the YAML data doesn't match the expected structure or types.";
-                    CLogger.LogError($"[MapInfoEditorWindow] Error deserializing YAML data from file: {path}\n{yse.Message}\nDetails: {yse.ToString()}");
+                    GameplayDataEditorLog.Channel.Error($"[MapInfoEditorWindow] Error deserializing YAML data from file: {path}\n{yse.Message}\nDetails: {yse.ToString()}");
                     EditorUtility.DisplayDialog("YAML Data/Structure Error",
                         $"Failed to map YAML data in file: {Path.GetFileName(path)}\n\n{detailedMessage}\n\nCheck the console for the full file path and more details.", "OK");
                 }
                 catch (System.Exception ex)
                 {
-                    CLogger.LogError($"[MapInfoEditorWindow] Error loading YAML file: {path}\nGeneral Error: {ex.ToString()}");
+                    GameplayDataEditorLog.Channel.Error($"[MapInfoEditorWindow] Error loading YAML file: {path}\nGeneral Error: {ex.ToString()}");
                     EditorUtility.DisplayDialog("Error Loading File",
                         $"Failed to load YAML file: {Path.GetFileName(path)}\nError: {ex.Message}\n\nCheck the console for the full file path and more details.", "OK");
                 }
@@ -847,7 +837,7 @@ namespace RhythmPulse.GameplayData.Editor
                 int originalIndex = indicesToRemove[i];
                 mapInfo.BeatmapDifficultyFiles.RemoveAt(originalIndex);
                 ClearBeatmapValidationMessages(originalIndex); // Also clear any messages for the removed entry
-                CLogger.LogWarning($"[MapInfoEditorWindow] Removed missing/invalid beatmap entry #{originalIndex + 1} from MapInfo.");
+                GameplayDataEditorLog.Channel.Warning($"[MapInfoEditorWindow] Removed missing/invalid beatmap entry #{originalIndex + 1} from MapInfo.");
             }
 
             if (indicesToRemove.Count > 0)
@@ -885,7 +875,7 @@ namespace RhythmPulse.GameplayData.Editor
 
             if (string.IsNullOrEmpty(savePath))
             {
-                CLogger.LogInfo("[MapInfoEditorWindow] Save operation cancelled by user.");
+                GameplayDataEditorLog.Channel.Info("[MapInfoEditorWindow] Save operation cancelled by user.");
                 return; // User cancelled the save dialog
             }
 
@@ -896,11 +886,11 @@ namespace RhythmPulse.GameplayData.Editor
                 try
                 {
                     Directory.CreateDirectory(directory);
-                    CLogger.LogInfo($"[MapInfoEditorWindow] Created directory: {directory}");
+                    GameplayDataEditorLog.Channel.Info($"[MapInfoEditorWindow] Created directory: {directory}");
                 }
                 catch (Exception e)
                 {
-                    CLogger.LogError($"[MapInfoEditorWindow] Failed to create directory for MapInfo: {directory}. Error: {e.Message}");
+                    GameplayDataEditorLog.Channel.Error($"[MapInfoEditorWindow] Failed to create directory for MapInfo: {directory}. Error: {e.Message}");
                     EditorUtility.DisplayDialog("Error Creating Directory", $"Failed to create directory:\n{directory}\n\nError: {e.Message}\n\nSaving aborted.", "OK");
                     return; // Abort save if directory cannot be created
                 }
@@ -921,13 +911,13 @@ namespace RhythmPulse.GameplayData.Editor
 
                 AssetDatabase.Refresh(); // Refresh Project window to ensure Unity sees the new/updated file.
 
-                CLogger.LogInfo($"[MapInfoEditorWindow] MapInfo YAML saved to: {savePath}");
+                GameplayDataEditorLog.Channel.Info($"[MapInfoEditorWindow] MapInfo YAML saved to: {savePath}");
                 EditorUtility.DisplayDialog("Save Successful", $"MapInfo YAML saved to:\n{savePath}", "OK");
                 Repaint(); // To update LastModifiedTime display
             }
             catch (Exception ex)
             {
-                CLogger.LogError($"[MapInfoEditorWindow] Error saving YAML to {savePath}: {ex.ToString()}");
+                GameplayDataEditorLog.Channel.Error($"[MapInfoEditorWindow] Error saving YAML to {savePath}: {ex.ToString()}");
                 EditorUtility.DisplayDialog("Error Saving YAML", $"Failed to save YAML file to:\n{savePath}\n\nError: {ex.Message}\n\nCheck console for more details.", "OK");
             }
         }

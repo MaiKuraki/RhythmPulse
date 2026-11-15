@@ -3,9 +3,10 @@
     "rootNamespace": "",
     "references": [
         "RhythmPulse.GameplayData.Runtime",
-        "CycloneGames.Logger",
-        "CycloneGames.Utility.Runtime",
-        "CycloneGames.Logger.Util"
+        "CycloneGames.Logging.Core",
+        "CycloneGames.IO.Core",
+        "CycloneGames.IO.SystemIO",
+        "CycloneGames.Utility.Runtime"
     ],
     "includePlatforms": [
         "Editor"

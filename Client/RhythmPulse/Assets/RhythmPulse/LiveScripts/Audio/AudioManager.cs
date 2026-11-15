@@ -2,11 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using CycloneGames.AssetManagement.Runtime;
-using CycloneGames.Logger;
-using CycloneGames.Utility.Runtime;
+using CycloneGames.IO.Unity;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Networking;
+using CycloneGames.Logging;
 
 namespace RhythmPulse.Audio
 {
@@ -59,7 +59,7 @@ namespace RhythmPulse.Audio
             var normalizedPath = NormalizePath(path);
             if (string.IsNullOrEmpty(normalizedPath))
             {
-                CLogger.LogError("[ExternalAudioContentProvider] Invalid path: " + path);
+                RpLog.Channel.Error("[ExternalAudioContentProvider] Invalid path: " + path);
                 return UniTask.FromResult<AudioClip>(null);
             }
 
@@ -77,16 +77,16 @@ namespace RhythmPulse.Audio
                 path.StartsWith("file://", StringComparison.OrdinalIgnoreCase) ||
                 path.StartsWith("jar:file://", StringComparison.OrdinalIgnoreCase))
             {
-                return FilePathUtility.GetUnityWebRequestUri(path, UnityPathSource.AbsoluteOrFullUri);
+                return UnityPathUtility.GetUnityWebRequestUri(path, UnityFileLocation.AbsolutePathOrUri);
             }
 
             // Heuristic: rooted disk paths are absolute, otherwise treat as persistentData relative path.
             if (System.IO.Path.IsPathRooted(path))
             {
-                return FilePathUtility.GetUnityWebRequestUri(path, UnityPathSource.AbsoluteOrFullUri);
+                return UnityPathUtility.GetUnityWebRequestUri(path, UnityFileLocation.AbsolutePathOrUri);
             }
 
-            return FilePathUtility.GetUnityWebRequestUri(path, UnityPathSource.PersistentData);
+            return UnityPathUtility.GetUnityWebRequestUri(path, UnityFileLocation.PersistentData);
         }
 
         private static AudioType GetAudioType(string path)
@@ -208,13 +208,13 @@ namespace RhythmPulse.Audio
                 var pkg = _assetModule.GetPackage("DefaultPackage");
                 if (pkg == null)
                 {
-                    CLogger.LogError("[AudioManager] Failed to get DefaultPackage from IAssetModule");
+                    RpLog.Channel.Error("[AudioManager] Failed to get DefaultPackage from IAssetModule");
                     return;
                 }
 
                 if (!_audioSourcePrefabRef.IsValid)
                 {
-                    CLogger.LogError("[AudioManager] AudioSource prefab AssetRef is invalid.");
+                    RpLog.Channel.Error("[AudioManager] AudioSource prefab AssetRef is invalid.");
                     return;
                 }
 
@@ -231,18 +231,18 @@ namespace RhythmPulse.Audio
                     }
                     else
                     {
-                        CLogger.LogError("[AudioManager] Loaded prefab missing GameAudioSource component");
+                        RpLog.Channel.Error("[AudioManager] Loaded prefab missing GameAudioSource component");
                     }
                 }
                 else
                 {
-                    CLogger.LogError("[AudioManager] Failed to load AudioSourcePrefab: " + _audioSourcePrefabRef.Location + ", Error: " + (_audioSourceHandle?.Error ?? "Unknown error"));
+                    RpLog.Channel.Error("[AudioManager] Failed to load AudioSourcePrefab: " + _audioSourcePrefabRef.Location + ", Error: " + (_audioSourceHandle?.Error ?? "Unknown error"));
                 }
             }
             catch (OperationCanceledException) { }
             catch (Exception ex)
             {
-                CLogger.LogError("[AudioManager] Unexpected error loading AudioSourcePrefab: " + ex.Message);
+                RpLog.Channel.Error("[AudioManager] Unexpected error loading AudioSourcePrefab: " + ex.Message);
             }
         }
 
@@ -281,7 +281,7 @@ namespace RhythmPulse.Audio
                     _audioLoadStates[path] = AudioLoadState.NotLoaded;
                     loadRequest.Completion.TrySetResult(null);
                     _loadingTasks.Remove(path);
-                    CLogger.LogError("[AudioManager] No audio provider can handle path: " + path);
+                    RpLog.Channel.Error("[AudioManager] No audio provider can handle path: " + path);
                     return null;
                 }
 
