@@ -3,6 +3,7 @@ using Cysharp.Threading.Tasks;
 using IngameDebugConsole;
 using UnityDebugSheet;
 using UnityDebugSheet.Runtime.Extensions.IngameDebugConsole;
+using UnityDebugSheet.Runtime.Extensions.Unity;
 using UnityEngine;
 
 namespace RhythmPulse.Cheat
@@ -118,6 +119,9 @@ namespace RhythmPulse.Cheat
                         "In-Game Console Debug",
                         () => Debug.LogError("[DebugSheet] DebugLogManager is missing; cannot open the console page."));
                 }
+
+                TryAddPageLinkButton<RhythmPulseDebugPage>("RhythmPulse");
+                TryAddPageLinkButton<SystemInfoDebugPage>("System Info");
 
                 // Proves the optional cheat bridge end-to-end: the Console trace always appears, the
                 // framework dispatch only when the package is installed.
