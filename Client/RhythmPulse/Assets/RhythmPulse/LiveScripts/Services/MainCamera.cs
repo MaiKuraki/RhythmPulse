@@ -10,7 +10,6 @@ namespace RhythmPulse.Services
     /// </summary>
     public class MainCamera : MonoBehaviour
     {
-        private const string DEBUG_FLAG = "[MainCamera]";
 
         [SerializeField] private Camera _camera;
         [SerializeField] private bool _singleton = true;
@@ -47,7 +46,7 @@ namespace RhythmPulse.Services
             _urpCameraData ??= CameraInst?.GetUniversalAdditionalCameraData();
             if (_urpCameraData == null)
             {
-                RpLog.Channel.Warning($"{DEBUG_FLAG} Invalid URP camera data");
+                RPLog.Channel.Warning("Invalid URP camera data");
                 return;
             }
 
@@ -72,7 +71,7 @@ namespace RhythmPulse.Services
             _urpCameraData ??= CameraInst?.GetUniversalAdditionalCameraData();
             if (_urpCameraData == null)
             {
-                RpLog.Channel.Warning($"{DEBUG_FLAG} Invalid URP camera data");
+                RPLog.Channel.Warning("Invalid URP camera data");
                 return;
             }
 

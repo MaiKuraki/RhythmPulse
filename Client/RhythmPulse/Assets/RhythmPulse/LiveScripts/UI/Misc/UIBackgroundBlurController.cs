@@ -300,6 +300,8 @@ namespace RhythmPulse.UI
         {
             if (_blurShader == null)
             {
+                // Keeps the Object context overload instead of RPLog: point-and-click navigation to the
+                // misconfigured component is the whole value of this authoring-time check.
                 Debug.LogError("[UIBackgroundBlurController] Blur Shader is not assigned.", this);
                 enabled = false;
                 return;

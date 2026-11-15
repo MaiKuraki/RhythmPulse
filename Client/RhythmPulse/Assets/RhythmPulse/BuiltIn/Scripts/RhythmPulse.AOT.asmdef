@@ -4,6 +4,7 @@
     "references": [
         "UniTask",
         "VContainer",
+        "CycloneGames.Logging.Core",
         "MackySoft.Navigathena",
         "MackySoft.Navigathena.SceneManagement",
         "MackySoft.Navigathena.SceneManagement.Addressables",

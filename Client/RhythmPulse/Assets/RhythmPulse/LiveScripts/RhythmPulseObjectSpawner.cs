@@ -22,7 +22,7 @@ namespace RhythmPulse
         {
             if (origin == null)
             {
-                RpLog.Channel.Error("[RhythmPulseObjectSpawner] Invalid prefab to spawn");
+                RPLog.Channel.Error("Invalid prefab to spawn");
                 return null;
             }
 
@@ -35,7 +35,7 @@ namespace RhythmPulse
         {
             if (origin == null)
             {
-                RpLog.Channel.Error("[RhythmPulseObjectSpawner] Invalid prefab to spawn");
+                RPLog.Channel.Error("Invalid prefab to spawn");
                 return null;
             }
 

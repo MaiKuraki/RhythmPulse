@@ -1,4 +1,5 @@
 using System;
+using CycloneGames.Logging;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 
@@ -32,7 +33,7 @@ namespace RhythmPulse.Audio
             _audioManager = UnityEngine.Object.FindFirstObjectByType<AudioManager>();
             if (_audioManager == null)
             {
-                Debug.LogError("[AudioLoadService] No AudioManager instance found in the scene");
+                RPLog.Channel.Error("No AudioManager instance found in the scene");
                 return;
             }
             _isInitialized = true;

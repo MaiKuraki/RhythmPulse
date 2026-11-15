@@ -31,11 +31,11 @@ namespace RhythmPulse.UI
             switch (gameMode)
             {
                 case EGameMode.Beats:
-                    RpLog.Channel.Info("[UIWindowLobby] Enter Beats Game");
+                    RPLog.Channel.Info("Enter Beats Game");
                     EnterTraditionalBeatsGame?.Invoke();
                     break;
                 case EGameMode.Dance:
-                    RpLog.Channel.Info("[UIWindowLobby] Enter Dance Game");
+                    RPLog.Channel.Info("Enter Dance Game");
                     EnterDanceGame?.Invoke();
                     break;
             }

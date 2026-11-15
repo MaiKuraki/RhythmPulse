@@ -7,7 +7,6 @@ namespace RhythmPulse.Scene
 {
     public class LifetimeScopeLobbyScene : LifetimeScope
     {
-        private const string DEBUG_FLAG = "[LifetimeScopeLobbyScene]";
 
         protected override void Configure(IContainerBuilder builder)
         {

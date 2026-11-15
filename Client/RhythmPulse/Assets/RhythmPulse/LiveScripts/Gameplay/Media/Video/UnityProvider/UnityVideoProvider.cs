@@ -163,7 +163,7 @@ namespace RhythmPulse.Media
 
             if (!textureField.Create())
             {
-                RpLog.Channel.Error("[UnityVideoProvider] Failed to create RenderTexture");
+                RPLog.Channel.Error("Failed to create RenderTexture");
                 return;
             }
 
@@ -176,7 +176,7 @@ namespace RhythmPulse.Media
             InitializeVideoPlayerAsync(videoUrl, bLoop).Forget(e =>
             {
                 if (e is not OperationCanceledException)
-                    RpLog.Channel.Error("[UnityVideoProvider] InitializeVideoPlayer failed: " + e.Message);
+                    RPLog.Channel.Error("InitializeVideoPlayer failed: " + e.Message);
             });
         }
 
@@ -184,7 +184,7 @@ namespace RhythmPulse.Media
         {
             if (string.IsNullOrEmpty(videoUrl))
             {
-                RpLog.Channel.Error("[UnityVideoProvider] Video URL is empty");
+                RPLog.Channel.Error("Video URL is empty");
                 return;
             }
 
@@ -216,7 +216,7 @@ namespace RhythmPulse.Media
             {
                 if (_standbyVideoPlayer == null)
                 {
-                    RpLog.Channel.Error("[UnityVideoProvider] Standby VideoPlayer is null");
+                    RPLog.Channel.Error("Standby VideoPlayer is null");
                     return;
                 }
 
@@ -269,7 +269,7 @@ namespace RhythmPulse.Media
 
             if (!success && !token.IsCancellationRequested)
             {
-                RpLog.Channel.Error("[UnityVideoProvider] Failed to prepare video after retries");
+                RPLog.Channel.Error("Failed to prepare video after retries");
             }
         }
 
@@ -294,7 +294,7 @@ namespace RhythmPulse.Media
 
                 if (player.targetTexture == null || !player.targetTexture.IsCreated())
                 {
-                    RpLog.Channel.Error("[UnityVideoProvider] TargetTexture missing");
+                    RPLog.Channel.Error("TargetTexture missing");
                     return PrepareAttemptStatus.Error;
                 }
 
@@ -330,7 +330,7 @@ namespace RhythmPulse.Media
             }
             catch (Exception ex)
             {
-                RpLog.Channel.Error("[UnityVideoProvider] Prepare exception: " + ex.Message);
+                RPLog.Channel.Error("Prepare exception: " + ex.Message);
                 SafeStopPlayer(player);
                 return PrepareAttemptStatus.Error;
             }
@@ -354,7 +354,7 @@ namespace RhythmPulse.Media
 
         private void OnErrorReceivedHandler(VideoPlayer source, string msg)
         {
-            RpLog.Channel.Error("[UnityVideoProvider] Video Error: " + msg);
+            RPLog.Channel.Error("Video Error: " + msg);
             _prepareCompletionSource?.TrySetResult(false);
         }
 
@@ -462,7 +462,7 @@ namespace RhythmPulse.Media
             catch (Exception ex)
             {
                 if (ex is not OperationCanceledException)
-                    RpLog.Channel.Error("[UnityVideoProvider] Seek error: " + ex.Message);
+                    RPLog.Channel.Error("Seek error: " + ex.Message);
             }
             finally
             {

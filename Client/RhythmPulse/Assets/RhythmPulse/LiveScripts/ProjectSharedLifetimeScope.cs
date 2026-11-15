@@ -110,7 +110,7 @@ namespace RhythmPulse
             {
                 _mapStorage.AddBasePath("DownloadedMap", UnityFileLocation.PersistentData);
                 _mapListManager.LoadAllMapsAsync(UnityEngine.Application.exitCancellationToken);
-                RpLog.Channel.Info("[MapListGlobalInitializer] Initiated global map list");
+                RPLog.Channel.Info("Global map list loading started.");
             }
         }
     }

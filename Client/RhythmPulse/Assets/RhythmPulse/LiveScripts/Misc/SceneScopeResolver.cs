@@ -22,9 +22,8 @@ namespace RhythmPulse.Misc
     /// </summary>
     public sealed class SceneScopeResolver : IDisposable
     {
-        private const string DEBUG_FLAG = "[SceneScopeResolver]";
 
-        private static readonly LogChannel Log = RpLog.Channel;
+        private static readonly LogChannel Log = RPLog.Channel;
 
         private readonly IObjectResolver _projectResolver;
         private LifetimeScope _cachedScope;
@@ -101,7 +100,7 @@ namespace RhythmPulse.Misc
             IObjectResolver resolver = Resolve();
             if (resolver == null)
             {
-                Log.Warning($"{DEBUG_FLAG} No resolver available; skipped injection for {instance.GetType().Name}.");
+                Log.Warning($"No resolver available; skipped injection for {instance.GetType().Name}.");
                 return;
             }
 

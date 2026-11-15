@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using CycloneGames.AssetManagement.Runtime;
+using CycloneGames.Logging;
 using Cysharp.Threading.Tasks;
 using MackySoft.Navigathena;
 using MackySoft.Navigathena.SceneManagement;
@@ -46,7 +47,7 @@ namespace RhythmPulse.AOT
             {
                 if (!assetModule.Initialized)
                 {
-                    UnityEngine.Debug.Log("[LifecycleSceneLaunch] Asset module not yet initialized, waiting...");
+                    AOTLog.Channel.Info("Asset module not yet initialized, waiting...");
                     int waitCount = 0;
                     while (!assetModule.Initialized && waitCount < 100) // Wait up to 10 seconds
                     {
@@ -56,7 +57,7 @@ namespace RhythmPulse.AOT
 
                     if (!assetModule.Initialized)
                     {
-                        UnityEngine.Debug.LogError("[LifecycleSceneLaunch] Asset module initialization timeout!");
+                        AOTLog.Channel.Error("Asset module initialization timeout!");
                         return false;
                     }
                 }
@@ -69,7 +70,7 @@ namespace RhythmPulse.AOT
 
                 if (pkg == null)
                 {
-                    UnityEngine.Debug.LogError("[LifecycleSceneLaunch] Asset package initialization failed: package is null.");
+                    AOTLog.Channel.Error("Asset package initialization failed: package is null.");
                     return false;
                 }
 
@@ -79,25 +80,25 @@ namespace RhythmPulse.AOT
                 if (pkg is IAddressablesCatalogMaintenance catalogMaintenance)
                 {
                     var releaseVersion = await catalogMaintenance.ReadReleaseMetadataVersionAsync(cancellationToken);
-                    UnityEngine.Debug.Log($"[LifecycleSceneLaunch] Release metadata version: {releaseVersion}");
+                    AOTLog.Channel.Info($"Release metadata version: {releaseVersion}");
 
                     // Try to refresh catalogs (for hot-update/online games)
                     // For standalone games, this will gracefully handle "content update not available"
                     var catalogUpdateSuccess = await catalogMaintenance.UpdateLatestCatalogsAsync(cancellationToken);
                     if (catalogUpdateSuccess)
                     {
-                        UnityEngine.Debug.Log($"[LifecycleSceneLaunch] Addressables catalogs refreshed. Release version: {releaseVersion}");
+                        AOTLog.Channel.Info($"Addressables catalogs refreshed. Release version: {releaseVersion}");
                     }
                     else
                     {
                         // Update failed, but this might be expected for standalone games
                         // Continue anyway as we can use local content
-                        UnityEngine.Debug.LogWarning($"[LifecycleSceneLaunch] Catalog update failed, but continuing with local content. Release version: {releaseVersion}");
+                        AOTLog.Channel.Warning($"Catalog update failed, but continuing with local content. Release version: {releaseVersion}");
                     }
                 }
                 else
                 {
-                    UnityEngine.Debug.Log("[LifecycleSceneLaunch] Package does not expose catalog maintenance; using bundled catalogs.");
+                    AOTLog.Channel.Info("Package does not expose catalog maintenance; using bundled catalogs.");
                 }
 #endif
 
@@ -105,12 +106,12 @@ namespace RhythmPulse.AOT
             }
             catch (OperationCanceledException)
             {
-                UnityEngine.Debug.Log("[LifecycleSceneLaunch] Package initialization was cancelled.");
+                AOTLog.Channel.Info("Package initialization was cancelled.");
                 return false;
             }
             catch (System.Exception ex)
             {
-                UnityEngine.Debug.LogError($"[LifecycleSceneLaunch] Exception during YooAsset initialization: {ex.Message}\nStack trace: {ex.StackTrace}");
+                AOTLog.Channel.Error(ex, "Asset package initialization failed.");
                 return false;
             }
         }

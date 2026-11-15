@@ -9,6 +9,9 @@ namespace RhythmPulse
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterAssembliesLoaded)]
         public static void SetDefaultObservableSystem()
         {
+            // Deliberately bypasses RPLog: this runs before the logging pipeline exists
+            // (AfterAssembliesLoaded vs. BeforeSceneLoad), and a swallowed exception here would hide
+            // exactly the failures this handler exists to surface. Debug.LogException always prints.
             SetDefaultObservableSystem(static ex => UnityEngine.Debug.LogException(ex));
         }
 

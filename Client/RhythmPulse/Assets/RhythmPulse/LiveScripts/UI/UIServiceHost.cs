@@ -17,9 +17,8 @@ namespace RhythmPulse.UI
     /// </summary>
     public sealed class UIServiceHost : IDisposable
     {
-        private const string DEBUG_FLAG = "[UIServiceHost]";
 
-        private static readonly LogChannel Log = RpLog.Channel;
+        private static readonly LogChannel Log = RPLog.Channel;
 
         private readonly IMainCameraService _mainCameraService;
         private readonly SceneScopeResolver _sceneScopes;
@@ -48,14 +47,14 @@ namespace RhythmPulse.UI
 
             if (package == null)
             {
-                Log.Error($"{DEBUG_FLAG} Cannot create the UI service without an initialized asset package.");
+                Log.Error("Cannot create the UI service without an initialized asset package.");
                 return null;
             }
 
             UIRoot root = UnityEngine.Object.FindFirstObjectByType<UIRoot>(FindObjectsInactive.Include);
             if (root == null)
             {
-                Log.Error($"{DEBUG_FLAG} UIRoot not found. Make sure the UIFramework prefab is instantiated before the initial scene enters.");
+                Log.Error("UIRoot not found. Make sure the UIFramework prefab is instantiated before the initial scene enters.");
                 return null;
             }
 
@@ -83,10 +82,10 @@ namespace RhythmPulse.UI
             }
             else
             {
-                Log.Warning($"{DEBUG_FLAG} UIRoot has no UI camera assigned; UI will not render.");
+                Log.Warning("UIRoot has no UI camera assigned; UI will not render.");
             }
 
-            Log.Info($"{DEBUG_FLAG} UI service created for {root.LayerCount} layers.");
+            Log.Info($"UI service created for {root.LayerCount} layers.");
             return _service;
         }
 
@@ -105,7 +104,7 @@ namespace RhythmPulse.UI
             }
             catch (Exception exception)
             {
-                Log.Error(exception, $"{DEBUG_FLAG} UI service disposal failed.");
+                Log.Error(exception, "UI service disposal failed.");
             }
         }
     }

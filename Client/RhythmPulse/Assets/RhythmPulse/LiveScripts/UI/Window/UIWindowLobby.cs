@@ -12,7 +12,6 @@ namespace RhythmPulse.UI
 {
     public class UIWindowLobby : UIWindow
     {
-        private const string DEBUG_FLAG = "[UIWindowLobby]";
         [Inject] private ISceneManagementAPIGateway sceneManagementAPIGateway;
 
         [SerializeField] Transform GameModeSelectionTF;
@@ -91,7 +90,7 @@ namespace RhythmPulse.UI
             }
             else
             {
-                RpLog.Channel.Warning($"{DEBUG_FLAG} Invalid GamplayData");
+                RPLog.Channel.Warning("Invalid GamplayData");
             }
         }
 

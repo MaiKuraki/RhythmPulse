@@ -11,7 +11,6 @@ namespace RhythmPulse.UI
 {
     class MapListScrollView : FancyScrollView<ItemData, MapListContext>
     {
-        private const string DEBUG_FLAG = "[MapListScrollView]";
         [SerializeField] Scroller scroller = default;
         [SerializeField] GameObject cellPrefab = default;
         public Action<ItemData> OnSelectedEvent;
@@ -71,7 +70,7 @@ namespace RhythmPulse.UI
         {
             Refresh();
             await OnSelectionChangedAsync(index, cancellationTokenSource);
-            // RpLog.Channel.Info($"{DEBUG_FLAG} ForceUpdateSelection {index}, data: {data.Message}");
+            // RPLog.Channel.Info($"ForceUpdateSelection {index}, data: {data.Message}");
         }
 
         private async UniTask OnSelectionChangedAsync(int index, CancellationTokenSource cancellationTokenSource)

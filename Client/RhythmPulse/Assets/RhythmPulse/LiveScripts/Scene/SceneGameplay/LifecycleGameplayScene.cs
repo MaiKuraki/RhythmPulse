@@ -1,5 +1,6 @@
 using System;
 using System.Threading;
+using CycloneGames.Logging;
 using CycloneGames.UIFramework.Runtime;
 using Cysharp.Threading.Tasks;
 using MackySoft.Navigathena;
@@ -43,7 +44,7 @@ namespace RhythmPulse.Scene
             }
             catch (System.Exception ex)
             {
-                UnityEngine.Debug.LogWarning($"[LifecycleGameplayScene] Error closing {UIWindowName.GameplayHUDBeatsGame}: {ex.Message}");
+                RPLog.Channel.Warning($"Error closing {UIWindowName.GameplayHUDBeatsGame}: {ex.Message}");
             }
 
             try
@@ -52,7 +53,7 @@ namespace RhythmPulse.Scene
             }
             catch (System.Exception ex)
             {
-                UnityEngine.Debug.LogWarning($"[LifecycleGameplayScene] Error closing {UIWindowName.UIWindowGameplayResult}: {ex.Message}");
+                RPLog.Channel.Warning($"Error closing {UIWindowName.UIWindowGameplayResult}: {ex.Message}");
             }
 
             cancelLoadGameplayMedias.Cancel();

@@ -16,7 +16,6 @@ namespace RhythmPulse.UI
 {
     class MapListCell : FancyCell<ItemData, MapListContext>
     {
-        private const string DEBUG_FLAG = "[MapListCell]";
         [SerializeField] Transform focusFlagTF = default;
         [SerializeField] Animator animator = default;
         [SerializeField] TMP_Text message = default;
@@ -69,7 +68,7 @@ namespace RhythmPulse.UI
         {
             Context.OnCellClicked?.Invoke(Index);
             // cachedItemData.OnSelectedEvent?.Invoke();
-            // RpLog.Channel.Info($"{DEBUG_FLAG} Selected {cachedItemData.MapInfo}, index: {Index}");
+            // RPLog.Channel.Info($"Selected {cachedItemData.MapInfo}, index: {Index}");
         }
 
         public override void UpdatePosition(float position)

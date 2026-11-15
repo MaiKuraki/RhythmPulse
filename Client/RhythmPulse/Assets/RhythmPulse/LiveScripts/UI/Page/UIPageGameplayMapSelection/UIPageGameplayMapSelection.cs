@@ -24,7 +24,6 @@ namespace RhythmPulse.UI
     /// </summary>
     public class UIPageGameplayMapSelection : MonoBehaviour
     {
-        private const string DEBUG_FLAG = "[UIPageGameplayMapSelection]";
 
         [Header("Component References")]
         [SerializeField] private RhythmPulse.UI.MapListScrollView scrollView = default;
@@ -117,7 +116,7 @@ namespace RhythmPulse.UI
             scrollView.SetCellInterval(1 / (uiService.GetRootCanvasSize().y / 140.0f));
 
             IsDIInitialized = true;
-            UnityEngine.Debug.Log($"Construct MapSelection");
+            RPLog.Channel.Debug("Map selection page constructed.");
         }
 
         void OnDestroy()
@@ -204,7 +203,7 @@ namespace RhythmPulse.UI
             }
             else
             {
-                RpLog.Channel.Warning($"{DEBUG_FLAG} Cannot enter gameplay, GameplayData is invalid. Likely no valid difficulty selected.");
+                RPLog.Channel.Warning("Cannot enter gameplay, GameplayData is invalid. Likely no valid difficulty selected.");
             }
         }
 

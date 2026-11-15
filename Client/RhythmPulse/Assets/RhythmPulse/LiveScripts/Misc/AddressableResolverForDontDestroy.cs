@@ -14,7 +14,6 @@ namespace RhythmPulse.Misc
     /// </summary>
     public sealed class AddressableResolverForDontDestroy : MonoBehaviour
     {
-        private const string DEBUG_FLAG = "[AssetResolver]";
 
         [SerializeField]
         private List<AssetResolverEntry> entries = new List<AssetResolverEntry>();
@@ -28,13 +27,13 @@ namespace RhythmPulse.Misc
             // Idempotency guard: prevent double-init (re-entry during async load leaks handles)
             if (Initialized || _loadedHandles != null)
             {
-                RpLog.Channel.Warning($"{DEBUG_FLAG} Already initialized or initializing. Skipping.");
+                RPLog.Channel.Warning("Already initialized or initializing. Skipping.");
                 return;
             }
 
             if (assetPackage == null)
             {
-                RpLog.Channel.Error($"{DEBUG_FLAG} Invalid asset package.");
+                RPLog.Channel.Error("Invalid asset package.");
                 return;
             }
 
@@ -49,7 +48,7 @@ namespace RhythmPulse.Misc
                 var entry = entries[i];
                 if (!entry.Prefab.IsValid)
                 {
-                    RpLog.Channel.Warning($"{DEBUG_FLAG} Skipping invalid entry: {entry.DisplayName}");
+                    RPLog.Channel.Warning($"Skipping invalid entry: {entry.DisplayName}");
                     tasks[i] = UniTask.CompletedTask;
                     _loadedHandles.Add(null);
                     continue;
@@ -72,16 +71,16 @@ namespace RhythmPulse.Misc
                 {
                     var instance = Instantiate(prefab);
                     DontDestroyOnLoad(instance);
-                    RpLog.Channel.Info($"{DEBUG_FLAG} Instantiate: {prefab.name}");
+                    RPLog.Channel.Info($"Instantiate: {prefab.name}");
                 }
                 else
                 {
-                    RpLog.Channel.Error($"{DEBUG_FLAG} Failed to load: {entries[i].Prefab.Location}, Error: {handle.Error}");
+                    RPLog.Channel.Error($"Failed to load: {entries[i].Prefab.Location}, Error: {handle.Error}");
                 }
             }
 
             Initialized = true;
-            RpLog.Channel.Info($"{DEBUG_FLAG} Initialization complete. {count} entries processed.");
+            RPLog.Channel.Info($"Initialization complete. {count} entries processed.");
         }
 
         private void OnDestroy()
@@ -93,7 +92,7 @@ namespace RhythmPulse.Misc
 
             // Null out the list reference; the List object itself is GC'd with this MonoBehaviour.
             _loadedHandles = null;
-            RpLog.Channel.Info($"{DEBUG_FLAG} All handles disposed.");
+            RPLog.Channel.Info("All handles disposed.");
         }
     }
 

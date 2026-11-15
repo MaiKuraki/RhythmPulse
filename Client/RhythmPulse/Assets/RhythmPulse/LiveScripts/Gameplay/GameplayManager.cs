@@ -18,7 +18,6 @@ namespace RhythmPulse.Gameplay
 {
     public class GameplayManager : MonoBehaviour
     {
-        private const string DEBUG_FLAG = "[GameplayManager]";
         private bool IsDIInitialized = false;
         private IMainCameraService mainCameraService;
         private IAudioLoadService audioLoadService;
@@ -88,7 +87,7 @@ namespace RhythmPulse.Gameplay
 
                 if (GameplayTimeline.State == GameplayTimeline.PlayingState)
                 {
-                    // RpLog.Channel.Info($"CurrentAudioLength: {GameplayTimeline.GameplayMusicPlayer?.GetCurrentMusicLengthMSec()}");
+                    // RPLog.Channel.Info($"CurrentAudioLength: {GameplayTimeline.GameplayMusicPlayer?.GetCurrentMusicLengthMSec()}");
                     OnUpdatePlaybackProgress?.Invoke(GetCurrentMusicPlaybackProgress());
 
                     if (GetPlaybackTimeRemainingMSec() <= 50)
@@ -112,7 +111,7 @@ namespace RhythmPulse.Gameplay
             }
             catch (Exception exception)
             {
-                RpLog.Channel.Error(exception, $"{DEBUG_FLAG} Failed to open the gameplay result window.");
+                RPLog.Channel.Error(exception, "Failed to open the gameplay result window.");
             }
         }
 

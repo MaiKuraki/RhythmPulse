@@ -31,7 +31,7 @@ namespace RhythmPulse.Audio
             if (www.result == UnityWebRequest.Result.ConnectionError || 
                 www.result == UnityWebRequest.Result.ProtocolError)
             {
-                Debug.LogError("[UnityAudioLoader] Error loading audio: " + www.error);
+                RPLog.Channel.Error("Error loading audio: " + www.error);
                 return null;
             }
 
@@ -59,7 +59,7 @@ namespace RhythmPulse.Audio
             var normalizedPath = NormalizePath(path);
             if (string.IsNullOrEmpty(normalizedPath))
             {
-                RpLog.Channel.Error("[ExternalAudioContentProvider] Invalid path: " + path);
+                RPLog.Channel.Error("External audio provider received an invalid path: " + path);
                 return UniTask.FromResult<AudioClip>(null);
             }
 
@@ -208,13 +208,13 @@ namespace RhythmPulse.Audio
                 var pkg = _assetModule.GetPackage("DefaultPackage");
                 if (pkg == null)
                 {
-                    RpLog.Channel.Error("[AudioManager] Failed to get DefaultPackage from IAssetModule");
+                    RPLog.Channel.Error("Failed to get DefaultPackage from IAssetModule");
                     return;
                 }
 
                 if (!_audioSourcePrefabRef.IsValid)
                 {
-                    RpLog.Channel.Error("[AudioManager] AudioSource prefab AssetRef is invalid.");
+                    RPLog.Channel.Error("AudioSource prefab AssetRef is invalid.");
                     return;
                 }
 
@@ -231,18 +231,18 @@ namespace RhythmPulse.Audio
                     }
                     else
                     {
-                        RpLog.Channel.Error("[AudioManager] Loaded prefab missing GameAudioSource component");
+                        RPLog.Channel.Error("Loaded prefab missing GameAudioSource component");
                     }
                 }
                 else
                 {
-                    RpLog.Channel.Error("[AudioManager] Failed to load AudioSourcePrefab: " + _audioSourcePrefabRef.Location + ", Error: " + (_audioSourceHandle?.Error ?? "Unknown error"));
+                    RPLog.Channel.Error("Failed to load AudioSourcePrefab: " + _audioSourcePrefabRef.Location + ", Error: " + (_audioSourceHandle?.Error ?? "Unknown error"));
                 }
             }
             catch (OperationCanceledException) { }
             catch (Exception ex)
             {
-                RpLog.Channel.Error("[AudioManager] Unexpected error loading AudioSourcePrefab: " + ex.Message);
+                RPLog.Channel.Error("Unexpected error loading AudioSourcePrefab: " + ex.Message);
             }
         }
 
@@ -281,7 +281,7 @@ namespace RhythmPulse.Audio
                     _audioLoadStates[path] = AudioLoadState.NotLoaded;
                     loadRequest.Completion.TrySetResult(null);
                     _loadingTasks.Remove(path);
-                    RpLog.Channel.Error("[AudioManager] No audio provider can handle path: " + path);
+                    RPLog.Channel.Error("No audio provider can handle path: " + path);
                     return null;
                 }
 
@@ -317,7 +317,7 @@ namespace RhythmPulse.Audio
             }
             catch (Exception ex)
             {
-                Debug.LogError("[AudioManager] Exception loading audio: " + ex.Message);
+                RPLog.Channel.Error("Exception loading audio: " + ex.Message);
                 _audioLoadStates[path] = AudioLoadState.NotLoaded;
                 loadRequest.Completion.TrySetResult(null);
                 _loadingTasks.Remove(path);

@@ -10,7 +10,6 @@ namespace RhythmPulse
     /// </summary>
     public static class UnityPathUtility
     {
-        private const string DEBUG_FLAG = "[UnityPathUtility]";
 
         /// <summary>
         /// Builds a platform-correct URI for use with UnityWebRequest.
@@ -33,7 +32,7 @@ namespace RhythmPulse
                 return uri;
             }
 
-            RpLog.Channel.Warning($"{DEBUG_FLAG} Cannot build URI for '{path}' ({location}): {error}");
+            RPLog.Channel.Warning($"Cannot build URI for '{path}' ({location}): {error}");
             return null;
         }
     }

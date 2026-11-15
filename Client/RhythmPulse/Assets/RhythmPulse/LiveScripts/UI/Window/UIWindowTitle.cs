@@ -34,7 +34,7 @@ namespace RhythmPulse.UI
 
         void ClickStart()
         {
-            // RpLog.Channel.Info("[UIWindowTitle] ClickStart");
+            // RPLog.Channel.Info("ClickStart");
             sceneManagementAPIGateway.Push(SceneDefinitions.Lobby);
         }
     }

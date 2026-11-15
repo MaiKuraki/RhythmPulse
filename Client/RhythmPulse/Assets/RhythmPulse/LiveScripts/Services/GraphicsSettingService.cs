@@ -58,7 +58,6 @@ namespace RhythmPulse.Services
 
     public sealed class GraphicsSettingService : IGraphicsSettingService, IDisposable
     {
-        private const string DEBUG_FLAG = "[GraphicsSettings]";
 
         private int _currentQualityLevel = -1;
         private IReadOnlyList<string> _qualityLevels;
@@ -89,7 +88,7 @@ namespace RhythmPulse.Services
         public GraphicsSettingService()
         {
             _targetRenderResolution = new Vector2Int(Screen.width, Screen.height);
-            RpLog.Channel.Info($"{DEBUG_FLAG} Initialized. Resolution: {Screen.width}x{Screen.height}");
+            RPLog.Channel.Info($"Initialized. Resolution: {Screen.width}x{Screen.height}");
         }
 
         #region Quality & Frame Rate
@@ -98,7 +97,7 @@ namespace RhythmPulse.Services
         {
             if (qualityLevel < 0 || qualityLevel >= QualityLevels.Count)
             {
-                RpLog.Channel.Error($"{DEBUG_FLAG} Invalid quality level: {qualityLevel}");
+                RPLog.Channel.Error($"Invalid quality level: {qualityLevel}");
                 return;
             }
             QualitySettings.SetQualityLevel(qualityLevel, true);
@@ -134,7 +133,7 @@ namespace RhythmPulse.Services
             var asset = UniversalRenderPipeline.asset;
             if (asset == null)
             {
-                RpLog.Channel.Warning($"{DEBUG_FLAG} URP asset not found, cannot set render scale");
+                RPLog.Channel.Warning("URP asset not found, cannot set render scale");
                 return;
             }
             asset.renderScale = Mathf.Clamp(scale, 0.1f, 2f);
@@ -164,13 +163,13 @@ namespace RhythmPulse.Services
                 Screen.SetResolution(w, h, Screen.fullScreen);
                 await UniTask.Delay(100, DelayType.Realtime, PlayerLoopTiming.Update, ct);
 
-                RpLog.Channel.Info($"{DEBUG_FLAG} Resolution changed to: {w}x{h} (Display: {displayWidth}x{displayHeight}, Aspect: {aspect:F2})");
+                RPLog.Channel.Info($"Resolution changed to: {w}x{h} (Display: {displayWidth}x{displayHeight}, Aspect: {aspect:F2})");
                 OnSettingsApplied?.Invoke();
             }
             catch (OperationCanceledException) { }
             catch (Exception ex)
             {
-                RpLog.Channel.Error($"{DEBUG_FLAG} Resolution change failed: {ex.Message}");
+                RPLog.Channel.Error($"Resolution change failed: {ex.Message}");
             }
         }
 

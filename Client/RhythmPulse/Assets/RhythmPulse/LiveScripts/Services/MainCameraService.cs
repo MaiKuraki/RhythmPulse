@@ -20,7 +20,6 @@ namespace RhythmPulse.Services
 
     public class MainCameraService : IMainCameraService
     {
-        private const string DEBUG_FLAG = "[MainCameraService]";
 
         private MainCamera _cached;
 
@@ -39,7 +38,7 @@ namespace RhythmPulse.Services
             var mc = GetMainCamera();
             if (mc == null)
             {
-                RpLog.Channel.Warning($"{DEBUG_FLAG} MainCamera not found, cannot add to stack");
+                RPLog.Channel.Warning("MainCamera not found, cannot add to stack");
                 return;
             }
             mc.AddCameraToStack(camera, index);
@@ -51,7 +50,7 @@ namespace RhythmPulse.Services
             var mc = GetMainCamera();
             if (mc == null)
             {
-                RpLog.Channel.Warning($"{DEBUG_FLAG} MainCamera not found, cannot remove from stack");
+                RPLog.Channel.Warning("MainCamera not found, cannot remove from stack");
                 return;
             }
             mc.RemoveCameraFromStack(camera);
