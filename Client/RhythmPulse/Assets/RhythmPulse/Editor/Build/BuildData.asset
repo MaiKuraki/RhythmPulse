@@ -13,11 +13,11 @@ MonoBehaviour:
   m_Name: BuildData
   m_EditorClassIdentifier: 
   launchScene: {fileID: 102900000, guid: 99c9720ab356a0642a771bea13969a05, type: 3}
-  applicationVersion: v0.1.0
+  applicationVersion: 0.1.0
   outputBasePath: Build
   companyName: CycloneGames
   productName: RhythmPulse
-  applicationIdentifier: CycloneGames.RhythmPulse
+  applicationIdentifier: com.cyclonegames.rhythmpulse
   versionInfoAssetPath: Assets/Build/Runtime/Resources/VersionInfoData.asset
   additionalScenes: []
   recipeInvocations:
@@ -35,11 +35,5 @@ MonoBehaviour:
     dependencies:
     - invocationId: asset-content
       mode: 1
-  - enabled: 0
-    invocationId: hot-update
-    stepTypeId: hot-update
-    configuration: {fileID: 0}
-    incrementality: 0
-    dependencies: []
   cheatBuildMode: 0
-  sourceCleanlinessPolicy: 0
+  sourceCleanlinessPolicy: 1

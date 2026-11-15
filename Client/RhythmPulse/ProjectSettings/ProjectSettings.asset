@@ -147,7 +147,7 @@ PlayerSettings:
   loadStoreDebugModeEnabled: 0
   visionOSBundleVersion: 1.0
   tvOSBundleVersion: 1.0
-  bundleVersion: v0.1.0
+  bundleVersion: 0.1.0
   preloadedAssets:
   - {fileID: 11400000, guid: a1800ed6bb5cc5048a5318b88436a552, type: 2}
   - {fileID: 11400000, guid: ed2c014ef64b5ff458da0f98985935a6, type: 2}
@@ -172,10 +172,10 @@ PlayerSettings:
   androidMaxAspectRatio: 2.1
   androidMinAspectRatio: 1
   applicationIdentifier:
-    Android: com.CycloneGames.RhythmPulse
-    Standalone: com.CycloneGames.RhythmPulse
-    WebGL: com.CycloneGames.UnityStarter
-    iPhone: com.CycloneGames.RhythmPulse
+    Android: com.cyclonegames.rhythmpulse
+    Standalone: com.cyclonegames.rhythmpulse
+    WebGL: com.cyclonegames.rhythmpulse
+    iPhone: com.cyclonegames.rhythmpulse
   buildNumber:
     Standalone: 0
     VisionOS: 0
