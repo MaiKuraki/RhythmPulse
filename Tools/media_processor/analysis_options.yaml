@@ -7,6 +7,18 @@
 
 # The following line activates a set of recommended lints for Flutter apps,
 # packages, and plugins designed to encourage good coding practices.
+analyzer:
+  exclude:
+    - build/**
+    - android/**
+    - ios/**
+    - web/**
+    - windows/**
+    - macos/**
+    - linux/**
+  errors:
+    # Async mistakes must not be silently ignored.
+    unawaited_futures: warning
 include: package:flutter_lints/flutter.yaml
 
 linter:
@@ -21,6 +33,13 @@ linter:
   # `// ignore_for_file: name_of_lint` syntax on the line or in the file
   # producing the lint.
   rules:
+    # Dependency injection uses named constructor parameters assigned to
+    # private fields, which cannot be initializing formals.
+    prefer_initializing_formals: false
+    # Verification tests emit [METRIC] lines and import lib via relative paths
+    # so helper files remain self-contained.
+    avoid_relative_lib_imports: false
+    avoid_print: false
     # avoid_print: false  # Uncomment to disable the `avoid_print` rule
     # prefer_single_quotes: true  # Uncomment to enable the `prefer_single_quotes` rule
 

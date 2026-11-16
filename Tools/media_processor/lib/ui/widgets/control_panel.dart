@@ -1,144 +1,273 @@
+// ignore_for_file: deprecated_member_use
 import 'package:flutter/material.dart';
-import 'package:localization/localization.dart';
-import '../../models/processing_state.dart';
 
-class ControlPanel extends StatelessWidget {
-  final bool isFileSelected;
-  final bool isProcessing;
-  final bool showPreviewOptions;
-  final bool apply4k;
-  final VideoFormat videoFormat;
-  final VoidCallback? onGenerateFull;
-  final VoidCallback? onTogglePreview;
-  final ValueChanged<bool>? on4kChanged;
-  final ValueChanged<VideoFormat>? onFormatChanged;
+import '../../domain/encoding.dart';
+import '../../domain/output_plan.dart';
+import '../strings.dart';
+import '../theme.dart';
+import 'section_card.dart';
 
+/// Presentation-only settings panel. Video-only controls disappear for audio
+/// inputs, and the resolution policy replaces the old boolean 4K switch.
+final class ControlPanel extends StatelessWidget {
   const ControlPanel({
     super.key,
-    required this.isFileSelected,
     required this.isProcessing,
-    required this.showPreviewOptions,
-    required this.apply4k,
-    required this.videoFormat,
+    required this.isAudioOnly,
+    required this.container,
+    required this.quality,
+    required this.outputResolution,
+    required this.targetSize,
+    required this.insights,
+    required this.onContainerChanged,
+    required this.onQualityChanged,
+    required this.onOutputResolutionChanged,
+    required this.showPreview,
     this.onGenerateFull,
     this.onTogglePreview,
-    this.on4kChanged,
-    this.onFormatChanged,
   });
+
+  final bool isProcessing;
+  final bool isAudioOnly;
+  final ContainerFormat container;
+  final QualityPreset quality;
+  final OutputResolution outputResolution;
+  final String targetSize;
+  final List<Insight> insights;
+  final ValueChanged<ContainerFormat> onContainerChanged;
+  final ValueChanged<QualityPreset> onQualityChanged;
+  final ValueChanged<OutputResolution> onOutputResolutionChanged;
+  final bool showPreview;
+  final VoidCallback? onGenerateFull;
+  final VoidCallback? onTogglePreview;
+
+  String _qualityLabel(QualityPreset preset, AppStrings s) => switch (preset) {
+        QualityPreset.speed => s.get(StringKey.qualitySpeed),
+        QualityPreset.balanced => s.get(StringKey.qualityBalanced),
+        QualityPreset.quality => s.get(StringKey.qualityQuality),
+      };
+
+  String _resolutionLabel(OutputResolution mode, AppStrings s) =>
+      mode.isFollow ? s.get(StringKey.resolutionFollowSource) : mode.label;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header
-            Row(
-              children: [
-                Icon(Icons.tune, color: Colors.deepPurple.shade700),
-                const SizedBox(width: 12),
-                Text(
-                  'operation'.i18n(),
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.deepPurple.shade800,
-                  ),
-                ),
-              ],
-            ),
-            const Divider(height: 32),
+    final s = AppStrings.of(context);
+    final theme = Theme.of(context);
+    final disabled = isProcessing;
 
-            // Section 1: Configuration
-            Text(
-              'configuration'.i18n(),
-              style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                color: Colors.grey.shade600,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 16),
-            
-            // Format Selector
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.grey.shade50,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.shade200),
-              ),
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      Text('videoFormat'.i18n(), style: const TextStyle(fontWeight: FontWeight.w500)),
-                      const SizedBox(width: 24),
-                      SegmentedButton<VideoFormat>(
-                        segments: const [
-                          ButtonSegment(value: VideoFormat.mp4, label: Text('MP4')),
-                          ButtonSegment(value: VideoFormat.webm, label: Text('WebM')),
+    return SectionCard(
+      title: s.get(StringKey.configuration),
+      icon: Icons.tune,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          LayoutBuilder(builder: (context, constraints) {
+            final fields = <Widget>[
+              if (!isAudioOnly)
+                LabeledField(
+                  label: s.get(StringKey.videoFormat),
+                  child: SizedBox(
+                    height: AppSpacing.controlHeight,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: SegmentedButton<ContainerFormat>(
+                        segments: [
+                          for (final format in ProfileRegistry.supported)
+                            ButtonSegment<ContainerFormat>(
+                              value: format,
+                              label: Text(format.name.toUpperCase()),
+                            ),
                         ],
-                        selected: {videoFormat},
-                        onSelectionChanged: isProcessing ? null : (set) => onFormatChanged?.call(set.first),
+                        selected: {container},
+                        showSelectedIcon: false,
+                        onSelectionChanged: disabled
+                            ? null
+                            : (selection) =>
+                                onContainerChanged(selection.first),
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Text('output4K'.i18n(), style: const TextStyle(fontWeight: FontWeight.w500)),
-                      const SizedBox(width: 24),
-                      Switch.adaptive(
-                        value: apply4k,
-                        onChanged: isProcessing ? null : on4kChanged,
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // Section 2: Actions
-            Text(
-              'actions'.i18n(),
-              style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                color: Colors.grey.shade600,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    icon: const Icon(Icons.movie_creation_outlined),
-                    label: Text('generateFullMedia'.i18n()),
-                    onPressed: (isFileSelected && !isProcessing) ? onGenerateFull : null,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.deepPurple,
-                      foregroundColor: Colors.white,
-                      elevation: 4,
-                      shadowColor: Colors.deepPurple.withAlpha(77),
                     ),
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            OutlinedButton.icon(
-              icon: Icon(showPreviewOptions ? Icons.expand_less : Icons.expand_more),
-              label: Text('generatePreviewMedia'.i18n()),
-              onPressed: (isFileSelected && !isProcessing) ? onTogglePreview : null,
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size.fromHeight(48),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              LabeledField(
+                label: s.get(isAudioOnly
+                    ? StringKey.audioQuality
+                    : StringKey.quality),
+                child: SizedBox(
+                  height: AppSpacing.controlHeight,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: DropdownMenu<QualityPreset>(
+                      key: const Key('quality-menu'),
+                      enabled: !disabled,
+                      width: 200,
+                      initialSelection: quality,
+                      dropdownMenuEntries: [
+                        for (final preset in QualityPreset.values)
+                          DropdownMenuEntry<QualityPreset>(
+                            value: preset,
+                            label: _qualityLabel(preset, s),
+                          ),
+                      ],
+                      onSelected: disabled
+                          ? null
+                          : (value) => onQualityChanged(value ?? quality),
+                    ),
+                  ),
+                ),
               ),
-            ),
+              if (!isAudioOnly)
+                LabeledField(
+                  label: s.get(StringKey.outputResolution),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        height: AppSpacing.controlHeight,
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: DropdownMenu<OutputResolution>(
+                            key: const Key('output-resolution-menu'),
+                            enabled: !disabled,
+                            width: 240,
+                            initialSelection: outputResolution,
+                            dropdownMenuEntries: [
+                              for (final mode in OutputResolution.values)
+                                DropdownMenuEntry<OutputResolution>(
+                                  value: mode,
+                                  label: _resolutionLabel(mode, s),
+                                ),
+                            ],
+                            onSelected: disabled
+                                ? null
+                                : (value) => onOutputResolutionChanged(
+                                    value ?? outputResolution),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
+                        '${s.get(StringKey.targetSize)}  $targetSize',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                ),
+            ];
+            if (constraints.maxWidth < 720) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (var i = 0; i < fields.length; i++) ...[
+                    fields[i],
+                    if (i < fields.length - 1)
+                      const SizedBox(height: AppSpacing.m),
+                  ],
+                ],
+              );
+            }
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (var i = 0; i < fields.length; i++) ...[
+                  Expanded(child: fields[i]),
+                  if (i < fields.length - 1)
+                    const SizedBox(width: AppSpacing.l),
+                ],
+              ],
+            );
+          }),
+          if (insights.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.l),
+            Text(s.get(StringKey.outputHints), style: theme.textTheme.titleSmall),
+            const SizedBox(height: AppSpacing.s),
+            for (final insight in insights)
+              Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.s),
+                child: _InsightTile(insight: insight, strings: s),
+              ),
           ],
-        ),
+          const SizedBox(height: AppSpacing.l),
+          Divider(height: 1, color: theme.colorScheme.outlineVariant),
+          const SizedBox(height: AppSpacing.m),
+          Text(s.get(StringKey.actions), style: theme.textTheme.titleSmall),
+          const SizedBox(height: AppSpacing.s),
+          Wrap(
+            spacing: AppSpacing.m,
+            runSpacing: AppSpacing.s,
+            children: [
+              FilledButton.icon(
+                onPressed: onGenerateFull,
+                icon: const Icon(Icons.movie_creation_outlined),
+                label: Text(s.get(StringKey.generateFullMedia)),
+              ),
+              OutlinedButton.icon(
+                onPressed: onTogglePreview,
+                icon: Icon(showPreview ? Icons.expand_less : Icons.expand_more),
+                label: Text(s.get(StringKey.generatePreviewMedia)),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InsightTile extends StatelessWidget {
+  const _InsightTile({required this.insight, required this.strings});
+
+  final Insight insight;
+  final AppStrings strings;
+
+  (String, IconData) _content() => switch (insight.kind) {
+        InsightKind.audioOnly =>
+          (StringKey.hintAudioOnly, Icons.audiotrack_outlined),
+        InsightKind.upscale =>
+          (StringKey.hintUpscale, Icons.warning_amber_rounded),
+        InsightKind.downscale =>
+          (StringKey.hintDownscale, Icons.photo_size_select_small_outlined),
+        InsightKind.lowResolutionSource =>
+          (StringKey.hintLowRes, Icons.info_outline),
+        InsightKind.hdrToneMap =>
+          (StringKey.hintHdr, Icons.wb_twilight_outlined),
+        InsightKind.streamCopy =>
+          (StringKey.hintStreamCopy, Icons.bolt_outlined),
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final warning = insight.level == InsightLevel.warning;
+    final (key, icon) = _content();
+    return Container(
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.m, vertical: AppSpacing.s),
+      decoration: BoxDecoration(
+        color: warning ? scheme.errorContainer : scheme.secondaryContainer,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon,
+              size: 18,
+              color: warning
+                  ? scheme.onErrorContainer
+                  : scheme.onSecondaryContainer),
+          const SizedBox(width: AppSpacing.s),
+          Expanded(
+            child: Text(
+              strings.get(key, insight.args),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: warning
+                      ? scheme.onErrorContainer
+                      : scheme.onSecondaryContainer),
+            ),
+          ),
+        ],
       ),
     );
   }

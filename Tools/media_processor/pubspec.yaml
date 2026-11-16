@@ -19,7 +19,7 @@ publish_to: "none" # Remove this line if you wish to publish to pub.dev
 version: 1.0.0+1
 
 environment:
-  sdk: ^3.7.2
+  sdk: ^3.14.0
 
 # Dependencies specify other packages that your package needs in order to work.
 # To automatically upgrade your package dependencies to the latest versions
@@ -30,11 +30,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  file_picker: ^11.0.2
+  file_picker: ^13.3.3
   flutter_localizations:
     sdk: flutter
-  localization: ^2.1.1
-  cupertino_icons: ^1.0.8
   path: ^1.9.1
   media_kit: ^1.1.0
   media_kit_video: ^2.0.1
@@ -92,6 +90,5 @@ flutter:
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
 
-  generate: true
   assets:
-      - lib/i18n/
+    - lib/i18n/

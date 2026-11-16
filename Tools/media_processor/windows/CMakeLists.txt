@@ -75,6 +75,16 @@ set(INSTALL_BUNDLE_LIB_DIR "${CMAKE_INSTALL_PREFIX}")
 install(TARGETS ${BINARY_NAME} RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}"
   COMPONENT Runtime)
 
+# Bundle the ffmpeg toolchain next to the executable so deployed builds are
+# self-contained. The binaries are optional for source-only checkouts.
+set(FFMPEG_BUNDLE_DIR
+  "${CMAKE_CURRENT_SOURCE_DIR}/../data/ffmpeg-release-full-shared")
+if(EXISTS "${FFMPEG_BUNDLE_DIR}/bin/ffmpeg.exe")
+  install(DIRECTORY "${FFMPEG_BUNDLE_DIR}/"
+    DESTINATION "${INSTALL_BUNDLE_DATA_DIR}/ffmpeg-release-full-shared"
+    COMPONENT Runtime)
+endif()
+
 install(FILES "${FLUTTER_ICU_DATA_FILE}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
   COMPONENT Runtime)
 

@@ -1,132 +1,118 @@
+import 'dart:async';
 import 'dart:io';
+import 'dart:ui'
+    show AppExitResponse, AppLifecycleState, Locale, PlatformDispatcher;
 
-import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:localization/localization.dart';
+import 'package:flutter/widgets.dart';
 import 'package:media_kit/media_kit.dart';
+import 'package:path/path.dart' as p;
 
-import 'services/ffmpeg_service.dart';
-import 'ui/home/home_screen.dart';
+import 'core/log.dart';
+import 'platform/host.dart';
+import 'services/binaries.dart';
+import 'services/media_processor.dart';
+import 'services/process_runner.dart';
+import 'services/probe.dart';
+import 'services/waveform.dart';
+import 'state/task_controller.dart';
+import 'ui/app.dart';
+import 'ui/app_scope.dart';
+import 'ui/strings.dart';
 
-/// Main application entry point
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  MediaKit.ensureInitialized();
+/// Graceful shutdown on both window-close and process signals. The native
+/// runner additionally binds all children to a Windows Job Object, so even a
+/// hard kill cannot leave orphaned ffmpeg processes.
+final class _ShutdownHandler extends WidgetsBindingObserver {
+  _ShutdownHandler(this._services);
 
-  // Initialize Localization
-  LocalJsonLocalization.delegate.directories = ['lib/i18n'];
+  final AppServices _services;
+  bool _done = false;
 
-  // Initialize FFmpeg Service with the correct root path before any CWD changes occur
-  FfmpegService.init(Directory.current.path);
-
-  // Handle process termination signals (Ctrl+C)
-  ProcessSignal.sigint.watch().listen((signal) {
-    FfmpegProcessManager().killAll().then((_) {
-      exit(0);
-    });
-  });
-
-  if (kDebugMode) {
-     _checkEnvironment();
+  Future<void> cleanup() async {
+    if (_done) return;
+    _done = true;
+    await _services.dispose();
   }
-
-  // Initialize and run the application
-  runApp(const MediaProcessingMasterApp());
-}
-
-Future<void> _checkEnvironment() async {
-    final ffmpegPath = FfmpegService.getBundledFfmpegPath();
-    final ffprobePath = FfmpegService.getBundledFfprobePath();
-    
-    if (kDebugMode) {
-      print('Checking FFmpeg environment...');
-      print('FFmpeg: $ffmpegPath (${await File(ffmpegPath).exists() ? 'Found' : 'Missing'})');
-      print('FFprobe: $ffprobePath (${await File(ffprobePath).exists() ? 'Found' : 'Missing'})');
-    }
-}
-
-/// Global notifier for app locale
-final ValueNotifier<Locale> appLocaleNotifier = ValueNotifier(const Locale('en', 'US'));
-
-/// Root application widget configuring MaterialApp with internationalization support
-class MediaProcessingMasterApp extends StatelessWidget {
-  const MediaProcessingMasterApp({super.key});
-
-  static const _supportedLocales = [Locale('en', 'US'), Locale('zh', 'CN')];
-  
-  static final List<LocalizationsDelegate> _localizationsDelegates = [
-    LocalJsonLocalization.delegate,
-    GlobalMaterialLocalizations.delegate,
-    GlobalWidgetsLocalizations.delegate,
-    GlobalCupertinoLocalizations.delegate,
-  ];
 
   @override
-  Widget build(BuildContext context) {
-    
-    return ValueListenableBuilder<Locale>(
-      valueListenable: appLocaleNotifier,
-      builder: (context, locale, _) {
-        return MaterialApp(
-          title: 'Media Processor',
-          debugShowCheckedModeBanner: false,
-          locale: locale,
-          theme: ThemeData(
-            colorScheme: ColorScheme.fromSeed(
-              seedColor: Colors.deepPurple,
-              brightness: Brightness.light,
-              surface: const Color(0xFFF5F5F7), // Apple-like light grey background
-            ),
-            useMaterial3: true,
-            scaffoldBackgroundColor: const Color(0xFFF5F5F7),
-            // Note: Using CardThemeData based on compiler error indicating CardTheme mismatch
-            cardTheme: CardThemeData(
-              elevation: 0, // Flat modern look
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-                side: BorderSide(color: Colors.grey.withAlpha(25), width: 1), 
-              ),
-              color: Colors.white,
-              margin: EdgeInsets.zero,
-            ),
-            inputDecorationTheme: InputDecorationTheme(
-              filled: true,
-              fillColor: Colors.grey.shade50,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide.none,
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide.none,
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Colors.deepPurple, width: 2),
-              ),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-            ),
-            elevatedButtonTheme: ElevatedButtonThemeData(
-              style: ElevatedButton.styleFrom(
-                elevation: 2,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 32), // Taller buttons
-                textStyle: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.5,
-                ),
-              ),
-            ),
-          ),
-          supportedLocales: _supportedLocales,
-          localizationsDelegates: _localizationsDelegates,
-          home: const HomeScreen(),
-        );
-      },
-    );
+  Future<AppExitResponse> didRequestAppExit() async {
+    await cleanup();
+    return AppExitResponse.exit;
   }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.detached) unawaited(cleanup());
+  }
+}
+
+Future<void> main() async {
+  final binding = WidgetsFlutterBinding.ensureInitialized();
+  MediaKit.ensureInitialized();
+
+  final host = detectHostCapabilities();
+  final logs = LogStore(scheduler: const SystemFlushScheduler());
+  final group = ProcessGroup();
+  final maxProcesses =
+      int.tryParse(Platform.environment['MEDIA_PROCESSOR_MAX_PROCESSES'] ?? '') ?? 4;
+  final runner = SystemProcessRunner(
+      group: group, maxConcurrentProcesses: maxProcesses.clamp(1, 16).toInt());
+  final executableDirectory = p.dirname(Platform.resolvedExecutable);
+  final binaries = ExeRelativeBinaryLocator(
+    executableDirectory: executableDirectory,
+    os: host.os,
+    overrideDirectory: Platform.environment['MEDIA_PROCESSOR_FFMPEG_DIR'],
+  );
+  final probe = MediaProbeService(runner: runner, binaries: binaries);
+  final processor = MediaProcessor(
+    runner: runner,
+    binaries: binaries,
+    host: host,
+    logs: logs,
+    probe: probe,
+    group: group,
+  );
+  final tasks = TaskController(processor: processor, logs: logs);
+  final waveforms = WaveformService(
+    runner: runner,
+    binaries: binaries,
+    logs: logs,
+    cacheDirectory: p.join(
+        Directory.systemTemp.path, 'media_processor', 'waveforms'),
+  );
+  final services = AppServices(
+    logs: logs,
+    processor: processor,
+    probe: probe,
+    tasks: tasks,
+    waveforms: waveforms,
+    host: host,
+    locale: ValueNotifier<Locale>(
+        AppStrings.normalize(PlatformDispatcher.instance.locale)),
+  );
+
+  final shutdown = _ShutdownHandler(services);
+  binding.addObserver(shutdown);
+  ProcessSignal.sigint.watch().listen((_) async {
+    await shutdown.cleanup();
+    exit(0);
+  });
+
+  final jobObject =
+      Platform.environment['MEDIA_PROCESSOR_JOB_OBJECT'] ?? 'unavailable';
+  // The native runner publishes this before creating any window; Dart uses the
+  // same value so the app-level ExcludeSemantics matches the WM_GETOBJECT
+  // filter exactly.
+  final semanticsState =
+      Platform.environment['MEDIA_PROCESSOR_SEMANTICS_STATE'] ?? 'active';
+  final disableSemantics = semanticsState == 'blocked';
+  logs.info('startup',
+      'Detected $host; binaries at ${binaries.directory}; '
+      'job_object=$jobObject; max_processes=$maxProcesses; '
+      'semantics=$semanticsState');
+  unawaited(waveforms.prune());
+  runApp(MediaProcessorApp(
+    services: services,
+    disableSemantics: disableSemantics,
+  ));
 }

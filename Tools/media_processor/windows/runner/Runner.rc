@@ -63,7 +63,7 @@ IDI_APP_ICON            ICON                    "resources\\app_icon.ico"
 #if defined(FLUTTER_VERSION_MAJOR) && defined(FLUTTER_VERSION_MINOR) && defined(FLUTTER_VERSION_PATCH) && defined(FLUTTER_VERSION_BUILD)
 #define VERSION_AS_NUMBER FLUTTER_VERSION_MAJOR,FLUTTER_VERSION_MINOR,FLUTTER_VERSION_PATCH,FLUTTER_VERSION_BUILD
 #else
-#define VERSION_AS_NUMBER 1,0,0,0
+#define VERSION_AS_NUMBER 1,0,0,1
 #endif
 
 #if defined(FLUTTER_VERSION)
@@ -89,11 +89,11 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.example" "\0"
+            VALUE "CompanyName", "CycloneGames" "\0"
             VALUE "FileDescription", "media_processor" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "media_processor" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2025 com.example. All rights reserved." "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 CycloneGames. All rights reserved." "\0"
             VALUE "OriginalFilename", "media_processor.exe" "\0"
             VALUE "ProductName", "media_processor" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"

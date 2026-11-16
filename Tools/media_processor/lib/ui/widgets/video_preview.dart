@@ -1,150 +1,138 @@
+// ignore_for_file: deprecated_member_use
 import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:localization/localization.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
-import 'package:path/path.dart' as p;
 
-import '../../services/ffmpeg_service.dart';
+import '../../core/cancellation.dart';
+import '../../domain/media.dart';
+import '../../services/waveform.dart';
+import '../strings.dart';
+import '../theme.dart';
+import 'section_card.dart';
 
-class VideoPreviewPanel extends StatefulWidget {
-  final String filePath;
-  final bool isVideo;
-  final ValueChanged<int>? onStartMsChanged;
-  final ValueChanged<int>? onEndMsChanged;
-  final VoidCallback? onGeneratePreview;
-  final bool enabled;
-
+/// Preview panel with generation-guarded waveform loading and complete
+/// resource disposal. Switching files can no longer let an old async result
+/// overwrite a newer one.
+final class VideoPreviewPanel extends StatefulWidget {
   const VideoPreviewPanel({
     super.key,
     required this.filePath,
     required this.isVideo,
-    this.onStartMsChanged,
-    this.onEndMsChanged,
-    this.onGeneratePreview,
-    this.enabled = true,
+    required this.waveforms,
+    required this.enabled,
+    required this.onRangeChanged,
+    required this.onGeneratePreview,
+    this.aspectRatio = 16 / 9,
   });
+
+  /// Real source aspect ratio; avoids forcing vertical / 4:3 media into 16:9.
+  final double aspectRatio;
+  final String filePath;
+  final bool isVideo;
+  final WaveformService waveforms;
+  final bool enabled;
+  final ValueChanged<ClipRange> onRangeChanged;
+  final ValueChanged<ClipRange> onGeneratePreview;
 
   @override
   State<VideoPreviewPanel> createState() => _VideoPreviewPanelState();
 }
 
 class _VideoPreviewPanelState extends State<VideoPreviewPanel> {
-  late Player _player;
+  static const int _preSeekMs = 50;
+
+  Player? _player;
   VideoController? _videoController;
+  StreamSubscription<Duration>? _durationSub;
+  StreamSubscription<Duration>? _positionSub;
+  StreamSubscription<bool>? _playingSub;
+
+  final ValueNotifier<int> _position = ValueNotifier<int>(0);
+  final TextEditingController _startCtrl = TextEditingController();
+  final TextEditingController _endCtrl = TextEditingController();
 
   int _durationMs = 0;
-  bool _isPlaying = false;
-
   int _rangeStartMs = 0;
   int _rangeEndMs = 0;
+  bool _isPlaying = false;
+  bool _looping = false;
 
-  bool _loopSelection = false;
-
-  // Position via ValueNotifier — avoids full widget tree rebuilds
-  final ValueNotifier<int> _positionNotifier = ValueNotifier<int>(0);
-
-  // Pre-seek margin in ms — seek this much before reaching the range end
-  // to minimize the audible gap at the loop point.
-  static const int _loopPreSeekMs = 50;
-
-  late final TextEditingController _startMsCtrl;
-  late final TextEditingController _endMsCtrl;
-
-  StreamSubscription? _durationSub;
-  StreamSubscription? _positionSub;
-  StreamSubscription? _playingSub;
-
-  // Waveform
-  FileImage? _waveformImageProvider;
+  String? _waveformPath;
   bool _waveformLoading = false;
+  CancellationToken? _waveformToken;
+  int _generation = 0;
+
+  ClipRange get _range =>
+      ClipRange(startMs: _rangeStartMs, endMs: _rangeEndMs);
 
   @override
   void initState() {
     super.initState();
-    _startMsCtrl = TextEditingController(text: '0');
-    _endMsCtrl = TextEditingController(text: '0');
     _initPlayer();
-    _generateWaveform();
+    _loadWaveform();
   }
 
   @override
   void didUpdateWidget(covariant VideoPreviewPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.filePath != widget.filePath) {
+      _generation++;
       _destroyPlayer();
       _initPlayer();
-      _generateWaveform();
+      _loadWaveform();
     }
   }
 
   void _initPlayer() {
-    _player = Player();
-    if (widget.isVideo) {
-      _videoController = VideoController(_player);
-    }
+    final player = Player();
+    _player = player;
+    if (widget.isVideo) _videoController = VideoController(player);
 
-    _durationSub = _player.stream.duration.listen((d) {
-      if (!mounted || d.inMilliseconds == 0) return;
+    _durationSub = player.stream.duration.listen((duration) {
+      if (!mounted || duration.inMilliseconds == 0) return;
+      final ms = duration.inMilliseconds;
       setState(() {
-        _durationMs = d.inMilliseconds;
+        _durationMs = ms;
         _rangeStartMs = 0;
-        _rangeEndMs = d.inMilliseconds;
+        _rangeEndMs = ms;
       });
-      _startMsCtrl.text = '0';
-      _endMsCtrl.text = '$_durationMs';
-      widget.onStartMsChanged?.call(0);
-      widget.onEndMsChanged?.call(d.inMilliseconds);
+      _startCtrl.text = '0';
+      _endCtrl.text = '$ms';
+      widget.onRangeChanged(_range);
     });
-
-    _positionSub = _player.stream.position.listen((p) {
+    _positionSub = player.stream.position.listen((position) {
       if (!mounted) return;
-      final ms = p.inMilliseconds;
-      _positionNotifier.value = ms;
-      if (_loopSelection && ms >= _rangeEndMs - _loopPreSeekMs) {
-        _player.seek(Duration(milliseconds: _rangeStartMs));
+      final ms = position.inMilliseconds;
+      _position.value = ms;
+      if (_looping && ms >= _rangeEndMs - _preSeekMs) {
+        player.seek(Duration(milliseconds: _rangeStartMs));
       }
     });
-
-    _playingSub = _player.stream.playing.listen((playing) {
-      if (!mounted) return;
-      setState(() => _isPlaying = playing);
+    _playingSub = player.stream.playing.listen((playing) {
+      if (mounted) setState(() => _isPlaying = playing);
     });
-
-    _player.open(Media(widget.filePath), play: false);
-    _player.setVolume(50);
+    player.open(Media(widget.filePath), play: false);
   }
 
-  Future<void> _generateWaveform() async {
-    _waveformImageProvider?.evict();
-    _waveformImageProvider = null;
-    setState(() {
-      _waveformLoading = true;
-    });
+  Future<void> _loadWaveform() async {
+    _waveformToken?.cancel();
+    _waveformToken?.dispose();
+    final token = CancellationToken();
+    _waveformToken = token;
+    final generation = _generation;
+    if (mounted) setState(() => _waveformLoading = true);
 
-    final dir = Directory.systemTemp;
-    final hash = widget.filePath.hashCode.toRadixString(16);
-    final outPath = p.join(dir.path, 'media_processor_waveform_$hash.png');
-
-    final result = await FfmpegService.generateWaveformImage(
-      inputPath: widget.filePath,
-      outputImagePath: outPath,
-      width: 2048,
-      height: 200,
-      onLog: (_) {},
+    final outcome = await widget.waveforms.ensure(
+      widget.filePath,
+      cancellation: token,
     );
-
-    if (!mounted) return;
-    final file = File(outPath);
-    final exists = result.success && file.existsSync();
+    if (!mounted || generation != _generation || token.isCancelled) return;
     setState(() {
       _waveformLoading = false;
-      if (exists) {
-        _waveformImageProvider = FileImage(file);
-      }
+      _waveformPath = outcome.valueOrNull;
     });
   }
 
@@ -152,173 +140,144 @@ class _VideoPreviewPanelState extends State<VideoPreviewPanel> {
     _durationSub?.cancel();
     _positionSub?.cancel();
     _playingSub?.cancel();
-    _player.dispose();
+    _durationSub = _positionSub = null;
+    _playingSub = null;
+    _player?.dispose();
+    _player = null;
     _videoController = null;
+    _position.value = 0;
     _durationMs = 0;
-    _positionNotifier.value = 0;
     _isPlaying = false;
-    _loopSelection = false;
+    _looping = false;
   }
 
   @override
   void dispose() {
+    _generation++;
+    _waveformToken?.cancel();
+    _waveformToken?.dispose();
     _destroyPlayer();
-    _positionNotifier.dispose();
-    _startMsCtrl.dispose();
-    _endMsCtrl.dispose();
-    _waveformImageProvider?.evict();
+    _position.dispose();
+    _startCtrl.dispose();
+    _endCtrl.dispose();
     super.dispose();
   }
 
-  // --- Range helpers ---
-
-  void _setRangeStart(int ms) {
-    ms = ms.clamp(0, _durationMs);
-    if (ms >= _rangeEndMs) return;
-    setState(() => _rangeStartMs = ms);
-    _startMsCtrl.text = '$ms';
-    widget.onStartMsChanged?.call(ms);
+  void _setStart(int value) {
+    final clamped = value.clamp(0, _durationMs).toInt();
+    if (clamped >= _rangeEndMs) return;
+    setState(() => _rangeStartMs = clamped);
+    _startCtrl.text = '$clamped';
+    widget.onRangeChanged(_range);
   }
 
-  void _setRangeEnd(int ms) {
-    ms = ms.clamp(0, _durationMs);
-    if (ms <= _rangeStartMs) return;
-    setState(() => _rangeEndMs = ms);
-    _endMsCtrl.text = '$ms';
-    widget.onEndMsChanged?.call(ms);
+  void _setEnd(int value) {
+    final clamped = value.clamp(0, _durationMs).toInt();
+    if (clamped <= _rangeStartMs) return;
+    setState(() => _rangeEndMs = clamped);
+    _endCtrl.text = '$clamped';
+    widget.onRangeChanged(_range);
   }
 
-  void _commitStartFromText() {
-    final ms = int.tryParse(_startMsCtrl.text);
-    if (ms == null) {
-      _startMsCtrl.text = '$_rangeStartMs';
-      return;
-    }
-    _setRangeStart(ms);
+  void _startLoop() {
+    setState(() => _looping = true);
+    _player?.seek(Duration(milliseconds: _rangeStartMs));
+    _player?.play();
   }
 
-  void _commitEndFromText() {
-    final ms = int.tryParse(_endMsCtrl.text);
-    if (ms == null) {
-      _endMsCtrl.text = '$_rangeEndMs';
-      return;
-    }
-    _setRangeEnd(ms);
-  }
-
-  void _startLoopPlayback() {
-    setState(() => _loopSelection = true);
-    _player.seek(Duration(milliseconds: _rangeStartMs));
-    _player.play();
-  }
-
-  void _stopLoopPlayback() {
-    setState(() => _loopSelection = false);
-    _player.pause();
+  void _stopLoop() {
+    setState(() => _looping = false);
+    _player?.pause();
   }
 
   static String _formatMs(int ms) {
-    if (ms < 0) ms = 0;
-    final h = ms ~/ 3600000;
-    final m = (ms ~/ 60000) % 60;
-    final s = (ms ~/ 1000) % 60;
-    final frac = ms % 1000;
-    final time = '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}.${frac.toString().padLeft(3, '0')}';
-    return h > 0 ? '$h:$time' : time;
+    final value = ms < 0 ? 0 : ms;
+    final minutes = (value ~/ 60000) % 60;
+    final seconds = (value ~/ 1000) % 60;
+    final millis = value % 1000;
+    return '${minutes.toString().padLeft(2, '0')}:'
+        '${seconds.toString().padLeft(2, '0')}.'
+        '${millis.toString().padLeft(3, '0')}';
   }
 
-  Widget _buildNudgeButton(String label, VoidCallback? onPressed) {
-    return SizedBox(
-      height: 28,
-      child: OutlinedButton(
-        onPressed: onPressed,
-        style: OutlinedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 6),
-          textStyle: const TextStyle(fontSize: 11, fontFamily: 'Consolas'),
-          minimumSize: Size.zero,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-        ),
-        child: Text(label),
-      ),
-    );
-  }
-
-  Widget _buildMsEditor({
+  Widget _timeEditor({
     required String label,
     required TextEditingController controller,
     required int currentMs,
-    required VoidCallback onSubmit,
-    required ValueChanged<int> onNudge,
-    required VoidCallback onSetToCurrent,
+    required ValueChanged<int> onSubmitted,
   }) {
-    final enabled = widget.enabled;
+    final s = AppStrings.of(context);
+    final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Text(label, style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: Colors.deepPurple.shade700,
-              fontSize: 12,
-            )),
-            const SizedBox(width: 8),
-            Text(
-              _formatMs(currentMs),
-              style: TextStyle(fontSize: 11, color: Colors.grey.shade600, fontFamily: 'Consolas'),
-            ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        Row(
-          children: [
-            SizedBox(
-              width: 110,
-              height: 36,
-              child: TextField(
-                controller: controller,
-                enabled: enabled,
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                style: const TextStyle(fontSize: 13, fontFamily: 'Consolas'),
-                decoration: InputDecoration(
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                  suffixText: 'ms',
-                  suffixStyle: TextStyle(fontSize: 11, color: Colors.grey.shade500),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-                onSubmitted: (_) => onSubmit(),
+        SizedBox(
+          height: AppSpacing.toolbarHeight,
+          child: Row(
+            children: [
+              Text(label, style: theme.textTheme.labelMedium),
+              const Spacer(),
+              Text(_formatMs(currentMs),
+                  style: theme.textTheme.labelMedium?.copyWith(
+                      fontFamily: 'Consolas',
+                      fontFamilyFallback: const ['monospace'])),
+              const SizedBox(width: AppSpacing.xs),
+              IconButton(
+                constraints: const BoxConstraints.tightFor(
+                    width: AppSpacing.toolbarHeight,
+                    height: AppSpacing.toolbarHeight),
+                padding: EdgeInsets.zero,
+                tooltip: s.get(StringKey.setCurrent),
+                onPressed: widget.enabled
+                    ? () => onSubmitted(_position.value)
+                    : null,
+                icon: const Icon(Icons.my_location, size: 16),
               ),
-            ),
-            const SizedBox(width: 8),
-            Tooltip(
-              message: 'setCurrent'.i18n(),
-              child: SizedBox(
-                height: 36,
-                width: 36,
-                child: IconButton(
-                  onPressed: enabled ? onSetToCurrent : null,
-                  icon: const Icon(Icons.my_location, size: 18),
-                  style: IconButton.styleFrom(
-                    backgroundColor: Colors.deepPurple.shade50,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    padding: EdgeInsets.zero,
-                  ),
-                ),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: AppSpacing.s),
+        SizedBox(
+          width: double.infinity,
+          height: AppSpacing.controlHeight,
+          child: TextField(
+            controller: controller,
+            enabled: widget.enabled,
+            keyboardType: TextInputType.number,
+            style: theme.textTheme.bodyMedium,
+            decoration: const InputDecoration(
+              isDense: true,
+              suffixText: 'ms',
+              border: OutlineInputBorder(),
+              contentPadding: EdgeInsets.symmetric(
+                  horizontal: AppSpacing.m, vertical: AppSpacing.s),
+            ),
+            onSubmitted: (text) {
+              final value = int.tryParse(text);
+              if (value != null) onSubmitted(value);
+            },
+          ),
+        ),
+        const SizedBox(height: AppSpacing.s),
         Wrap(
-          spacing: 4,
-          runSpacing: 4,
+          spacing: AppSpacing.xs,
+          runSpacing: AppSpacing.xs,
           children: [
-            for (final delta in [-1000, -100, -10, -1, 1, 10, 100, 1000])
-              _buildNudgeButton(
-                '${delta > 0 ? '+' : ''}$delta',
-                enabled ? () => onNudge(delta) : null,
+            for (final delta in [-1000, -100, 1, 100, 1000])
+              SizedBox(
+                height: AppSpacing.microControlHeight,
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.s),
+                    minimumSize: Size.zero,
+                    textStyle: theme.textTheme.labelSmall,
+                  ),
+                  onPressed: widget.enabled
+                      ? () => onSubmitted(currentMs + delta)
+                      : null,
+                  child: Text('${delta > 0 ? '+' : ''}$delta'),
+                ),
               ),
           ],
         ),
@@ -326,357 +285,259 @@ class _VideoPreviewPanelState extends State<VideoPreviewPanel> {
     );
   }
 
-  Widget _buildWaveformTimeline() {
+  Widget _waveform() {
+    final s = AppStrings.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    const double height = 112;
     if (_waveformLoading) {
       return Container(
-        height: 120,
+        height: height,
+        alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: Colors.grey.shade900,
-          borderRadius: BorderRadius.circular(8),
+          color: scheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(12),
         ),
-        child: Center(
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white54)),
-              const SizedBox(width: 12),
-              Text('waveformLoading'.i18n(), style: const TextStyle(color: Colors.white54, fontSize: 12)),
-            ],
-          ),
-        ),
+        child: Text(s.get(StringKey.waveformLoading),
+            style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12)),
       );
     }
-
-    if (_waveformImageProvider == null || _durationMs == 0) {
-      return const SizedBox.shrink();
-    }
-
-    return RepaintBoundary(
-      child: LayoutBuilder(builder: (context, constraints) {
-        final totalWidth = constraints.maxWidth;
-        return GestureDetector(
-          onTapDown: (details) {
-            final fraction = (details.localPosition.dx / totalWidth).clamp(0.0, 1.0);
-            final ms = (fraction * _durationMs).round();
-            _player.seek(Duration(milliseconds: ms));
-            if (_loopSelection) _stopLoopPlayback();
-          },
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(8),
+    final path = _waveformPath;
+    if (path == null || _durationMs == 0) return const SizedBox.shrink();
+    // Purely decorative waveform + unlabeled tap region: excluding it keeps
+    // LayoutBuilder-driven resize churn out of the semantics tree. The
+    // accessible RangeSlider below remains the primary seek control.
+    return ExcludeSemantics(
+      child: RepaintBoundary(
+        child: LayoutBuilder(builder: (context, constraints) {
+          return GestureDetector(
+            onTapDown: (details) {
+              final fraction = (details.localPosition.dx /
+                      constraints.maxWidth)
+                  .clamp(0.0, 1.0)
+                  .toDouble();
+              _player?.seek(Duration(
+                  milliseconds: (fraction * _durationMs).round()));
+              if (_looping) _stopLoop();
+            },
             child: SizedBox(
-              height: 120,
-              width: totalWidth,
+              height: height,
+              width: constraints.maxWidth,
               child: ValueListenableBuilder<int>(
-                valueListenable: _positionNotifier,
-                builder: (context, posMs, child) {
-                  return CustomPaint(
-                    foregroundPainter: _WaveformOverlayPainter(
-                      durationMs: _durationMs,
-                      positionMs: posMs,
-                      rangeStartMs: _rangeStartMs,
-                      rangeEndMs: _rangeEndMs,
-                    ),
-                    child: child,
-                  );
-                },
-                child: Image(
-                  image: _waveformImageProvider!,
-                  fit: BoxFit.fill,
-                  width: totalWidth,
-                  height: 120,
-                  gaplessPlayback: true,
-                  errorBuilder: (_, _, _) => Container(
-                    color: Colors.grey.shade900,
-                    child: const Center(child: Icon(Icons.broken_image, color: Colors.white38)),
+                valueListenable: _position,
+                builder: (context, positionMs, child) => CustomPaint(
+                  foregroundPainter: _WaveformOverlayPainter(
+                    durationMs: _durationMs,
+                    positionMs: positionMs,
+                    rangeStartMs: _rangeStartMs,
+                    rangeEndMs: _rangeEndMs,
+                    dimColor: scheme.surface.withValues(alpha: 0.62),
+                    boundaryColor: scheme.primary,
+                    positionColor: scheme.onSurface,
+                  ),
+                  child: child,
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.file(
+                    File(path),
+                    fit: BoxFit.fill,
+                    width: constraints.maxWidth,
+                    height: height,
+                    gaplessPlayback: true,
+                    errorBuilder: (_, _, _) => Container(
+                        color: scheme.surfaceContainerHighest),
                   ),
                 ),
               ),
             ),
-          ),
-        );
-      }),
+          );
+        }),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+    final s = AppStrings.of(context);
+    final theme = Theme.of(context);
+    final player = _player;
+    final controller = _videoController;
+    return SectionCard(
+      title: s.get(StringKey.mediaPreview),
+      icon: Icons.play_circle_outline,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (widget.isVideo && controller != null && player != null)
+            Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                    maxWidth: 720, maxHeight: 400),
+                // A media canvas needs a real backdrop: white source frames
+                // otherwise blend into the light card surface.
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Colors.black,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: ExcludeSemantics(
+                      child: AspectRatio(
+                        aspectRatio: widget.aspectRatio.clamp(0.5, 3.0).toDouble(),
+                        child: Video(controller: controller),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          if (_durationMs == 0)
+            const Padding(
+              padding: EdgeInsets.all(AppSpacing.l),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else ...[
+            const SizedBox(height: AppSpacing.m),
+            _waveform(),
+            const SizedBox(height: AppSpacing.s),
             Row(
               children: [
-                Icon(Icons.ondemand_video, color: Colors.deepPurple.shade700),
-                const SizedBox(width: 12),
-                Text(
-                  'mediaPreview'.i18n(),
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.deepPurple.shade800,
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: s.get(StringKey.playSelection),
+                  icon: Icon(_isPlaying
+                      ? Icons.pause_circle_filled
+                      : Icons.play_circle_filled),
+                  iconSize: 34,
+                  onPressed: () => _player?.playOrPause(),
+                ),
+                ValueListenableBuilder<int>(
+                  valueListenable: _position,
+                  builder: (context, position, _) => Text(
+                    '${_formatMs(position)} / ${_formatMs(_durationMs)}',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontFamily: 'Consolas',
+                      fontFamilyFallback: const ['monospace'],
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                FilledButton.tonalIcon(
+                  onPressed: _looping ? _stopLoop : _startLoop,
+                  icon: Icon(_looping ? Icons.stop : Icons.loop, size: 16),
+                  label: Text(s.get(
+                      _looping ? StringKey.stopLoop : StringKey.loopSelection)),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.s),
+            Text(s.get(StringKey.clipRange),
+                style: theme.textTheme.titleSmall),
+            RangeSlider(
+              values: RangeValues(
+                _rangeStartMs.toDouble(),
+                _rangeEndMs.toDouble(),
+              ),
+              max: _durationMs.toDouble(),
+              labels: RangeLabels(
+                  _formatMs(_rangeStartMs), _formatMs(_rangeEndMs)),
+              onChanged: widget.enabled
+                  ? (values) {
+                      _setStart(values.start.round());
+                      _setEnd(values.end.round());
+                    }
+                  : null,
+            ),
+            const SizedBox(height: AppSpacing.s),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: _timeEditor(
+                    label: s.get(StringKey.rangeStart),
+                    controller: _startCtrl,
+                    currentMs: _rangeStartMs,
+                    onSubmitted: _setStart,
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.m),
+                Expanded(
+                  child: _timeEditor(
+                    label: s.get(StringKey.rangeEnd),
+                    controller: _endCtrl,
+                    currentMs: _rangeEndMs,
+                    onSubmitted: _setEnd,
                   ),
                 ),
               ],
             ),
-            const Divider(height: 24),
-
-            // Video player — constrained to 640px max, centered
-            if (widget.isVideo && _videoController != null)
-              Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 640),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Container(
-                      color: Colors.black,
-                      child: AspectRatio(
-                        aspectRatio: 16 / 9,
-                        child: Video(controller: _videoController!),
-                      ),
-                    ),
-                  ),
-                ),
+            const SizedBox(height: AppSpacing.m),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: (widget.enabled && _range.isValid)
+                    ? () => widget.onGeneratePreview(_range)
+                    : null,
+                icon: const Icon(Icons.content_cut),
+                label: Text(s.get(StringKey.generatePreview)),
               ),
-
-            if (_durationMs == 0) ...[
-              const SizedBox(height: 40),
-              const Center(child: CircularProgressIndicator()),
-              const SizedBox(height: 40),
-            ] else ...[
-              const SizedBox(height: 16),
-
-              // Audio waveform timeline (isolated repaint boundary)
-              _buildWaveformTimeline(),
-              const SizedBox(height: 12),
-
-              // Playback controls — position text isolated via ValueListenableBuilder
-              Row(
-                children: [
-                  IconButton(
-                    onPressed: () {
-                      if (_loopSelection) _stopLoopPlayback();
-                      _player.playOrPause();
-                    },
-                    icon: Icon(_isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled),
-                    iconSize: 36,
-                    color: Colors.deepPurple,
-                  ),
-                  const SizedBox(width: 8),
-                  ValueListenableBuilder<int>(
-                    valueListenable: _positionNotifier,
-                    builder: (context, posMs, _) {
-                      return Text(
-                        '${_formatMs(posMs)} / ${_formatMs(_durationMs)}',
-                        style: const TextStyle(fontFamily: 'Consolas', fontSize: 14),
-                      );
-                    },
-                  ),
-                  const Spacer(),
-                  if (_loopSelection)
-                    FilledButton.tonalIcon(
-                      onPressed: _stopLoopPlayback,
-                      icon: const Icon(Icons.stop, size: 18),
-                      label: Text('stopLoop'.i18n()),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: Colors.red.shade50,
-                        foregroundColor: Colors.red.shade700,
-                      ),
-                    )
-                  else
-                    FilledButton.tonalIcon(
-                      onPressed: _startLoopPlayback,
-                      icon: const Icon(Icons.loop, size: 18),
-                      label: Text('loopSelection'.i18n()),
-                    ),
-                ],
-              ),
-
-              // Seek slider — isolated rebuild
-              ValueListenableBuilder<int>(
-                valueListenable: _positionNotifier,
-                builder: (context, posMs, _) {
-                  return SliderTheme(
-                    data: SliderTheme.of(context).copyWith(
-                      trackHeight: 4,
-                      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
-                      overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
-                    ),
-                    child: Slider(
-                      value: posMs.clamp(0, _durationMs).toDouble(),
-                      max: _durationMs.toDouble(),
-                      activeColor: Colors.deepPurple,
-                      inactiveColor: Colors.deepPurple.shade100,
-                      onChanged: (v) {
-                        if (_loopSelection) _stopLoopPlayback();
-                        _player.seek(Duration(milliseconds: v.round()));
-                      },
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(height: 8),
-
-              // Clip range section (static — only rebuilds on range change)
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.deepPurple.shade50.withAlpha(128),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.deepPurple.shade100),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Text(
-                          'clipRange'.i18n(),
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.deepPurple.shade700,
-                            fontSize: 13,
-                          ),
-                        ),
-                        const Spacer(),
-                        Text(
-                          '${'rangeDuration'.i18n()}: ${_formatMs(_rangeEndMs - _rangeStartMs)}',
-                          style: TextStyle(fontSize: 12, color: Colors.grey.shade600, fontFamily: 'Consolas'),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-
-                    RangeSlider(
-                      values: RangeValues(
-                        _rangeStartMs.clamp(0, _durationMs).toDouble(),
-                        _rangeEndMs.clamp(0, _durationMs).toDouble(),
-                      ),
-                      max: _durationMs.toDouble(),
-                      activeColor: Colors.deepPurple.shade400,
-                      inactiveColor: Colors.grey.shade300,
-                      labels: RangeLabels(
-                        _formatMs(_rangeStartMs),
-                        _formatMs(_rangeEndMs),
-                      ),
-                      onChanged: widget.enabled ? (values) {
-                        _setRangeStart(values.start.round());
-                        final endMs = values.end.round().clamp(0, _durationMs);
-                        if (endMs > _rangeStartMs) {
-                          setState(() => _rangeEndMs = endMs);
-                          _endMsCtrl.text = '$endMs';
-                          widget.onEndMsChanged?.call(endMs);
-                        }
-                      } : null,
-                    ),
-                    const SizedBox(height: 12),
-
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: _buildMsEditor(
-                            label: 'rangeStart'.i18n(),
-                            controller: _startMsCtrl,
-                            currentMs: _rangeStartMs,
-                            onSubmit: _commitStartFromText,
-                            onNudge: (delta) => _setRangeStart(_rangeStartMs + delta),
-                            onSetToCurrent: () => _setRangeStart(_positionNotifier.value),
-                          ),
-                        ),
-                        const SizedBox(width: 24),
-                        Expanded(
-                          child: _buildMsEditor(
-                            label: 'rangeEnd'.i18n(),
-                            controller: _endMsCtrl,
-                            currentMs: _rangeEndMs,
-                            onSubmit: _commitEndFromText,
-                            onNudge: (delta) => _setRangeEnd(_rangeEndMs + delta),
-                            onSetToCurrent: () => _setRangeEnd(_positionNotifier.value),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        icon: const Icon(Icons.content_cut),
-                        label: Text('generatePreview'.i18n()),
-                        onPressed: (widget.enabled && _rangeEndMs > _rangeStartMs)
-                            ? widget.onGeneratePreview
-                            : null,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.deepPurple,
-                          foregroundColor: Colors.white,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+            ),
           ],
-        ),
+        ],
       ),
     );
   }
 }
 
-class _WaveformOverlayPainter extends CustomPainter {
-  final int durationMs;
-  final int positionMs;
-  final int rangeStartMs;
-  final int rangeEndMs;
-
-  // Pre-allocated paints — zero GC per frame
-  static final Paint _dimPaint = Paint()..color = const Color(0xAA000000);
-  static final Paint _boundaryPaint = Paint()
-    ..color = const Color(0xFF7C4DFF)
-    ..strokeWidth = 2;
-  static final Paint _posPaint = Paint()
-    ..color = const Color(0xFFFFFFFF)
-    ..strokeWidth = 1.5;
-
+final class _WaveformOverlayPainter extends CustomPainter {
   const _WaveformOverlayPainter({
     required this.durationMs,
     required this.positionMs,
     required this.rangeStartMs,
     required this.rangeEndMs,
+    required this.dimColor,
+    required this.boundaryColor,
+    required this.positionColor,
   });
+
+  final int durationMs;
+  final int positionMs;
+  final int rangeStartMs;
+  final int rangeEndMs;
+  final Color dimColor;
+  final Color boundaryColor;
+  final Color positionColor;
 
   @override
   void paint(Canvas canvas, Size size) {
     if (durationMs <= 0) return;
+    final dim = Paint()..color = dimColor;
+    final boundary = Paint()
+      ..color = boundaryColor
+      ..strokeWidth = 2;
+    final position = Paint()
+      ..color = positionColor
+      ..strokeWidth = 1.5;
     final w = size.width;
     final h = size.height;
-
     final startX = (rangeStartMs / durationMs) * w;
     final endX = (rangeEndMs / durationMs) * w;
-
-    // Dim areas outside the selected range
-    if (startX > 0) {
-      canvas.drawRect(Rect.fromLTWH(0, 0, startX, h), _dimPaint);
-    }
-    if (endX < w) {
-      canvas.drawRect(Rect.fromLTWH(endX, 0, w - endX, h), _dimPaint);
-    }
-
-    // Range boundary lines
-    canvas.drawLine(Offset(startX, 0), Offset(startX, h), _boundaryPaint);
-    canvas.drawLine(Offset(endX, 0), Offset(endX, h), _boundaryPaint);
-
-    // Playback position line
     final posX = (positionMs / durationMs) * w;
-    canvas.drawLine(Offset(posX, 0), Offset(posX, h), _posPaint);
+    if (startX > 0) canvas.drawRect(Rect.fromLTWH(0, 0, startX, h), dim);
+    if (endX < w) canvas.drawRect(Rect.fromLTWH(endX, 0, w - endX, h), dim);
+    canvas.drawLine(Offset(startX, 0), Offset(startX, h), boundary);
+    canvas.drawLine(Offset(endX, 0), Offset(endX, h), boundary);
+    canvas.drawLine(Offset(posX, 0), Offset(posX, h), position);
   }
 
   @override
-  bool shouldRepaint(covariant _WaveformOverlayPainter oldDelegate) {
-    return oldDelegate.positionMs != positionMs ||
-        oldDelegate.rangeStartMs != rangeStartMs ||
-        oldDelegate.rangeEndMs != rangeEndMs ||
-        oldDelegate.durationMs != durationMs;
-  }
+  bool shouldRepaint(covariant _WaveformOverlayPainter old) =>
+      old.positionMs != positionMs ||
+      old.rangeStartMs != rangeStartMs ||
+      old.rangeEndMs != rangeEndMs ||
+      old.durationMs != durationMs ||
+      old.dimColor != dimColor ||
+      old.boundaryColor != boundaryColor ||
+      old.positionColor != positionColor;
 }
